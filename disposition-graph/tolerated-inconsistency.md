@@ -14,7 +14,6 @@ facts:
     recommends: as-read
     boldness: moderate
     against: "The tradition's substance is a claim about several parties writing one specification, whose disagreement carries information a forced resolution destroys, and this record has one author and one representation, so what survives the transfer is a marker on the material and a re-check trigger, which is worth having and is not tolerated inconsistency."
-    stands: as-read
   - name: authority
     options:
       - name: ratified
@@ -27,7 +26,7 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: c72aae8f5079f08c27cfbcf5c85c792dff419fa1
+  of: c9dd8c050d039458f6c4989b08bfd442a588d519
   commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
   against: "All five of the previous reading's findings are answered: the rationale/authority class agreement, the `bears` retarget to the option that stands (with the reasoning stated in `## Answer`), the narrowed \"supports on the marker and the trigger\" opening with the handling-policy departure spelled out, the boldness figure and its against, and the removal of the bare attribution to Nuseibeh. The rationale's replacement clause paraphrases rather than quotes the finding's suggested text verbatim (it now reads \"the one holding this line of work is read as attaching to tolerance\" rather than \"the one holding attributed to a named person\"), but this tracks the fifth finding's own fix removing the named-person framing from `## Answer`, so the two edits are consistent with each other rather than in tension. The `## Facts` authority prose still speaks of \"the one named condition the answer leans on\", a phrase from before the fifth finding's fix, but it was untouched by this diff and is not itself false."
 under:
@@ -42,19 +41,44 @@ bears:
     option: the-survey-block-carries-what-the-next-survey-selects-on
     relation: adopted
 ---
-## Answer
-
-Supports on the marker and on the trigger, departs on the handling policy, and the discharge condition is the answer's own. The tradition holds that where a specification is written by several parties inconsistency is the normal state and not a defect, that forcing resolution at the moment of discovery destroys the information the disagreement carries, and that the discipline is therefore to record each inconsistency as a first-class object with its diagnosis and its handling policy — resolve now, defer, ameliorate, tolerate — and to let the work proceed under it; Balzer's markers annotate the inconsistent material in place, so that whatever reads it knows to be careful rather than to halt. The answer takes that as the shape of what a survey leaves behind: the register on a node is the standing inconsistency register, each finding carried with the support it rests on and the condition on which it is discharged, and the next survey reads the register rather than re-deriving it, reporting a finding whose support is unmoved as standing, re-deriving one whose support moved, and calling new only what the register does not already hold. That is the whole of the delta's saving on the side the hashes do not reach: a finding rediscovered every survey is paid for every survey. The dialogue option this reading also bears on is where the register is kept, in the survey's own block on the node beside the hashes and the keys, which is the tradition's rule that the marker lives on the material it marks and not in a report filed elsewhere. This record needs no handling-policy vocabulary of its own, because its rulings are the policies: a finding the author has ruled on is closed by the ruling, and a finding no ruling has reached is tolerated in exactly the tradition's sense while the node stays unanswered, which is the ordinary condition of every node in it. That is a departure and not an economy: a handling policy is chosen while an inconsistency stands, and a ruling ends it, so what the record keeps of the four is `resolve now` and an unchosen default. The one refinement is the condition this line of work is read as attaching to tolerance, that it is respectable only with a trigger for revisiting and is otherwise decay — a register without one becomes a debt pile that launders drift as known. That is why the discharge condition is in the answer at all rather than left to whoever keeps the register; and the record's trigger is not a date but the movement of the support, read off the section hashes the same paragraph writes, so an entry is revisited exactly when the text it rests on changes and a survey that reports nothing new is a claim about the text and not about the reader's patience. The entry on `survey-selection` is recorded on `candidate-pairs-with-their-nominating-key`, the option that stands, because the register this reading grounds is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen.
-
-## Rationale
-
-Recorded under `survey-selection` on 2026-09-07, after the clean-context reading of that day found this tradition doing load-bearing work in the draft with no reading behind it, which is what `evaluation`'s rule that every tradition surfaced is recorded as a reading forbids; the source is the tradition survey of the same date, which is not part of the record. The AI validated the relation from its own knowledge of the sources, at the confidence that survey recorded: the tradition and the people who made it are certain, the exact titles and years are given as it gave them and are moderate. Deferred, because the titles, the years and the one holding this line of work is read as attaching to tolerance are what the author's own reading would settle, and the ruling on the options this reading bears on is where it has effect.
 
 ## Facts
 
 ### answer
 
 `as-read` is the only reading of the ViewPoints line on the record and it is recommended because the register `survey-selection` describes is the tradition's own object and not an analogue of it: a finding carried with the support it rests on and the condition on which it is discharged is Balzer's marker with the trigger this line of work attaches to it, and the record needs no handling-policy vocabulary of its own because its rulings are the policies, which the answer argues in its own terms rather than borrowing. Boldness moderate, on the relation, the citation risk being carried in `source`, which hedges its years, in the account and in the authority fact's argument. The tradition survey of 2026-09-07 recorded this line at high confidence on the tradition and its people and at moderate confidence on the exact titles and years, and this node's `source` gives three of them; the condition the answer reads this line as attaching to tolerance, that it is respectable only with a trigger for revisiting and is otherwise decay, is stated as the reading's own and at the reading's confidence, since the record holds nothing to check it against. The case against is on the fact.
+
+#### as-read
+
+Supports on the marker and on the trigger, departs on the handling policy, and the discharge condition is the answer's own.
+
+**AI support.** Recorded under `survey-selection` on 2026-09-07, after the clean-context reading of that day found this tradition doing load-bearing work in the draft with no reading behind it, which is what `evaluation`'s rule that every tradition surfaced is recorded as a reading forbids; the source is the tradition survey of the same date, which is not part of the record. The AI validated the relation from its own knowledge of the sources, at the confidence that survey recorded: the tradition and the people who made it are certain, the exact titles and years are given as it gave them and are moderate. Deferred, because the titles, the years and the one holding this line of work is read as attaching to tolerance are what the author's own reading would settle, and the ruling on the options this reading bears on is where it has effect.
+
+**AI divergence.** The tradition's substance is a claim about several parties writing one specification, whose disagreement carries information a forced resolution destroys, and this record has one author and one representation, so what survives the transfer is a marker on the material and a re-check trigger, which is worth having and is not tolerated inconsistency.
+
+**Content.**
+
+```markdown
+---
+question: Does tolerated inconsistency ground the register the survey leaves on a node and the condition that discharges an entry?
+form: reading
+under:
+  - commons.systems/disposition-graph/survey-selection
+source: The ViewPoints framework of Finkelstein, Kramer, Nuseibeh and Goedicke, early 1990s; Balzer, Tolerating inconsistency, ICSE 1991; Nuseibeh, Easterbrook and Russo on making inconsistency respectable and on leveraging inconsistency in software development, around 1999 to 2001.
+bears:
+  - fact: answer
+    option: candidate-pairs-with-their-nominating-key
+    relation: adopted
+  - node: commons.systems/disposition-graph/dialogue
+    fact: answer
+    option: the-survey-block-carries-what-the-next-survey-selects-on
+    relation: adopted
+---
+
+## Answer
+
+Supports on the marker and on the trigger, departs on the handling policy, and the discharge condition is the answer's own. The tradition holds that where a specification is written by several parties inconsistency is the normal state and not a defect, that forcing resolution at the moment of discovery destroys the information the disagreement carries, and that the discipline is therefore to record each inconsistency as a first-class object with its diagnosis and its handling policy — resolve now, defer, ameliorate, tolerate — and to let the work proceed under it; Balzer's markers annotate the inconsistent material in place, so that whatever reads it knows to be careful rather than to halt. The answer takes that as the shape of what a survey leaves behind: the register on a node is the standing inconsistency register, each finding carried with the support it rests on and the condition on which it is discharged, and the next survey reads the register rather than re-deriving it, reporting a finding whose support is unmoved as standing, re-deriving one whose support moved, and calling new only what the register does not already hold. That is the whole of the delta's saving on the side the hashes do not reach: a finding rediscovered every survey is paid for every survey. The dialogue option this reading also bears on is where the register is kept, in the survey's own block on the node beside the hashes and the keys, which is the tradition's rule that the marker lives on the material it marks and not in a report filed elsewhere. This record needs no handling-policy vocabulary of its own, because its rulings are the policies: a finding the author has ruled on is closed by the ruling, and a finding no ruling has reached is tolerated in exactly the tradition's sense while the node stays unanswered, which is the ordinary condition of every node in it. That is a departure and not an economy: a handling policy is chosen while an inconsistency stands, and a ruling ends it, so what the record keeps of the four is `resolve now` and an unchosen default. The one refinement is the condition this line of work is read as attaching to tolerance, that it is respectable only with a trigger for revisiting and is otherwise decay — a register without one becomes a debt pile that launders drift as known. That is why the discharge condition is in the answer at all rather than left to whoever keeps the register; and the record's trigger is not a date but the movement of the support, read off the section hashes the same paragraph writes, so an entry is revisited exactly when the text it rests on changes and a survey that reports nothing new is a claim about the text and not about the reader's patience. The entry on `survey-selection` is recorded on `candidate-pairs-with-their-nominating-key`, the option that stands, because the register this reading grounds is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen.
+```
 
 #### adopted-on-the-marker-and-the-trigger
 
@@ -63,6 +87,30 @@ Supports on the marker and on the trigger, departs on what makes the tolerance r
 **AI support.** It is the counter-argument of the clean-context reading of abb15a3e, recorded so the author can rule for it: strip the multi-party premise and what survives is a defect list with a staleness rule, which the tradition's own argument does not reach.
 
 **AI divergence.** The recommended reading's reply is that the survey's reader and the node's drafter are two parties, so a finding held open on an unanswered node is genuinely their disagreement kept rather than forced, and the tradition's justification reaches the record after all; the two differ on whether the register is tolerated inconsistency or a queue that borrows its discipline.
+
+**Content.**
+
+```markdown
+---
+question: Does tolerated inconsistency ground the register the survey leaves on a node and the condition that discharges an entry?
+form: reading
+under:
+  - commons.systems/disposition-graph/survey-selection
+source: The ViewPoints framework of Finkelstein, Kramer, Nuseibeh and Goedicke, early 1990s; Balzer, Tolerating inconsistency, ICSE 1991; Nuseibeh, Easterbrook and Russo on making inconsistency respectable and on leveraging inconsistency in software development, around 1999 to 2001.
+bears:
+  - fact: answer
+    option: candidate-pairs-with-their-nominating-key
+    relation: adopted
+  - node: commons.systems/disposition-graph/dialogue
+    fact: answer
+    option: the-survey-block-carries-what-the-next-survey-selects-on
+    relation: adopted
+---
+
+## Answer
+
+Supports on the marker and on the trigger, departs on what makes the tolerance respectable. The tradition's mechanical parts are taken whole: an inconsistency is recorded as a first-class object where the material is, not filed elsewhere, and it is revisited on a trigger rather than on a date, which is the record's movement of the support read off the section hashes. The departure is the premise. The tradition tolerates inconsistency between several parties writing one specification, and the reason resolution is not forced is that the disagreement records which party holds what, information the resolution destroys. This record has one author and one representation, so an inconsistency in it is not a disagreement between viewpoints but a defect one party has not yet ruled on, and what the register holds is a queue of open findings with a re-check trigger. The record therefore takes the tradition's discipline and not its justification, and it takes no handling-policy vocabulary because a ruling is a resolution and not a policy for living with an open one.
+```
 
 ### authority
 
@@ -118,3 +166,7 @@ Strongest counter-argument (weak): All five of the previous reading's findings a
 ### The session's reply to the re-reading of c72aae8f, 2026-09-07
 
 Recorded in its own entry because the apply that landed the reading carried no reply, the replies file it was given being another wave's. The rationale's clause was written to match the answer after the fifth finding rather than the suggested text, as the counter reads it. The authority prose's phrase about the one named condition is left as it stands, being true and untouched by this amendment.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/tolerated-inconsistency stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `as-read`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `adopted-on-the-marker-and-the-trigger`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `c72aae8f5079f08c27cfbcf5c85c792dff419fa1` is re-computed for the encoding as `c9dd8c050d039458f6c4989b08bfd442a588d519`; nothing it read changed.

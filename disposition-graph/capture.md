@@ -16,6 +16,8 @@ facts:
       - name: draft
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-02/1
       - name: restate-as-record-not-capacity
         source: review
         ref: "2026-09-03"
@@ -24,7 +26,6 @@ facts:
         ref: "2026-09-03"
     recommends: draft
     boldness: low
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -36,36 +37,43 @@ form: assumption
 under:
   - commons.systems/disposition-graph/purpose
 ---
-## Disposition
-
-The author, 2026-09-02:
-> Is this correctly encoded as form: assumption vs form: disposition with unvalidated instrumentation? Is assumption a form at all?
-
-## Answer
-
-Yes. The ways an institution comes to set a person's problems for them recur across daily life, and a record of one's dispositions with instruments against them is a general defence, not one specific to misaligned AI writing software. Recorded as an assumption: if it fails, the purpose above returns to the author.
-
-## Rationale
-
-The author's hypothesis, 2026-09-02. The archē this graph rests on already names capture as the thing that must remain recoverable; this node asks whether the same record that guards against capture by delegated software guards against capture by other institutions. The traditions that would ground it are gathered as an open question under this node, for the author to choose from.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+Yes.
+
+**AI support.** The author's hypothesis, 2026-09-02. The archē this graph rests on already names capture as the thing that must remain recoverable; this node asks whether the same record that guards against capture by delegated software guards against capture by other institutions. The traditions that would ground it are gathered as an open question under this node, for the author to choose from.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does the same discipline help manage capture of the author's intention by institutions generally?
+form: assumption
+under:
+  - commons.systems/disposition-graph/purpose
+---
+
+## Answer
+
+Yes. The ways an institution comes to set a person's problems for them recur across daily life, and a record of one's dispositions with instruments against them is a general defence, not one specific to misaligned AI writing software. Recorded as an assumption: if it fails, the purpose above returns to the author.
+```
+
 #### draft
 
 The Draft keeps form assumption and adds an assessment criterion made by the author at a sitting on this node, failing if a capture of the author's intention by an institution other than delegated software is neither noticed nor recoverable through the record. Its answer says criteria rather than instruments and states the hypothesis explicitly, so that a failure returns the purpose above to the author. Its frontmatter uses a criteria key the schema does not carry, which the session says arrives with the instruments ruling.
 
-#### restate-as-record-not-capacity
+**AI support.** The author's hypothesis, 2026-09-02. The archē this graph rests on already names capture as the thing that must remain recoverable; this node asks whether the same record that guards against capture by delegated software guards against capture by other institutions. The traditions that would ground it are gathered as an open question under this node, for the author to choose from.
 
-The redundancy finding holds that public/agency, this node's root, already makes the general claim, naming capture without restricting it to software and grounding it in general readings, and that capture's own counter-argument concedes it may be a restatement of its root. The alternative keeps capture a hypothesis but rewrites it to state only what agency does not: that the record, and not merely the capacity, is the instrument of noticing capture and recovering from it, and that this is untested outside delegated software. Capture's answer would cite agency rather than restate it, and 'a general defence' become 'a general instrument for noticing capture and recovering from it', the archē's own wording. The session accepted this as the question for the sitting after agency, so it is owed and not written. Raised on commons.systems/public/agency.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-#### cite-forms
-
-The coverage finding of 2026-09-03: the author's form-versus-assumption question, whether this is correctly encoded as form assumption against form disposition with unvalidated instrumentation and whether assumption is a form at all, is carried verbatim here, on knowledge-store and on purpose, and forms is the node that answers it. The finding proposes this node cite forms instead of carrying the quotation, so that one disposition is answered by one node. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/knowledge-store.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -81,10 +89,52 @@ criteria:
 ## Answer
 
 Yes. The ways an institution comes to set a person's problems for them recur across daily life, and a record of one's dispositions with criteria against them is a general defence, not one specific to misaligned AI writing software. This is a hypothesis, so its criterion is not yet validated: if it fails, the purpose above returns to the author.
+```
 
-## Rationale
+#### restate-as-record-not-capacity
 
-The author's hypothesis, 2026-09-02. The archē this graph rests on already names capture as the thing that must remain recoverable; this node asks whether the same record that guards against capture by delegated software guards against capture by other institutions. The traditions that would ground it are gathered as an open question under this node, for the author to choose from.
+The redundancy finding holds that public/agency, this node's root, already makes the general claim, naming capture without restricting it to software and grounding it in general readings, and that capture's own counter-argument concedes it may be a restatement of its root. The alternative keeps capture a hypothesis but rewrites it to state only what agency does not: that the record, and not merely the capacity, is the instrument of noticing capture and recovering from it, and that this is untested outside delegated software. Capture's answer would cite agency rather than restate it, and 'a general defence' become 'a general instrument for noticing capture and recovering from it', the archē's own wording. The session accepted this as the question for the sitting after agency, so it is owed and not written. Raised on commons.systems/public/agency.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does the same discipline help manage capture of the author's intention by institutions generally?
+form: assumption
+under:
+  - commons.systems/disposition-graph/purpose
+---
+
+## Answer
+
+The redundancy finding holds that public/agency, this node's root, already makes the general claim, naming capture without restricting it to software and grounding it in general readings, and that capture's own counter-argument concedes it may be a restatement of its root. The alternative keeps capture a hypothesis but rewrites it to state only what agency does not: that the record, and not merely the capacity, is the instrument of noticing capture and recovering from it, and that this is untested outside delegated software. Capture's answer would cite agency rather than restate it, and 'a general defence' become 'a general instrument for noticing capture and recovering from it', the archē's own wording. The session accepted this as the question for the sitting after agency, so it is owed and not written. Raised on commons.systems/public/agency.
+```
+
+#### cite-forms
+
+The coverage finding of 2026-09-03: the author's form-versus-assumption question, whether this is correctly encoded as form assumption against form disposition with unvalidated instrumentation and whether assumption is a form at all, is carried verbatim here, on knowledge-store and on purpose, and forms is the node that answers it. The finding proposes this node cite forms instead of carrying the quotation, so that one disposition is answered by one node. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/knowledge-store.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does the same discipline help manage capture of the author's intention by institutions generally?
+form: assumption
+under:
+  - commons.systems/disposition-graph/purpose
+---
+
+## Answer
+
+The coverage finding of 2026-09-03: the author's form-versus-assumption question, whether this is correctly encoded as form assumption against form disposition with unvalidated instrumentation and whether assumption is a form at all, is carried verbatim here, on knowledge-store and on purpose, and forms is the node that answers it. The finding proposes this node cite forms instead of carrying the quotation, so that one disposition is answered by one node. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/knowledge-store.
 ```
 
 ## Account
@@ -166,3 +216,7 @@ The census unit's note: The Draft is what the recommendation adopts; the other p
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `restate-as-record-not-capacity` absorbs `narrowed-to-record-as-instrument`; `cite-forms` absorbs `cite-forms-for-the-form-question`, `cite-forms-not-the-quote`. The merge unit's note: Neither merged group is adopted (the recommendation adopts `draft`); `restate-as-record-not-capacity` was kept over `narrowed-to-record-as-instrument` because it names the change to the node directly, and `cite-forms` over its two longer variants for the same reason and for consistency with knowledge-store and purpose.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/capture stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `draft`; 1 `## Disposition` entry became the ledger entry words/2026-09-02/1, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `restate-as-record-not-capacity`, `cite-forms`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `3c9b0a7059869f3446083b9871b81c51c828ae8d` was already past the recommendation and is left as it stood.

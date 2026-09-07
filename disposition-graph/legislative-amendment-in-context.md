@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -26,6 +25,37 @@ bears:
     option: edit-led-against-a-named-ground
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of this practice the pass produced, and
+no second account of what the record takes from it is on the table.
+
+#### standing
+
+Supports leading with the edit, and adds the part the record was leaving to inference.
+
+**AI support.** Surfaced by the second evaluation of `commons.systems/disposition-graph/dialogue`'s maieutic movement of 2026-09-04 and named in the fence's rationale among the readings owed under that node: "legislative amendment shown against the text it changes, for naming the ground of an edit". It bears on `edit-led-against-a-named-ground` because that is the clause the tradition informed and the clause the composed option `every-part-in-the-record` adopts; the entry is written on the clause the account names. The related engineering practice, reviewing a change as a diff against what stands, is read separately at `commons.systems/disposition-graph/change-reviewed-as-a-diff` under this node, since it answers a different question, the form the change is presented in rather than the ground it is presented against.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an amendment printed against the text it changes say about naming the ground of an edit, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/dialogue
+source: The legislative practice of publishing an amendment against the text it would change. The Ramseyer rule of the United States House of Representatives, which requires a committee report on a bill to set out the existing law with the matter proposed to be omitted shown in brackets and the new matter in italic; the Cordon rule, the Senate's counterpart requirement for a reported bill; and the Keeling schedule of United Kingdom practice, a schedule printing an act as it would read once amended. Locus to be checked, the current rule and clause numbers for Ramseyer and Cordon, and the standing of the Keeling schedule in modern drafting guidance.
+bears:
+  - fact: answer
+    option: edit-led-against-a-named-ground
+    relation: adopted
+---
+
 ## Answer
 
 Supports leading with the edit, and adds the part the record was leaving to inference. An amendment read alone is a list of strikings and insertions that says nothing about what the law will be. The practice is therefore to publish it against the text it changes, so that a reader sees the standing law, what is struck from it, and what is put in its place, in one place and at one glance. What makes the device work is that the ground is identified and is authoritative. The reader knows the bracketed text is the law in force, so the italic text is a proposal about something that already binds.
@@ -35,17 +65,7 @@ The record takes the form and then has to supply what the tradition gets for fre
 The departure is worth stating plainly, since it is the reason the clause exists. Legislative practice never faces a bill amending a draft; there is always a statute in force. The record's commonest case is the one the tradition has no word for, and the author's own observation of 2026-09-03, that a purpose node read as an edit to a confirmed disposition when nothing was confirmed, is that case doing damage. Naming the ground answers it.
 
 The counter, attached and not resolved. Printing a proposal against an unconfirmed draft borrows the authority of the form itself. Brackets and italic say to a reader, without a word, that the surrounding text is in force, and a reader who skims will take the draft as settled precisely because the record chose the shape the tradition uses for statutes. The record's reply is a sentence saying what the ground is, which is weaker than the typography it sits beside; the tradition would say the remedy is not to use the form at all where there is nothing in force, and the record uses it and says so.
-
-## Rationale
-
-Surfaced by the second evaluation of `commons.systems/disposition-graph/dialogue`'s maieutic movement of 2026-09-04 and named in the fence's rationale among the readings owed under that node: "legislative amendment shown against the text it changes, for naming the ground of an edit". It bears on `edit-led-against-a-named-ground` because that is the clause the tradition informed and the clause the composed option `every-part-in-the-record` adopts; the entry is written on the clause the account names. The related engineering practice, reviewing a change as a diff against what stands, is read separately at `commons.systems/disposition-graph/change-reviewed-as-a-diff` under this node, since it answers a different question, the form the change is presented in rather than the ground it is presented against.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of this practice the pass produced, and
-no second account of what the record takes from it is on the table.
+```
 
 ### authority
 
@@ -70,3 +90,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/legislative-amendment-in-context stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

@@ -11,6 +11,8 @@ facts:
       - name: case-against-to-the-details
         source: author
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-04/45
       - name: ai-case-against-on-the-row
         source: ai
         ref: "2026-09-06"
@@ -49,10 +51,15 @@ facts:
       - name: the-details-carry-the-three-accumulations
         source: commons.systems/disposition-graph/dialogue
         ref: "2026-09-07"
+        supports:
+          - words/2026-09-06/2
+          - words/2026-09-06/3
+          - words/2026-09-07/2
+          - words/2026-09-07/3
+          - words/2026-09-07/4
     recommends: the-details-carry-the-three-accumulations
     boldness: moderate
     against: "The record asks the AI for a case against every recommendation — `dialogue`'s recommended text makes a fact's `against` the argument the recommendation had to beat, written when the recommendation is recorded — and under this answer the author never sees it at the level they read: on every fact of every node but one, the row carries a mark saying no reader's line bears and the AI's written objection, where one exists, sits behind a fold, because a reading returns one counter-argument for a node and `caseAgainst` substitutes it on the answer fact alone. The rule is mostly unmet today, 53 fact-level `against` fields beside 247 recommendations at this head, so on most rows the mark replaces nothing yet; that is back-fill debt against the rule, as `dialogue`'s own account records, and not a reason the rule will stay unmet, so what the fold hides grows as the debt is paid. The arrangement this answer forbids, the AI's line at the first level, is the only one under which an objection the record holds is always where the author reads."
-    stands: three-marks-and-the-case-against
   - name: authority
     options:
       - name: ratified
@@ -82,39 +89,81 @@ under:
 depends:
   - commons.systems/disposition-graph/where-the-unconfirmed-indication-goes
 ---
-## Disposition
 
-The author, 2026-09-04, on the alignment page, queued from the sitting on author-questions:
-> - most chips and the id-shaped string listed for each option shown in the agency node are not useful in the ui. Is "stands: a draft no one has confirmed" recording anything useful? For each option, list only a short text summary, a simple indicator if it is the recommended choice of the ai and with what boldness, and keep the chips that indicate support or divergence by tradition. Move AI reasoning (such as "passed over") to the details area for each option - not in a chip.
+## Facts
 
-The author, 2026-09-06, answering the probe they raised on 2026-09-04, whether the `stands` chip records anything useful:
+### answer
 
-> What "stands" could represent is the prior confirmed disposition (if any). There are no confirmed dispositions currently, so we would expect to see no indication of that.
+`the-details-carry-the-three-accumulations` is recommended since 2026-09-07: it is `three-marks-and-the-case-against` with the confirmed mark read as the derived label and the expanded details given their three accumulations and the preview beneath them, on the author's refinement of that day quoted under `## Disposition`; the first level is unchanged. Its own support and divergence are under its subsection, and what follows is the reason the text it amends was recommended on, which the amendment carries except where it says otherwise.
 
-The author, 2026-09-06, on where the warning goes that a node's text is an unconfirmed draft, once the `stands` chip stops carrying it:
+`three-marks-and-the-case-against` was recommended because every settlement on it is the author's words applied where
+they fall, except one clause, which is the readings' and is named as theirs. The
+three marks are the author's list of 2026-09-04 with their answer of 2026-09-06
+in place of the chip it discharges. The merge of the standing and ruled marks is
+not a design choice but a consequence of the rule the reader of the graph
+enforces, that on the answer fact the ruled option is the option that stands.
+Whether the node is confirmed leaves the row because it is a fact about the node,
+and where it goes is `where-the-unconfirmed-indication-goes`'.
 
-> A single indication per node to indicate that node is not yet confirmed is fine.
+What rests on the AI is the mark that stands where no reader's line bears, the
+choice to collapse into it the two ways that can happen, and the judgment that
+the row needs the mark at all. The last is what `no-mark-where-no-line` contests
+and it is argued rather than assumed. The stage chip says whether the node's
+readings have run; the mark says whether a reader's line bears on this fact,
+which is a different fact and is the one the author is about to choose on. A
+reader weighing two rows of the same fact against each other should not have to
+leave the row to learn that nothing has been said against either, and a blank
+where an argument would be reads as a recommendation nobody has objected to
+rather than as one nobody has checked — the confusion `recording`'s rule that
+"when the review found no strong counter-argument, the recommendation goes alone
+and says so" exists to prevent. Against that, the mark is one fact said as many
+times as the node has facts, which is what `codd-update-anomaly` names and what
+this answer's own merge of the standing and ruled marks refuses elsewhere; the
+difference is that the merged marks were two names for one row's state and this
+is the same state on rows the reader meets one at a time. Boldness moderate, and
+the cardinality is why: with one counter-argument per node, most rows of most
+nodes carry the mark rather than a line, and whether that is right depends on
+`counter-argument-per-fact` on `clean-context-review`, which this answer does not
+own.
 
-The author, 2026-09-07, after the session described the recommended accumulation strategy, refining the disposition on what an option carries and what an unconfirmed node keeps: carried here because this node's question is one the refinement reaches,
+#### three-marks-and-the-case-against
 
-> record this refinement to disposition and ensure the accumulation strategy supports it:
-> - each option for each fact is recorded with its actual fact content so that when the author selects an option via the alignment artifact the context pane is dynamically updated to preview the node that is being confirmed.
-> - "standing" is just a label that can be applied to an option (similar to an AI recommendation) to indicate that it was the last confirmed option for that fact on that node.
-> - the expanded details of an option (before and also after confirmation) shows a) the history of author quotes that both support and/or contradict the option (implies that one quote may be reference by multiple options) b) the accumulated/current AI support and/or rejection rationale for that option (independent of ultimate recommendation)
->
-> Anything else that doesn't support the alignment dialogue/artifact disposition is subject to accumulation/removal.
+A row leads with what the option would answer, in the sentence the record holds
+for it, and carries the option's name nowhere.
 
-The author, 2026-09-07, in the next turn, granting the reconciliation of the refinement above:
+**AI support.** The author's layout words of 2026-09-04 carry the row's whole shape: "For each
+option, list only a short text summary, a simple indicator if it is the
+recommended choice of the ai and with what boldness, and keep the chips that
+indicate support or divergence by tradition. Move AI reasoning (such as 'passed
+over') to the details area for each option - not in a chip." Every mark this
+answer keeps or moves is read off that sentence.
 
-> reconciliation of that disposition in included in the bootstrap reconciliation authority for this sitting
+Their answer of 2026-09-06 to the probe the same words raised — "What 'stands'
+could represent is the prior confirmed disposition (if any). There are no
+confirmed dispositions currently, so we would expect to see no indication of
+that." — turns a chip that named the absence of a ruling into a mark that names
+one, and so takes the question of confirmation off the row entirely.
 
-The author, 2026-09-07, answering the three calls the session put before them on the revised accumulation strategy: carried here because this node's question is one the answer reaches,
+The third ground is not the author's and is named as such. Four clean-context
+readings on this node's line of drafts found, in turn, that the choice on the
+contested clause was never binary; that the record already holds the third
+answer, the reader's line in place of the AI's; and that the two cases with no
+reader's line are one. What the answer beat is on the fact:
+`ai-case-against-on-the-row`, which every one of those drafts recommended before
+the readings, and `case-against-to-the-details`, which is the author's placement
+with no line at the first level at all.
 
-> 1. named-change form legibility tradeoff is acceptable as long as the exact node preview can be mechanically derived (eg. via patch syntax)
-> 2. previously confirmed and standing are just one and the same thing (we can probably just remove reference to "standing" and replace it with "confirmed"
-> 3. All of AI and author rationale and references to tradition are recorded as support and/or divergence for each option. AI response is accumulated, reference to tradition is accumulated, author response is concatenated quotation. AI support and divergence can be recorded for any option. The AI recommendation is the judgement that weighs AI support/divergence for each option.
->
-> This implies guidance for which quotes from the author need to be retained and which options need to be recorded. We don't need to retain author quotes that neither support or diverge from an option. If a quote from an author expresses support or divergence from an option then that option must be recorded. Any option with support or divergence in tradition must be recorded. If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
 
 ## Answer
 
@@ -217,66 +266,7 @@ is a fact about the node and not a status of one option among several, so it is
 not a row's business; where the page says it instead is
 `where-the-unconfirmed-indication-goes`, named in `depends`, and this answer
 settles only that the row does not carry it.
-
-## Rationale
-
-The author's layout words of 2026-09-04 carry the row's whole shape: "For each
-option, list only a short text summary, a simple indicator if it is the
-recommended choice of the ai and with what boldness, and keep the chips that
-indicate support or divergence by tradition. Move AI reasoning (such as 'passed
-over') to the details area for each option - not in a chip." Every mark this
-answer keeps or moves is read off that sentence.
-
-Their answer of 2026-09-06 to the probe the same words raised — "What 'stands'
-could represent is the prior confirmed disposition (if any). There are no
-confirmed dispositions currently, so we would expect to see no indication of
-that." — turns a chip that named the absence of a ruling into a mark that names
-one, and so takes the question of confirmation off the row entirely.
-
-The third ground is not the author's and is named as such. Four clean-context
-readings on this node's line of drafts found, in turn, that the choice on the
-contested clause was never binary; that the record already holds the third
-answer, the reader's line in place of the AI's; and that the two cases with no
-reader's line are one. What the answer beat is on the fact:
-`ai-case-against-on-the-row`, which every one of those drafts recommended before
-the readings, and `case-against-to-the-details`, which is the author's placement
-with no line at the first level at all.
-
-## Facts
-
-### answer
-
-`the-details-carry-the-three-accumulations` is recommended since 2026-09-07: it is `three-marks-and-the-case-against` with the confirmed mark read as the derived label and the expanded details given their three accumulations and the preview beneath them, on the author's refinement of that day quoted under `## Disposition`; the first level is unchanged. Its own support and divergence are under its subsection, and what follows is the reason the text it amends was recommended on, which the amendment carries except where it says otherwise.
-
-`three-marks-and-the-case-against` was recommended because every settlement on it is the author's words applied where
-they fall, except one clause, which is the readings' and is named as theirs. The
-three marks are the author's list of 2026-09-04 with their answer of 2026-09-06
-in place of the chip it discharges. The merge of the standing and ruled marks is
-not a design choice but a consequence of the rule the reader of the graph
-enforces, that on the answer fact the ruled option is the option that stands.
-Whether the node is confirmed leaves the row because it is a fact about the node,
-and where it goes is `where-the-unconfirmed-indication-goes`'.
-
-What rests on the AI is the mark that stands where no reader's line bears, the
-choice to collapse into it the two ways that can happen, and the judgment that
-the row needs the mark at all. The last is what `no-mark-where-no-line` contests
-and it is argued rather than assumed. The stage chip says whether the node's
-readings have run; the mark says whether a reader's line bears on this fact,
-which is a different fact and is the one the author is about to choose on. A
-reader weighing two rows of the same fact against each other should not have to
-leave the row to learn that nothing has been said against either, and a blank
-where an argument would be reads as a recommendation nobody has objected to
-rather than as one nobody has checked — the confusion `recording`'s rule that
-"when the review found no strong counter-argument, the recommendation goes alone
-and says so" exists to prevent. Against that, the mark is one fact said as many
-times as the node has facts, which is what `codd-update-anomaly` names and what
-this answer's own merge of the standing and ruled marks refuses elsewhere; the
-difference is that the merged marks were two names for one row's state and this
-is the same state on rows the reader meets one at a time. Boldness moderate, and
-the cardinality is why: with one counter-argument per node, most rows of most
-nodes carry the mark rather than a line, and whether that is right depends on
-`counter-argument-per-fact` on `clean-context-review`, which this answer does not
-own.
+```
 
 #### case-against-to-the-details
 
@@ -288,6 +278,31 @@ What it costs is that the first level of every fact carries a recommendation and
 no objection to it, which is the anchoring the parent's own paragraph exists to
 prevent.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with no line at the first level at all:
+the reader's counter-argument goes down with the AI's, and the row carries the
+sentence, the marks and the tradition chips and nothing else. This is the
+author's placement read at its widest, and their words are twice on its side.
+What it costs is that the first level of every fact carries a recommendation and
+no objection to it, which is the anchoring the parent's own paragraph exists to
+prevent.
+```
+
 #### ai-case-against-on-the-row
 
 Everything the recommended option says, with the line at the first level written
@@ -296,10 +311,35 @@ full strength, on the recommended option's row, giving way to the reader's
 counter-argument where one has been returned. It is the only option under which
 an objection the record holds is always at the level the author reads, on every
 fact of every node, which is the fact's own `against` and is
-`hansard-verbatim-record`'s side of the divergence recorded above. Against it:
+`hansard-verbatim-record`'s side of the divergence recorded above.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it:
 the author placed the AI's reasoning in the details twice, and `scholastic-
 articulus` holds that an objection written by the recommending party has lost the
 guarantee the tradition gave it.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the line at the first level written
+by the AI rather than by the reader: the AI's own case against, in one line, at
+full strength, on the recommended option's row, giving way to the reader's
+counter-argument where one has been returned. It is the only option under which
+an objection the record holds is always at the level the author reads, on every
+fact of every node, which is the fact's own `against` and is
+`hansard-verbatim-record`'s side of the divergence recorded above.
+```
 
 #### keep-the-four-pills
 
@@ -310,6 +350,30 @@ page renders today. Passed over: it is the reading the parent withdrew on
 three pills the author's words name as not useful. It survives on the list so
 that what the page does is refused in the open rather than by silence.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the row keeping `alt-src`,
+`alt-stands`, `alt-ruled` and `alt-passed` at the first level, which is what the
+page renders today. Passed over: it is the reading the parent withdrew on
+2026-09-05 as a misreading of its own fence, and it keeps at the first level the
+three pills the author's words name as not useful. It survives on the list so
+that what the page does is refused in the open rather than by silence.
+```
+
 #### confirmed-mark-struck
 
 Everything the recommended option says, with no status mark of any kind on the
@@ -319,6 +383,30 @@ the confirmed choice keeps its authority, and position alone cannot say it,
 cannot distinguish the confirmed choice from an option ordered first by chance,
 and leaves the author unable to find their own prior ruling.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with no status mark of any kind on the
+row: the confirmed choice is shown first, as `dialogue` orders the options, and
+the page says nothing more. Passed over: that node requires a projection to say
+the confirmed choice keeps its authority, and position alone cannot say it,
+cannot distinguish the confirmed choice from an option ordered first by chance,
+and leaves the author unable to find their own prior ruling.
+```
+
 #### stands-and-ruled-as-two-marks
 
 Everything the recommended option says, with the redefined standing mark and the
@@ -327,6 +415,30 @@ other that the author ruled for it. Viable and not adopted. It is the reading
 that survives if the reader's rule that the ruled option is the option that
 stands is ever relaxed; against it, on the answer fact today the two are the same
 option by that rule, so two marks would be one fact said twice on one row.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the redefined standing mark and the
+ruled mark staying separate: one says the option's text is the node's answer, the
+other that the author ruled for it. Viable and not adopted. It is the reading
+that survives if the reader's rule that the ruled option is the option that
+stands is ever relaxed; against it, on the answer fact today the two are the same
+option by that rule, so two marks would be one fact said twice on one row.
+```
 
 #### source-stays-on-the-row
 
@@ -338,6 +450,31 @@ name three things the row keeps and this is not among them, and the author's own
 words behind an option are in that option's drill-down already, where they are
 the thing itself rather than a phrase about it.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with `alt-src` staying at the first
+level: where an option came from is arguably what a chooser needs and not what a
+checker needs, an option the author put on the table being a different kind of
+candidate from one the AI invented. Viable and not adopted: the author's words
+name three things the row keeps and this is not among them, and the author's own
+words behind an option are in that option's drill-down already, where they are
+the thing itself rather than a phrase about it.
+```
+
 #### unread-mark-where-no-reading-has-run
 
 The mark appears only where no reading has run, and a fact whose reading returned
@@ -346,6 +483,28 @@ deliberately, and this option is the half of the recommendation that would be
 left if it did not, so it names no choice the author can make against the
 recommendation as a whole.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+The mark appears only where no reading has run, and a fact whose reading returned
+nothing carries something else. Passed over: the answer collapses the two cases
+deliberately, and this option is the half of the recommendation that would be
+left if it did not, so it names no choice the author can make against the
+recommendation as a whole.
+```
 
 #### ai-line-until-a-reading-returns
 
@@ -356,6 +515,31 @@ the reader's line when one arrives. Passed over: it is
 further, so it names the same arrangement with a narrower reach, and the choice
 the author has between the AI's line and the reader's is put plainly by that
 option instead.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the AI's own case against standing at
+the first level on any fact whose reading has not yet returned, and giving way to
+the reader's line when one arrives. Passed over: it is
+`ai-case-against-on-the-row` for the interval before a reading returns and no
+further, so it names the same arrangement with a narrower reach, and the choice
+the author has between the AI's line and the reader's is put plainly by that
+option instead.
+```
 
 #### no-mark-where-no-line
 
@@ -373,6 +557,38 @@ know whether anything has been said against the recommendation, and an absence
 where an argument would be reads as an absence of anything to say rather than as
 an absence of a reader, which is the legibility the recommended option buys with
 the mark.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with no mark on the row where no reader's
+line bears on the fact: the row carries the sentence, the three status marks, the
+tradition chips, and the reader's counter-argument where one bears, and nothing
+at all where none does. Whether a node's recommendations have been read is a fact
+about the node and not a status of one option, the stage chip already carries the
+two readings' readiness, and the absence of a line already says what the mark
+would say, so a mark repeated on every row of every fact is one fact said as many
+times as the node has facts, which is what `codd-update-anomaly` warns of and
+what this answer's own merge of the standing and ruled marks refuses. Viable and
+not adopted: a reader choosing on a row would have to leave it for the chip to
+know whether anything has been said against the recommendation, and an absence
+where an argument would be reads as an absence of anything to say rather than as
+an absence of a reader, which is the legibility the recommended option buys with
+the mark.
+```
 
 #### a-term-is-its-own-sentence
 
@@ -396,13 +612,102 @@ authority fact a lead this answer's own words call a defect to be found. Under
 this option those two clauses say what they mean for a per-node fact and say what
 a vocabulary fact does instead; nothing else in the answer changes.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with one exception written into the two
+clauses that would otherwise forbid it. This answer holds that a row "carries the
+option's name nowhere", on the reason the parent gives, "the name is how a ruling
+is stored and the sentence is the decision, and the author's words of 2026-09-04
+strike the id-shaped string from the row"; and it holds that where the record
+holds no sentence "the row falls back to the bare name ... so a bare name on the
+page is a record not yet written and a defect to be found". On the two facts
+whose options are the record's own vocabulary, `authority` and `existence`,
+neither reaches. The option's name there is not an id-shaped slug but a term the
+record defines, so the sentence the record holds for it and its name are the same
+string: leading with the term is leading with what the record holds. And it is
+not the fallback, which is what the projector prints where the record holds
+nothing, since here the record holds the term and its gloss both. Raised by
+`commons.systems/disposition-graph/vocabulary-option-summary`, whose recommended
+answer leads a vocabulary row with the term and puts the gloss one step down, and
+which would otherwise print on three rows of each of the 134 nodes carrying the
+authority fact a lead this answer's own words call a defect to be found. Under
+this option those two clauses say what they mean for a per-node fact and say what
+a vocabulary fact does instead; nothing else in the answer changes.
+```
+
 #### the-details-carry-the-three-accumulations
 
 The row's three marks are unchanged, the confirmed mark being the derived label on the option last ruled confirm; the expanded details carry three accumulations and no more, the author's words each way as one quotation, the traditions' from the readings, and the AI's support and divergence whether or not the fact recommends the option, and beneath them the node as it would stand under this option, which the context pane previews when the option is selected.
 
 **AI support.** The author's refinement of 2026-09-07 names the expanded details' contents, before and after confirmation; the row's first level is unchanged, so the marks this answer settled stay settled and only the drill-down grows. The preview beneath the details is what makes the context pane's preview and the details one thing, resolved from the same content.
 
+The author's layout words of 2026-09-04 carry the row's whole shape: "For each
+option, list only a short text summary, a simple indicator if it is the
+recommended choice of the ai and with what boldness, and keep the chips that
+indicate support or divergence by tradition. Move AI reasoning (such as 'passed
+over') to the details area for each option - not in a chip." Every mark this
+answer keeps or moves is read off that sentence.
+
+Their answer of 2026-09-06 to the probe the same words raised — "What 'stands'
+could represent is the prior confirmed disposition (if any). There are no
+confirmed dispositions currently, so we would expect to see no indication of
+that." — turns a chip that named the absence of a ruling into a mark that names
+one, and so takes the question of confirmation off the row entirely.
+
+The third ground is not the author's and is named as such. Four clean-context
+readings on this node's line of drafts found, in turn, that the choice on the
+contested clause was never binary; that the record already holds the third
+answer, the reader's line in place of the AI's; and that the two cases with no
+reader's line are one. What the answer beat is on the fact:
+`ai-case-against-on-the-row`, which every one of those drafts recommended before
+the readings, and `case-against-to-the-details`, which is the author's placement
+with no line at the first level at all.
+
 **AI divergence.** Three accumulations in a drill-down is the most the details have carried, and where an option has been argued across many sittings the AI's accumulated divergence alone can be longer than the answer, so the details need the order this answer gives them and a projection that folds each accumulation closed by default.
+
+The record asks the AI for a case against every recommendation — `dialogue`'s recommended text makes a fact's `against` the argument the recommendation had to beat, written when the recommendation is recorded — and under this answer the author never sees it at the level they read: on every fact of every node but one, the row carries a mark saying no reader's line bears and the AI's written objection, where one exists, sits behind a fold, because a reading returns one counter-argument for a node and `caseAgainst` substitutes it on the answer fact alone. The rule is mostly unmet today, 53 fact-level `against` fields beside 247 recommendations at this head, so on most rows the mark replaces nothing yet; that is back-fill debt against the rule, as `dialogue`'s own account records, and not a reason the rule will stay unmet, so what the fold hides grows as the debt is paid. The arrangement this answer forbids, the AI's line at the first level, is the only one under which an objection the record holds is always where the author reads.
+
+**Content.**
+
+From: three-marks-and-the-case-against
+
+```diff
+@@ -4,7 +4,6 @@
+ under:
+   - commons.systems/disposition-graph/alignment-page
+ ---
+-
+ ## Answer
+ 
+ A row leads with what the option would answer, in the sentence the record holds
+@@ -19,11 +18,7 @@
+ record not yet written and a defect to be found. The name also stays in the row's
+ markup, where a ruling is staged from it.
+ 
+-Beside that sentence the row carries three status marks and no others. That the
+-recommendation adopts it, with its boldness. For each reading that bears on it,
+-whether the tradition supports it or departs from it, by the reading's name. And,
+-where the author has ruled for it, that it is the confirmed disposition and keeps
+-its authority until the author rules for another, with the response and the date.
++Beside that sentence the row carries three status marks and no others. That the recommendation adopts it, with its boldness. For each reading that bears on it, whether the tradition supports it or departs from it, by the reading's name. And, where the author has ruled for it with the response confirm, that it is the confirmed disposition, marked confirmed where it is the last so ruled on this fact, and keeps its authority until the author rules for another, with the response and the date. The row's expanded details carry three accumulations and no more, at every stage and before and after any confirmation: the author's words, the entries the option references, each marked support or divergence and shown as one quotation concatenated in date order; the traditions', projected from the readings that bear on the option, each marked the same way; and the AI's accumulated support and divergence, shown whether or not the fact recommends the option. Beneath them, the node as it would stand under this option, resolved from the option's content, which the page previews in the context pane when the option is selected.
+ The first two are the author's words of 2026-09-04. The third is what their
+ answer of 2026-09-06 puts where the `stands` chip was: a mark records the prior
+ confirmed disposition, if any, so it appears on an option the author has ruled
+```
 
 ### authority
 
@@ -430,138 +735,6 @@ Against it: layout is reversible and cheap to fix, so `deferred` would let the
 recommendation act on the row while the author works the rest of the frontier,
 and a `ratified` ruling here stops any delegation from ever reaching the page's
 presentation, which is most of what this subtree decides.
-
-## Recommendation
-
-```markdown
----
-question: What does an option's row carry at the first level?
-form: rule
-under:
-  - commons.systems/disposition-graph/alignment-page
----
-## Answer
-
-A row leads with what the option would answer, in the sentence the record holds
-for it, and carries the option's name nowhere. Every option has such a sentence:
-the parent's clause requires one and has the page supply the two kinds the node
-does not write, a vocabulary fact's options and the option that stands. Where the
-record holds none for one yet, the row falls back to the bare name, and that
-fallback is the projector's defence against incomplete data rather than a form
-this answer or the parent provides for — `renderOption` writes a `choicename`
-span where the record yields no sentence, in
-`packages/disposition/project.mjs` — so a bare name on the page is a
-record not yet written and a defect to be found. The name also stays in the row's
-markup, where a ruling is staged from it.
-
-Beside that sentence the row carries three status marks and no others. That the recommendation adopts it, with its boldness. For each reading that bears on it, whether the tradition supports it or departs from it, by the reading's name. And, where the author has ruled for it with the response confirm, that it is the confirmed disposition, marked confirmed where it is the last so ruled on this fact, and keeps its authority until the author rules for another, with the response and the date. The row's expanded details carry three accumulations and no more, at every stage and before and after any confirmation: the author's words, the entries the option references, each marked support or divergence and shown as one quotation concatenated in date order; the traditions', projected from the readings that bear on the option, each marked the same way; and the AI's accumulated support and divergence, shown whether or not the fact recommends the option. Beneath them, the node as it would stand under this option, resolved from the option's content, which the page previews in the context pane when the option is selected.
-The first two are the author's words of 2026-09-04. The third is what their
-answer of 2026-09-06 puts where the `stands` chip was: a mark records the prior
-confirmed disposition, if any, so it appears on an option the author has ruled
-for and nowhere else, and with no confirmed disposition in the record it appears
-nowhere.
-
-It is one mark and not two. On the answer fact the option the author ruled for is
-the option that stands, which the reader of the graph enforces, so two marks
-would be one fact said twice; on the other facts nothing stands and only the
-ruling can appear. Nor can position replace it: `dialogue` has every projection
-show the confirmed choice first and say that it keeps its authority, and a row
-distinguished only by being above its neighbours says neither.
-
-Everything else the record holds on an option is one step down, with the rest of
-its text, the author's words it rests on, and each reading's account: where the
-option came from, by its source and reference; that the AI holds it dominated,
-marked passed over with the clause saying why, in the gloss `viable-options`
-recommends for that status and not in the projector's own words — a gloss its
-standing `defines` does not yet carry, so the projection of it is owed with that
-node's answer and is not this ruling's to find already made; and, where a ruling
-stands on it, the reason the author gave and the pin the ruling answered. The
-author's words send the passed-over status down by name, and the source goes with
-it as the same kind of thing, an account of how the option came to be on the list
-rather than what a reader chooses by. What that costs is stated rather than
-argued away: an option the author put on the table is no longer distinguishable
-at a glance from one the AI invented.
-
-On the recommended option's row of each fact, and on no other row, one line
-against the recommendation, and the AI never writes it. The author's words move
-the AI's reasoning to the details "not in a chip", and the AI's own case against
-is the AI's reasoning however it is set, so it goes down on every fact, with no
-exception. Where it goes is the recommended option's drill-down: the case against
-is a fact's line and a drill-down is an option's, and the recommended option's is
-the one it belongs to, being the argument that option had to beat. It appears
-there as text, beside the source and the passed-over clause, and not as a pill
-re-declared one level down, since "not in a chip" reaches the thing wherever it
-is set. What stands in its place at the first level is the counter-argument the
-clean-context review returned for that fact, with the strength that reading gave
-it. That is not the recommending party's reasoning, and the record already draws
-the line there: `alignment-page` says "that counter-argument is the line and
-carries the strength the review gave it", and `scholastic-articulus` says that
-here "the case against the recommended option is written by the party that
-recommends, so the guarantee is gone and what stands in its place is the
-clean-context review, whose counter-argument replaces the AI's own on the row
-when the review returns one". That reading is cited for that and for no more. Its
-substitution is conditioned on a returned line, and it closes by saying the
-substitution "is weaker than the tradition's guarantee and the record should not
-pretend otherwise", so it licenses nothing at all for the case where no reader's
-line bears, which is the case the next paragraph settles.
-
-Where no reader's line bears on a fact the row carries, in the line's place, one
-mark saying so, and no argument. The two ways that happens — no reading has run
-on the node, and a reading ran and returned nothing for that fact — are one fact
-about the row, and a reader cannot tell them apart by looking. Collapsing them is
-what makes the row legible without knowing the node's stage, and it keeps this
-answer out of a question that is not its own: whether a recommendation with no
-reader's line beside it may be called unopposed is `recording`'s, where the
-conflict between that node's rule and `dialogue`'s requirement of an `against` on
-every recommendation is recorded.
-
-What that costs, stated and not hidden: a reading returns one counter-argument
-for a node, and `caseAgainst` substitutes it on the answer fact alone, so on
-every other fact of every node the row carries the mark and the AI's written
-objection is one step down. Whether a reading should return one line per fact is
-`clean-context-review`'s question, recorded there as `counter-argument-per-fact`.
-It is also a divergence from two readings, recorded here rather than absorbed.
-`hansard-verbatim-record` holds of this very line that it "illustrates the
-argument, so by this standard it cannot be edited out" of the first level, and
-this answer edits it out of the first level on every fact. And
-`scholastic-articulus` licenses the substitution of the reader's line for the
-AI's only "when the review returns one", warning that even there it "is weaker
-than the tradition's guarantee": for the case where no reader's line bears it
-says nothing, so the mark that stands in that case departs from it rather than
-applying it. The option `ai-case-against-on-the-row` is the side both traditions
-take, and each divergence is carried on that reading's own `bears` entry as well
-as here.
-
-What leaves the row entirely is whether the node's text has been confirmed. That
-is a fact about the node and not a status of one option among several, so it is
-not a row's business; where the page says it instead is
-`where-the-unconfirmed-indication-goes`, named in `depends`, and this answer
-settles only that the row does not carry it.
-
-## Rationale
-
-The author's layout words of 2026-09-04 carry the row's whole shape: "For each
-option, list only a short text summary, a simple indicator if it is the
-recommended choice of the ai and with what boldness, and keep the chips that
-indicate support or divergence by tradition. Move AI reasoning (such as 'passed
-over') to the details area for each option - not in a chip." Every mark this
-answer keeps or moves is read off that sentence.
-
-Their answer of 2026-09-06 to the probe the same words raised — "What 'stands'
-could represent is the prior confirmed disposition (if any). There are no
-confirmed dispositions currently, so we would expect to see no indication of
-that." — turns a chip that named the absence of a ruling into a mark that names
-one, and so takes the question of confirmation off the row entirely.
-
-The third ground is not the author's and is named as such. Four clean-context
-readings on this node's line of drafts found, in turn, that the choice on the
-contested clause was never binary; that the record already holds the third
-answer, the reader's line in place of the AI's; and that the two cases with no
-reader's line are one. What the answer beat is on the fact:
-`ai-case-against-on-the-row`, which every one of those drafts recommended before
-the readings, and `case-against-to-the-details`, which is the author's placement
-with no line at the first level at all.
-```
 
 ## Account
 
@@ -1205,3 +1378,7 @@ On the facts and what they recommend: The diff touches only the answer fact's op
 On the viability of the options: Every option already on the list keeps its prior status (the three passed-over options remain passed with their reasons intact); the two new options each carry an argued case rather than a bare assertion, and the newly recommended `the-details-carry-the-three-accumulations` is explicit that it leaves the row's three first-level marks unchanged and only grows the drill-down, so it does not conflict with the fact-level rationale paragraph that argues for the marks arrangement. Nothing in the diff leaves an option ambiguous or contradicts the viable list.
 
 Strongest counter-argument (weak): The fact-level lead paragraph ("Recommended because every settlement on it is the author's words applied where they fall...") was not touched by this diff and argues only for the marks arrangement, without saying why the accumulation-layer option is now recommended over the plain `three-marks-and-the-case-against` it is built on; the option's own added prose (AI support/divergence) carries that argument instead, which is a defensible split but leaves the fact's summary line silent on the actual recommended option. Separately, `a-term-is-its-own-sentence` rests on an unverified claim about `vocabulary-option-summary` and a node count neither this diff nor the previous reading established. Neither point was visible to the last reading since both are new to this diff, but neither is a false statement, a broken pin, or a contradiction this node's own text shows — they are gaps for the neighbourhood to close, not defects in the amendment itself.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/what-an-option-row-carries stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `three-marks-and-the-case-against`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `the-details-carry-the-three-accumulations`; 6 `## Disposition` entries became the ledger entries words/2026-09-04/45, words/2026-09-06/2, words/2026-09-06/3, words/2026-09-07/2, words/2026-09-07/3, words/2026-09-07/4, referenced by 1 option the entry's own date names and by the recommended option for 5 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `case-against-to-the-details`, `ai-case-against-on-the-row`, `keep-the-four-pills`, `confirmed-mark-struck`, `stands-and-ruled-as-two-marks`, `source-stays-on-the-row`, `unread-mark-where-no-reading-has-run`, `ai-line-until-a-reading-returns`, `no-mark-where-no-line`, `a-term-is-its-own-sentence`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `262fc5f533ed9beffd16a456f6dc58a181374812` was already past the recommendation and is left as it stood. The survey's pin `b89922c46f615f7d2ba8814aeeb6b8d431e50670` was already past the recommendation and is left as it stood.

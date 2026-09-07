@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -30,6 +29,42 @@ bears:
     option: all-four-listed-two-derived
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of the special verdict this pass
+produced, and no second account of what the record takes from it is on the
+table.
+
+#### standing
+
+Supports asking the question rather than inferring the answer, and supplies the reason the record was missing.
+
+**AI support.** Surfaced by the second evaluation of `commons.systems/disposition-graph/dialogue`'s maieutic movement of 2026-09-04 and named in the fence's rationale among the readings owed under that node: "the special verdict form, for the rule that a decider is asked each question the judgment needs and the form supplies none by default". It bears on `authority-fact-on-every-node` because that is the clause the tradition informed, the fact put on every node that carries facts so the class is asked rather than inferred; the composed option `every-part-in-the-record` adopts the clause, and the entry is written on the clause the account names.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the special verdict say about asking a decider each question the judgment needs, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/dialogue
+source: The special verdict of the common law, in which the jury answers the questions of fact the judgment turns on and the court applies the law to the answers, against the general verdict, in which one word carries the whole case. Rule 49(a) of the United States Federal Rules of Civil Procedure, the special verdict by written questions, whose own text provides that a party waives a question the court omits and does not demand, and Rule 49(b), the general verdict with answers to written questions, which says what happens when the two disagree. Locus to be checked, the English lineage before the Federal Rules, and whether the reading's emphasis that the form supplies no question by default is the tradition's own or this record's gloss on it.
+bears:
+  - fact: answer
+    option: authority-fact-on-every-node
+    relation: adopted
+  - node: commons.systems/disposition-graph/which-facts-are-listed
+    fact: answer
+    option: all-four-listed-two-derived
+    relation: adopted
+---
+
 ## Answer
 
 Supports asking the question rather than inferring the answer, and supplies the reason the record was missing. A general verdict is one act that carries everything, and nobody afterwards can tell which of the several things it decided the decider actually meant; a special verdict puts each question the judgment needs to the decider separately, so the answers can be read apart, and a question that was never put was never answered. The form supplies no question by itself. The questions are drafted for the case, and drafting them is the work, which is why the rules say what happens to a question the court left out.
@@ -39,18 +74,7 @@ The record takes both halves. A ruling that only confirms an answer says nothing
 The narrowing the record makes is the tradition's too. The fact is required where a node carries facts and not on every staged node, since three staged nodes carry none at all; the tradition puts to the decider the questions the judgment needs and no others, and a node with nothing to rule on needs no question about who rules.
 
 Where the analogy stops. In the special verdict the court composes the answers into a judgment mechanically, and the decider never sees the composition; here the composition is itself an option on the answer fact, and `commons.systems/disposition-graph/dialogue`'s recommendation puts six decisions into one row, which is the general verdict's shape returning on the fact this tradition was cited to divide. The reading records that tension rather than resolving it, and the counter it belongs to is `commons.systems/disposition-graph/single-subject-rule` under this node. The tradition also has a standing objection of its own, that fragmenting a decision into questions drafted by one party lets that party shape what can be decided, which is exactly the AI's position here.
-
-## Rationale
-
-Surfaced by the second evaluation of `commons.systems/disposition-graph/dialogue`'s maieutic movement of 2026-09-04 and named in the fence's rationale among the readings owed under that node: "the special verdict form, for the rule that a decider is asked each question the judgment needs and the form supplies none by default". It bears on `authority-fact-on-every-node` because that is the clause the tradition informed, the fact put on every node that carries facts so the class is asked rather than inferred; the composed option `every-part-in-the-record` adopts the clause, and the entry is written on the clause the account names.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of the special verdict this pass
-produced, and no second account of what the record takes from it is on the
-table.
+```
 
 ### authority
 
@@ -75,3 +99,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/special-verdict-form stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

@@ -16,6 +16,12 @@ facts:
       - name: four-form-draft
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-02/7
+          - words/2026-09-02/15
+          - words/2026-09-02/16
+          - words/2026-09-02/17
+          - words/2026-09-02/18
       - name: five-forms-restored
         source: review
         ref: "2026-09-03"
@@ -55,7 +61,6 @@ facts:
         ref: "2026-09-07"
     recommends: four-form-draft
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -76,89 +81,52 @@ instrument:
   ref: packages/disposition/validate.mjs on the implementation ref
   note: every file parses as one question, at most one answer, and only defined fields
 ---
-## Disposition
-
-The author, 2026-09-02:
-> Given the above: is "form: target" synonymous with "disposition"? Evaluate if "disposition" would be a better name for "target".
-
-The author, 2026-09-02:
-> "assumption" deserves a target disposition, along with "tradition" and "disposition" (if target is renamed to disposition). This is how vocabulary is recorded, not with something bolted on that will drift. Recommend how hyperlinks will avoid drift.
-
-The author, 2026-09-02:
-> Is assumption a form at all? I think the concept of an assumption started as instrumentation. Something like "this answer is valid so long as this assumption holds". eg. using this platform is economical assuming we are operating at startup scale, but would fail to be economical at enterprise scale.
-
-The author, 2026-09-02:
-> What is the function of a "rule" form? What's not already handled by a target/disposition?
-
-The author, 2026-09-02:
-> What is the rejected section a projection of. Should it be associated with the deferred authority somehow? An authority section projected into the documentation (with notes on pending ratification for deferred authority) would make more sense than a "rejected" section which seems ad-hoc.
-
-## Answer
-
-One question and its standing answer. The question is one line someone could ask the author. The answer is the current position in one of five forms, a target (something that should become true), a rule (something that must stay true while working), an assumption (something about the world the answer relies on), an archē (a first principle held, never derived), or a reading (what a tradition says about the answer above it). The rationale says why, and which alternatives were rejected. While a dialogue is open on it a node also carries the dialogue state, the alternatives pending the author's ruling, each with its source, and the recommendation among them, as the dialogue node says; a stamped node keeps its authority while they are pending. A node with a question and no answer is an un-aligned disposition, the author's stated disposition or the AI's draft on which the alignment dialogue has not concluded; it carries the author's words, the AI's account, and the stage of the dialogue, as the transience node says. It is a node like any other and may be refined by children; what it lacks is authority, not standing. If a text answers two questions, it is two nodes. If a new answer replaces an old one, the node holds the new answer and version control holds the old.
-
-## Rationale
-
-One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Traditions to record as readings: issues as questions (Kunz and Rittel, IBIS, 1970); the answer as an accumulated restatement (the common-law restatement); store once and derive the rest (Codd). An archē is held, never derived, so nothing ranks above one: Metaphysics V.1 on the senses of archē, Posterior Analytics I.3 on the regress of demonstration, Nicomachean Ethics I.4 on beginning from what is known to us, each owed as a reading.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+One question and its standing answer.
+
+**AI support.** One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Traditions to record as readings: issues as questions (Kunz and Rittel, IBIS, 1970); the answer as an accumulated restatement (the common-law restatement); store once and derive the rest (Codd). An archē is held, never derived, so nothing ranks above one: Metaphysics V.1 on the senses of archē, Posterior Analytics I.3 on the regress of demonstration, Nicomachean Ethics I.4 on beginning from what is known to us, each owed as a reading.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+One question and its standing answer. The question is one line someone could ask the author. The answer is the current position in one of five forms, a target (something that should become true), a rule (something that must stay true while working), an assumption (something about the world the answer relies on), an archē (a first principle held, never derived), or a reading (what a tradition says about the answer above it). The rationale says why, and which alternatives were rejected. While a dialogue is open on it a node also carries the dialogue state, the alternatives pending the author's ruling, each with its source, and the recommendation among them, as the dialogue node says; a stamped node keeps its authority while they are pending. A node with a question and no answer is an un-aligned disposition, the author's stated disposition or the AI's draft on which the alignment dialogue has not concluded; it carries the author's words, the AI's account, and the stage of the dialogue, as the transience node says. It is a node like any other and may be refined by children; what it lacks is authority, not standing. If a text answers two questions, it is two nodes. If a new answer replaces an old one, the node holds the new answer and version control holds the old.
+```
+
 #### four-form-draft
 
 The Draft this node carries collapses the five forms to four: target and rule merge as disposition, with achieve or maintain carried by the criteria; archē and reading stay; tradition is added as a form. It also replaces the un-aligned-disposition sentence with a stamp rule, that every node carries a stamp or is an open question, and moves assumption out of the forms into a criterion kind. Its frontmatter uses a criteria key the schema does not have and drops instrument from defines while the node still carries an instrument block, so it could not land as written.
 
-#### five-forms-restored
+**AI support.** One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Target and rule were one form seen from two sides, achieve and maintain, which the goal-oriented requirements tradition carries on the goal's criterion rather than on its kind; assumption began as instrumentation, the condition under which an answer stays valid, and is recorded where it is checked.
 
-The second review kicked the node back and the contradiction finding, which makes forms the survivor, proposes the recommended text revert to five forms and its summary be rewritten, since it still states the four-form merge and the assumption-is-a-criterion clause that forms' own reply withdrew, and no criterion in the record carries the achieve-or-maintain marker the merge rested on. It also restores the sentence that a node with a question and no answer is an un-aligned disposition, which is the schema node's only statement of the term the validator's message quotes, and leaves whether a tradition carries a form of its own to traditions-home. Node's reply accepts all of this and defers the redraft to the sitting, so it is owed and the text still carries the merge. Raised on commons.systems/disposition-graph/instruments.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-#### un-aligned-disposition-not-open-question
-
-The vocabulary finding holds that transience is the survivor of the term: un-aligned disposition is defined there and open question is defined by no node while fifteen use it. Node's recommended text still says 'Every node carries a stamp, or it is an open question awaiting its answer', and node's own statement of the rule was struck. The finding proposes node take the defined term instead, restoring 'a node with a question and no answer is an un-aligned disposition', which is the sentence the validator's message quotes. Raised on commons.systems/disposition-graph/transience, commons.systems/disposition-graph/growth.
-
-#### absorb-form-vocabulary
-
-The redundancy finding makes projection and readings the survivors of the linking rules and proposes that this node be folded into node's rationale as a rejected alternative and pruned. Node already carries the author's quotation verbatim, so the fold costs no words; what it adds to node is the recorded rejection of one node per form, on the ground that each such node would restate the definition its owning node already carries. (Raised on commons.systems/disposition-graph/form-vocabulary.) Also raised on commons.systems/disposition-graph/projection.
-
-#### rationale-argues-facts-list
-
-The rationale says why the answer stands and why the candidates it beat fell, in argument; what was considered is the answer fact's options, each with its status, and the page projects them from the fact and never from the rationale. The standing sentence, that the rationale says which alternatives were rejected, and the fence's, that the page projects those alternatives beside the stamp, both give the rationale a list a field also carries. Raised on commons.systems/disposition-graph/prose-and-structure, whose clean-context review of 2026-09-04 asked that the conflict be recorded here rather than resolved by that node's draft.
-
-#### node-as-a-topic
-
-A node is a topic rather than one question. It was passed over because a topic
-mixes authority in one text, and one question per node is what makes same
-scope decidable.
-
-#### node-as-a-cluster-around-a-default-scope
-
-A node is a cluster of related texts around a default scope. The rationale
-records no reason for passing it over; it states only that one question per
-node makes same scope decidable.
-
-#### history-kept-inside-the-node
-
-A node carries its own history of what it replaced. The rationale records no
-reason for passing it over.
-
-#### proposal-as-a-state-of-a-ratified-node
-
-The recommended `four-form-draft` says a proposal "is the alternative that arose outside alignment, as the authority node defines it", and cites a definition that node no longer gives: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. The sentence drops the origin and cites the authority node for the state. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05.
-
-#### answer-gloss-released-to-dialogue
-
-Everything the recommendation says, with this node's bare `defines` entry for `answer` released, so that the term is defined once, on `dialogue`, the node that reserves the four fact names and would carry the gloss. It is on the table because how-a-fact-is-headed's recommended answer requires the release by name — the bare entry here "does not qualify" as the target of a fact heading's link, and `definerIndex` takes the first definer it meets — so a ruling there writes on this node's `defines` list, and this is where the author rules on that. It acts on nothing until that node is ruled.
-
-#### a-node-file-is-facts-and-account
-
-A node is one question and the options its facts carry, each answer option holding the node as it would stand under it; its file is frontmatter, `## Facts` and `## Account`, and the sentence that a rationale says why and which alternatives were rejected is answered by the options' support and divergence.
-
-**AI support.** It is what `dialogue`'s recommended encoding of 2026-09-07 makes a node, raised by the clean-context reading of that node the same day as a finding on this one, since this node's answer and that one answer the same question two ways.
-
-**AI divergence.** This node defines a node for every graph and `dialogue` encodes an unanswered one; whether a node keeps its options' content after the confirmation is the recording node's, and this option reaches past it.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -179,10 +147,336 @@ criteria:
 ## Answer
 
 One question and its standing answer. The question is one line someone could ask the author. The answer is the current position in one of four forms: a disposition, something that should become or stay true, where whether it is to be achieved or maintained is carried by its criteria; an archē, a first principle held and never derived; a reading, what a tradition says about the answer above it; or a tradition, the root of a mounted body of thought or work. The rationale says why, and which alternatives were rejected and for what reason; the page projects those alternatives beside the stamp. Every node carries a stamp, or it is an open question awaiting its answer; an alternative pending on a stamped node is dialogue state beside its answer, never a class of node, and a proposal is the alternative that arose outside alignment, as the authority node defines it. An assumption is not a form but a criterion: this answer holds so long as the assumption does. If a text answers two questions, it is two nodes. If a new answer replaces an old one, the node holds the new answer and version control holds the old.
+```
 
-## Rationale
+#### five-forms-restored
 
-One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Target and rule were one form seen from two sides, achieve and maintain, which the goal-oriented requirements tradition carries on the goal's criterion rather than on its kind; assumption began as instrumentation, the condition under which an answer stays valid, and is recorded where it is checked.
+The second review kicked the node back and the contradiction finding, which makes forms the survivor, proposes the recommended text revert to five forms and its summary be rewritten, since it still states the four-form merge and the assumption-is-a-criterion clause that forms' own reply withdrew, and no criterion in the record carries the achieve-or-maintain marker the merge rested on. It also restores the sentence that a node with a question and no answer is an un-aligned disposition, which is the schema node's only statement of the term the validator's message quotes, and leaves whether a tradition carries a form of its own to traditions-home. Node's reply accepts all of this and defers the redraft to the sitting, so it is owed and the text still carries the merge. Raised on commons.systems/disposition-graph/instruments.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+The second review kicked the node back and the contradiction finding, which makes forms the survivor, proposes the recommended text revert to five forms and its summary be rewritten, since it still states the four-form merge and the assumption-is-a-criterion clause that forms' own reply withdrew, and no criterion in the record carries the achieve-or-maintain marker the merge rested on. It also restores the sentence that a node with a question and no answer is an un-aligned disposition, which is the schema node's only statement of the term the validator's message quotes, and leaves whether a tradition carries a form of its own to traditions-home. Node's reply accepts all of this and defers the redraft to the sitting, so it is owed and the text still carries the merge. Raised on commons.systems/disposition-graph/instruments.
+```
+
+#### un-aligned-disposition-not-open-question
+
+The vocabulary finding holds that transience is the survivor of the term: un-aligned disposition is defined there and open question is defined by no node while fifteen use it. Node's recommended text still says 'Every node carries a stamp, or it is an open question awaiting its answer', and node's own statement of the rule was struck. The finding proposes node take the defined term instead, restoring 'a node with a question and no answer is an un-aligned disposition', which is the sentence the validator's message quotes. Raised on commons.systems/disposition-graph/transience, commons.systems/disposition-graph/growth.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+The vocabulary finding holds that transience is the survivor of the term: un-aligned disposition is defined there and open question is defined by no node while fifteen use it. Node's recommended text still says 'Every node carries a stamp, or it is an open question awaiting its answer', and node's own statement of the rule was struck. The finding proposes node take the defined term instead, restoring 'a node with a question and no answer is an un-aligned disposition', which is the sentence the validator's message quotes. Raised on commons.systems/disposition-graph/transience, commons.systems/disposition-graph/growth.
+```
+
+#### absorb-form-vocabulary
+
+The redundancy finding makes projection and readings the survivors of the linking rules and proposes that this node be folded into node's rationale as a rejected alternative and pruned. Node already carries the author's quotation verbatim, so the fold costs no words; what it adds to node is the recorded rejection of one node per form, on the ground that each such node would restate the definition its owning node already carries. (Raised on commons.systems/disposition-graph/form-vocabulary.) Also raised on commons.systems/disposition-graph/projection.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+The redundancy finding makes projection and readings the survivors of the linking rules and proposes that this node be folded into node's rationale as a rejected alternative and pruned. Node already carries the author's quotation verbatim, so the fold costs no words; what it adds to node is the recorded rejection of one node per form, on the ground that each such node would restate the definition its owning node already carries. (Raised on commons.systems/disposition-graph/form-vocabulary.) Also raised on commons.systems/disposition-graph/projection.
+```
+
+#### rationale-argues-facts-list
+
+The rationale says why the answer stands and why the candidates it beat fell, in argument; what was considered is the answer fact's options, each with its status, and the page projects them from the fact and never from the rationale. The standing sentence, that the rationale says which alternatives were rejected, and the fence's, that the page projects those alternatives beside the stamp, both give the rationale a list a field also carries. Raised on commons.systems/disposition-graph/prose-and-structure, whose clean-context review of 2026-09-04 asked that the conflict be recorded here rather than resolved by that node's draft.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+The rationale says why the answer stands and why the candidates it beat fell, in argument; what was considered is the answer fact's options, each with its status, and the page projects them from the fact and never from the rationale. The standing sentence, that the rationale says which alternatives were rejected, and the fence's, that the page projects those alternatives beside the stamp, both give the rationale a list a field also carries. Raised on commons.systems/disposition-graph/prose-and-structure, whose clean-context review of 2026-09-04 asked that the conflict be recorded here rather than resolved by that node's draft.
+```
+
+#### node-as-a-topic
+
+A node is a topic rather than one question. It was passed over because a topic
+mixes authority in one text, and one question per node is what makes same
+scope decidable.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+A node is a topic rather than one question. It was passed over because a topic
+mixes authority in one text, and one question per node is what makes same
+scope decidable.
+```
+
+#### node-as-a-cluster-around-a-default-scope
+
+A node is a cluster of related texts around a default scope. The rationale
+records no reason for passing it over; it states only that one question per
+node makes same scope decidable.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+A node is a cluster of related texts around a default scope. The rationale
+records no reason for passing it over; it states only that one question per
+node makes same scope decidable.
+```
+
+#### history-kept-inside-the-node
+
+A node carries its own history of what it replaced. The rationale records no
+reason for passing it over.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+A node carries its own history of what it replaced. The rationale records no
+reason for passing it over.
+```
+
+#### proposal-as-a-state-of-a-ratified-node
+
+The recommended `four-form-draft` says a proposal "is the alternative that arose outside alignment, as the authority node defines it", and cites a definition that node no longer gives: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. The sentence drops the origin and cites the authority node for the state. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+The recommended `four-form-draft` says a proposal "is the alternative that arose outside alignment, as the authority node defines it", and cites a definition that node no longer gives: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. The sentence drops the origin and cites the authority node for the state. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05.
+```
+
+#### answer-gloss-released-to-dialogue
+
+Everything the recommendation says, with this node's bare `defines` entry for `answer` released, so that the term is defined once, on `dialogue`, the node that reserves the four fact names and would carry the gloss. It is on the table because how-a-fact-is-headed's recommended answer requires the release by name — the bare entry here "does not qualify" as the target of a fact heading's link, and `definerIndex` takes the first definer it meets — so a ruling there writes on this node's `defines` list, and this is where the author rules on that. It acts on nothing until that node is ruled.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+Everything the recommendation says, with this node's bare `defines` entry for `answer` released, so that the term is defined once, on `dialogue`, the node that reserves the four fact names and would carry the gloss. It is on the table because how-a-fact-is-headed's recommended answer requires the release by name — the bare entry here "does not qualify" as the target of a fact heading's link, and `definerIndex` takes the first definer it meets — so a ruling there writes on this node's `defines` list, and this is where the author rules on that. It acts on nothing until that node is ruled.
+```
+
+#### a-node-file-is-facts-and-account
+
+A node is one question and the options its facts carry, each answer option holding the node as it would stand under it; its file is frontmatter, `## Facts` and `## Account`, and the sentence that a rationale says why and which alternatives were rejected is answered by the options' support and divergence.
+
+**AI support.** It is what `dialogue`'s recommended encoding of 2026-09-07 makes a node, raised by the clean-context reading of that node the same day as a finding on this one, since this node's answer and that one answer the same question two ways.
+
+**AI divergence.** This node defines a node for every graph and `dialogue` encodes an unanswered one; whether a node keeps its options' content after the confirmation is the recording node's, and this option reaches past it.
+
+**Content.**
+
+```markdown
+---
+question: What is a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - question
+  - answer
+  - rationale
+  - form
+instrument:
+  kind: check
+  ref: packages/disposition/validate.mjs on the implementation ref
+  note: every file parses as one question, at most one answer, and only defined fields
+---
+
+## Answer
+
+A node is one question and the options its facts carry, each answer option holding the node as it would stand under it; its file is frontmatter, `## Facts` and `## Account`, and the sentence that a rationale says why and which alternatives were rejected is answered by the options' support and divergence.
 ```
 
 ## Account
@@ -319,3 +613,7 @@ Proposed: node and transience are where the release is missing. The release of e
 Recorded as an option on this node's answer fact: `answer-gloss-released-to-dialogue` (source review, 2026-09-07).
 
 Recorded as an option on commons.systems/disposition-graph/transience's answer fact: `persistence-gloss-released-to-dialogue` (source review, 2026-09-07).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/node stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `four-form-draft`; 5 `## Disposition` entries became the ledger entries words/2026-09-02/15, words/2026-09-02/7, words/2026-09-02/16, words/2026-09-02/17, words/2026-09-02/18, referenced by 0 options the entry's own date names and by the recommended option for 5 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `five-forms-restored`, `un-aligned-disposition-not-open-question`, `absorb-form-vocabulary`, `rationale-argues-facts-list`, `node-as-a-topic`, `node-as-a-cluster-around-a-default-scope`, `history-kept-inside-the-node`, `proposal-as-a-state-of-a-ratified-node`, `answer-gloss-released-to-dialogue`, `a-node-file-is-facts-and-account`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `50b9ea4f40a07e8facf86b081e6183c2381cce21` was already past the recommendation and is left as it stood.

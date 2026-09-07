@@ -9,7 +9,7 @@ review:
   against: "The node asserts that a teaching order, a work order and a compaction floor coincide because prerequisites come from `under` and importance from rank; they came apart within a day, and this node records it — session-context at boost 2 ranked below the work loop against the author's order of the same day, and the fix was a hand-raised boost and then a whole new field on another node. That is direct evidence that one scalar cannot carry two orders, and scope's `order` field is the admission. The alternative the answer never adopts, that the author states the order and nothing is derived, is the one that actually worked, and it is pending as `author-states-the-order`."
   survey:
     date: 2026-09-05
-    of: 4e6da7c5471bd013675743ab6811ef423fb928ee
+    of: 77945e4946b132709b6386e4bd79aad8857e4d5d
 facts:
   - name: answer
     options:
@@ -25,6 +25,10 @@ facts:
       - name: rank-orders-reconciliation-only
         source: author
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-03/3
+          - words/2026-09-03/24
+          - words/2026-09-03/25
       - name: choose-a-parent-to-change-priority
         source: ai
         ref: "1920badc"
@@ -32,7 +36,6 @@ facts:
         reason: "no reason recorded in the rationale"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -47,40 +50,114 @@ defines:
   - boost
   - onboarding path
 ---
-## Disposition
-
-The author, 2026-09-03:
-> priotity is encoded as rank
-
-The author, 2026-09-03, on the order of reconciliation:
-> The shim will iteratively bite work from the frontier in rank order for reconciliation. i.e. purpose/browser artifact (browser artifact may need new high ranking disposition) -> alignment skill -> the rest of the context management for the harness (CLAUDE.md, rules, CLAUDE.local.md per worktree) -> the non-shim reconciliation harness (codified reconciliation orchestrator, skills for each bite type).
-
-The author, 2026-09-03, on the sitting of alignment-order, answering the probe on this node's second reading of rank, "frontier attention, where work goes first"; these are the words that source the option `rank-orders-reconciliation-only`:
-> It originally referred to the reconciliation frontier, but that predated the alignment frontier. attention "for where work goes first" refers to the reconciliation process (shimmed as a skill, but codified before bootstrap exit).
-
-## Answer
-
-By rank, which is one fact with three readings. Rank is computed from the `under` tree: roots share the whole, and each node's share is divided among its children, weighted by boost, an allocation only the author may ratify, and every boost in the record today is the AI's and unratified. The three readings are the onboarding path, the order a newcomer meets the record, which is the tree walked in rank order; frontier attention, where work goes first; and the compaction floor, what stays in a session's context when it is trimmed, which nothing reads yet and which is owed. During bootstrap the author's choice of what comes next is therefore a boost ratification, so the bootstrap order and the ranking agree by construction. The high-level order, the sections of the record after purpose, is recorded once on the scope node, and the boosts of the nodes it names are held to that order; every other boost is the node's own.
-
-## Rationale
-
-The author's ruling of 2026-09-02 that ranking serves onboarding. Prerequisites come from `under` and importance from rank, so a pedagogical order and a priority order do not fight: the walk descends the tree and orders siblings by rank. The author, 2026-09-03, quoted above: priority is encoded as rank, and the shim bites the frontier in rank order, purpose and the browser first, then the alignment skill, then the harness context, then the non-shim reconciliation harness. The boosts of 2026-09-03 transcribe that order among the children of model, projection above growth above the work loop, with values the AI chose and the author has not ratified; the earlier boost of the same day, model first under purpose, stands. Later on 2026-09-03 the author recorded the high-level order on the scope node, and the boosts of the nodes it names were reset to realize it: the scope node 9 under purpose and session-context 6 under projection, raised from 2 because at 2 it ranked below the work loop; the validator holds the ranks to that order since 2026-09-03. A browser node was not added for rank: a child's rank is a share of its parent's, so the browser bite ranks first through projection's boost, and a browser node is owed by projection's shim at its sitting.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+By rank, which is one fact with three readings.
+
+**AI support.** The author's ruling of 2026-09-02 that ranking serves onboarding. Prerequisites come from `under` and importance from rank, so a pedagogical order and a priority order do not fight: the walk descends the tree and orders siblings by rank. The author, 2026-09-03, quoted above: priority is encoded as rank, and the shim bites the frontier in rank order, purpose and the browser first, then the alignment skill, then the harness context, then the non-shim reconciliation harness. The boosts of 2026-09-03 transcribe that order among the children of model, projection above growth above the work loop, with values the AI chose and the author has not ratified; the earlier boost of the same day, model first under purpose, stands. Later on 2026-09-03 the author recorded the high-level order on the scope node, and the boosts of the nodes it names were reset to realize it: the scope node 9 under purpose and session-context 6 under projection, raised from 2 because at 2 it ranked below the work loop; the validator holds the ranks to that order since 2026-09-03. A browser node was not added for rank: a child's rank is a share of its parent's, so the browser bite ranks first through projection's boost, and a browser node is owed by projection's shim at its sitting.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is attention allocated?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - boost
+  - onboarding path
+---
+
+## Answer
+
+By rank, which is one fact with three readings. Rank is computed from the `under` tree: roots share the whole, and each node's share is divided among its children, weighted by boost, an allocation only the author may ratify, and every boost in the record today is the AI's and unratified. The three readings are the onboarding path, the order a newcomer meets the record, which is the tree walked in rank order; frontier attention, where work goes first; and the compaction floor, what stays in a session's context when it is trimmed, which nothing reads yet and which is owed. During bootstrap the author's choice of what comes next is therefore a boost ratification, so the bootstrap order and the ranking agree by construction. The high-level order, the sections of the record after purpose, is recorded once on the scope node, and the boosts of the nodes it names are held to that order; every other boost is the node's own.
+```
+
 #### author-states-the-order
 
 The reviewer's strongest counter-argument, made twice: one scalar cannot carry a teaching order, a work order and a compaction floor, and this node records the proof, since session-context at boost 2 ranked below the work loop against the author's order of the same day, and the fix was a hand-raised boost and then a whole new order field on scope. The alternative the answer never considers is to let the author state the order and derive nothing, with the recorded order as the mechanism and boost as at most a tie-break. It would make scope's order field the rule rather than a constraint on a derived rank.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is attention allocated?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - boost
+  - onboarding path
+---
+
+## Answer
+
+The reviewer's strongest counter-argument, made twice: one scalar cannot carry a teaching order, a work order and a compaction floor, and this node records the proof, since session-context at boost 2 ranked below the work loop against the author's order of the same day, and the fix was a hand-raised boost and then a whole new order field on scope. The alternative the answer never considers is to let the author state the order and derive nothing, with the recorded order as the mechanism and boost as at most a tie-break. It would make scope's order field the rule rather than a constraint on a derived rank.
+```
 
 #### rank-moves-here
 
 The decomposition finding proposes that 'rank' move from under's `defines` to attention's, since attention already answers how rank is computed and read, leaving under as the edge alone. Under answers four questions at once and stands at the maieutic stage with no drafted text, while four ruling-stage nodes rest on the term. Verified: under's defines carries rank and attention's carries only boost and the onboarding path. The session accepted the substance and left the ruling to under's sitting. Raised on commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/under.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is attention allocated?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - boost
+  - onboarding path
+---
+
+## Answer
+
+The decomposition finding proposes that 'rank' move from under's `defines` to attention's, since attention already answers how rank is computed and read, leaving under as the edge alone. Under answers four questions at once and stands at the maieutic stage with no drafted text, while four ruling-stage nodes rest on the term. Verified: under's defines carries rank and attention's carries only boost and the onboarding path. The session accepted the substance and left the ruling to under's sitting. Raised on commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/under.
+```
+
 #### rank-orders-reconciliation-only
 
 The author's words on alignment-order, 2026-09-03: attention's second reading of rank, "where work goes first", originally referred to the reconciliation frontier and predates the alignment frontier. The alternative amends the second reading to say so: rank orders the reconciliation frontier and the onboarding path, and the alignment frontier is ordered by the ruling order the alignment-order node defines, with rank as its tie-break. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is attention allocated?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - boost
+  - onboarding path
+---
+
+## Answer
+
+The author's words on alignment-order, 2026-09-03: attention's second reading of rank, "where work goes first", originally referred to the reconciliation frontier and predates the alignment frontier. The alternative amends the second reading to say so: rank orders the reconciliation frontier and the onboarding path, and the alignment frontier is ordered by the ruling order the alignment-order node defines, with rank as its tie-break. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+```
 
 #### choose-a-parent-to-change-priority
 
@@ -88,6 +165,31 @@ A node's priority is changed by choosing its parent, so that the tree carries
 priority as well as refinement. The rationale records no reason for passing it
 over; it states only the answer's own ground, that prerequisites come from
 `under` and importance from rank.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is attention allocated?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - boost
+  - onboarding path
+---
+
+## Answer
+
+A node's priority is changed by choosing its parent, so that the tree carries
+priority as well as refinement. The rationale records no reason for passing it
+over; it states only the answer's own ground, that prerequisites come from
+`under` and importance from rank.
+```
 
 ## Account
 
@@ -205,3 +307,7 @@ Findings:
 Strongest counter-argument (strong): The answer concedes in its own text that "every boost in the record today is the AI's and unratified", and then makes rank — which orders the author's review queue, the onboarding walk, and the frontier — a function of those boosts. The party that sets the order in which the author is asked is the party the asking exists to check; that is `class-recommendation`'s capture limb exactly, and this node's authority fact recommends ratified without naming it. The reply, that during bootstrap the author's choice of what comes next is itself a boost ratification so order and rank agree by construction, is true only of the nodes the author has chosen, and this survey's own object of forty-eight nodes was ordered by the unratified numbers.
 
 The session's reply: Taken. Rank orders the queue in which the author is asked, boost is its input, every boost on the record is the AI's and unratified, and the node's authority fact recommends ratified without naming the capture limb that `class-recommendation` would apply to exactly that shape. The reply the node offers is good only for the nodes the author chose by name, and this survey's own object of forty-eight was ordered by the unratified numbers, which is the counter-argument demonstrated rather than answered. What is owed is the reading in `### authority` that `class-recommendation` requires, applying the capture limb to this node's own subject.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/attention stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 3 `## Disposition` entries became the ledger entries words/2026-09-03/24, words/2026-09-03/25, words/2026-09-03/3, referenced by 3 options the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `author-states-the-order`, `rank-moves-here`, `rank-orders-reconciliation-only`, `choose-a-parent-to-change-priority`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `b5cab25eecbb77967324bc260ea5a2d68db896e3` was already past the recommendation and is left as it stood. The survey's pin `4e6da7c5471bd013675743ab6811ef423fb928ee` is re-computed for the encoding as `77945e4946b132709b6386e4bd79aad8857e4d5d`; nothing it read changed.

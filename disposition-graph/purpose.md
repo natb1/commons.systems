@@ -9,16 +9,27 @@ review:
   against: "Purpose is the criterion by which coverage is ruled and by which materialization's swap prunes, and coverage stands at the periagogic stage with four of twelve surveyed functions outside the purpose as worded. The session's answer — that materialization's shim now names the coverage ruling as a condition of the swap — is verified true in the shim text and does close the deletion risk. What remains is that purpose refines an archē that has no author words on it at all: public/agency's answer is written in the author's first person by the AI, and ratifying the child of an unstated first principle fixes the record's why on the AI's draft of it."
   survey:
     date: 2026-09-05
-    of: 0d2481cf1b07f9f9afb3f5e76b4afea2a2b0aced
+    of: 4720df14f032114a26a19af75e8d9d01bd57ef73
 facts:
   - name: answer
     options:
       - name: standing
         source: author
         ref: "2026-09-02"
+        supports:
+          - words/2026-09-02/23
+          - words/2026-09-02/24
+          - words/2026-09-02/25
+          - words/2026-09-02/26
+          - words/2026-09-02/27
+          - words/2026-09-02/28
+          - words/2026-09-02/29
+          - words/2026-09-02/30
       - name: draft
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-03/68
       - name: fold-option-nodes
         source: review
         ref: "2026-09-03"
@@ -59,7 +70,6 @@ facts:
         reason: "it makes the harness the origin"
     recommends: draft
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -71,105 +81,47 @@ form: target
 under:
   - commons.systems/public/agency
 ---
-## Disposition
 
-The author, 2026-09-02:
-> "the factory is whatever agents act on them" - the factory is the reconciliation of disposition with implementation (wordsmith this and validate against tradition).
+## Facts
 
-The author, 2026-09-02:
-> "It records the person's dispositions as a graph, and the work is derived from that record rather than from prompts or chat" - more like dialog with AI is used to maintain a person's dispositions as graph using an `/align` skill (hyperlink to disposition), rather than executing tasks directly. Then, a harness (reference to tradition) directs long horizon work on that graph.
+### answer
 
-The author, 2026-09-02:
-> "The author's words for this answer (2026-09-02) are quoted in the ledger, entry L12" don't refer to the ledger in the disposition. Disposition must resist drift. ledger is temporary bootstrap scaffolding.
+#### standing
 
-The author, 2026-09-02:
-> Also reference harnesses as a tradition. But, do not replicate tradition references in the rationale section. There is already a tradition section.
+This repository exists so that a person can keep long-horizon AI work aligned with their explicit intent.
 
-The author, 2026-09-02:
-> "Defining the repository by its parts." - agreed not for this node, though the graph must provide disposition for both the graph and the harness. Both serve the purpose described in this node.
+**AI support.** Why it matters leads up to the archē this node refines. Delegating work to autonomous tools is expected and good; it buys attention at the level where intent is set. What must not be lost is the person's standing as the origin of what is done in their name, and the capacity to notice capture and recover. A record of intent that the tools act under, and that the person can read, amend, and rank, is how the origin stays with the person while the tools work.
 
-The author, 2026-09-02:
-> "Intent carried in prompts, chat, or memory." - noted
+"Spec-driven development" and "software factories" are the audience's own vocabulary; each is a reading under this node, validated against its tradition and marked where this repository diverges.
 
-The author, 2026-09-02:
-> "Issue trackers as the record of intent." - ratified. Issue trackers and the scrum-like workflows that operate on them are designed for humans with different requirements that don't fit the purpose described in this node
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-The author, 2026-09-02:
-> Is this correctly encoded as form: assumption vs form: disposition with unvalidated instrumentation? Is assumption a form at all? I think the concept of an assumption started as instrumentation.
+**Content.**
 
-The author, 2026-09-03:
-> Rather that deferring a partial edit to a disposition which is confusing (how is that even recorded) the artifact would allow you to show me the edit to the disposition and approve the disposition as a whole.
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
 
 ## Answer
 
 This repository exists so that a person can keep long-horizon AI work aligned with their explicit intent. It records the person's dispositions as a graph, and the work is derived from that record rather than from prompts or chat: something like spec-driven development, applied to software factories, where the specification is the person's standing answers and the factory is whatever agents act on them. Its intended readers are humans who want that, and who may arrive here by way of an AI tasked with the same goal.
 
 Two further functions are hypotheses, recorded as assumptions under this node: that the same record serves as a knowledge store, a projection of its author's hexis; and that the same discipline helps manage capture of the author's intention by institutions generally, not only by misaligned AI writing software.
-
-## Rationale
-
-Why it matters leads up to the archē this node refines. Delegating work to autonomous tools is expected and good; it buys attention at the level where intent is set. What must not be lost is the person's standing as the origin of what is done in their name, and the capacity to notice capture and recover. A record of intent that the tools act under, and that the person can read, amend, and rank, is how the origin stays with the person while the tools work.
-
-"Spec-driven development" and "software factories" are the audience's own vocabulary; each is a reading under this node, validated against its tradition and marked where this repository diverges.
-
-## Facts
-
-### answer
+```
 
 #### draft
 
 The recommended text rewrites the mechanism sentence in the author's own terms, that dialogue with an AI maintains the dispositions as a graph through the alignment skill and a harness then directs long-horizon work on it, strikes 'explicit' from 'explicit intent', and defines the factory as the reconciliation of the standing answers with implementation in both directions. It drops the ledger reference, restates the two hypotheses with the hexis claim first and without storing the children's validation state, and folds the rejected alternatives into the rationale, adding one the node does not carry: the incumbent's framing of the graph as a data structure the harness consumes, rejected because it makes the harness the origin. It also drops the '### Rejected' heading and carries no Disposition section, so the nine dated quotations are not in it. The criteria block it once carried was struck after purpose-criteria's reply.
 
-#### fold-option-nodes
+**AI support.** Why it matters leads up to the archē this node refines. Delegating work to autonomous tools is expected and good; it buys attention at the level where intent is set. What must not be lost is the person's standing as the origin of what is done in their name, and the capacity to notice capture and recover. A record of intent that the tools act under, and that the person can read, amend, and rank, is how the origin stays with the person while the tools work. The graph and the harness both serve this purpose, and the graph gives disposition for both.
 
-Three option-nodes decide clauses a parent's recommended text already contains: hexis on whether the hexis claim comes first, purpose-criteria on whether purpose carries criteria, second-stop on the model rewrite. The finding's second branch folds each option into its parent's account as an explicit alternative rather than keeping it a node, which is what this re-encoding makes structural; its first branch keeps the option-nodes and has each say it is a sub-ruling that must be ruled first. Either way purpose's account names the option-nodes its text presumes, which it does not today.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-#### disclose-unstated-arche
-
-Purpose's parent, public/agency, is at the periagogic stage with no author words anywhere on it and an answer written in the author's first person by the AI, and every node at the review or ruling stage descends from it. The placement finding proposes purpose add one clause saying it rests on an archē the author has not yet stated, which frontier-consistency's placement validation requires of any node ruling on periagogic ground. Raised on commons.systems/public/aristotle-arche-of-action, commons.systems/public/agency.
-
-#### cite-forms
-
-The author's question whether assumption is a form at all, and whether it is correctly encoded as form assumption against form disposition with unvalidated instrumentation, is carried verbatim on knowledge-store, capture and purpose, and forms is the node that answers it. The coverage finding proposes all three cite forms instead of each carrying the quotation, so that one part of one disposition is answered by one node; purpose keeps the quotations that ground the parts it does answer. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/knowledge-store.
-
-#### say-instrument-not-criterion
-
-The same finding names purpose's draft, which uses criterion and the criteria frontmatter key that the schema does not hold. Until instruments is ruled the draft says instrument or discloses that the term and the key arrive with instruments. (Raised on commons.systems/disposition-graph/instruments.)
-
-#### keep-the-authors-words
-
-Purpose's recommended text keeps a '## Disposition' section rather than dropping all nine dated quotations, and its account names for each quotation either the sentence of the answer that absorbs it or the node it moves to. Verified that the fence carries no author quotation of any date and that two of the three quotations answered elsewhere — the form question and the tradition instruction — have no '## Disposition' section on their target nodes to move into. It is on the table because quotes' recommended answer permits only a roll-up of what the answer absorbed, quotes is unruled, and this would be the first and largest application of a rule whose shape no node describes; the author may equally rule that the record's highest-ranked page should carry the answer alone, with version control holding the words.
-
-#### knowledge-store-first
-
-The recommended text with its second hypothesis in the order the page had, "a knowledge store, a projection of its author's hexis", and otherwise as `draft` has it. It is the second ordering the option-node hexis held, recorded here on 2026-09-04 when the independence test of probe-or-node found that node to be a question on this one, which is the fold `fold-option-nodes` proposes, executed for hexis. Both reviews of 2026-09-03 backed this ordering with the same counter-argument: purpose is the onboarding entry point and the README's source, no node's `defines` carries hexis so the browser cannot link it, and the apposition teaches the term instead of assuming it, the philosophical precision belonging on knowledge-store where the hypothesis and its reading live. Low boldness either way, the ground being the AI's reading of a text the author has not read.
-
-#### define-by-its-parts
-
-The repository is defined by its parts, a data structure plus a harness, as
-the incumbent README describes it. It was passed over because that is scope
-and not purpose: it says what is here, not why.
-
-#### intent-in-prompts-chat-or-memory
-
-Intent is carried in prompts, chat, or memory rather than in a record. It was
-passed over because it is not durable, not reviewable and not rankable: it is
-the tacit form this repository exists to replace.
-
-#### issue-trackers-as-the-record-of-intent
-
-Issue trackers are the record of intent, which was tried here at length. It
-was passed over because they record work and not dispositions, and cannot
-carry authority or rank; the scrum-like workflows on them are designed for a
-different requirement.
-
-#### data-structure-the-harness-consumes
-
-The strongest form of the incumbent's framing: the graph is a data structure
-the harness consumes. It was passed over because it makes the harness the
-origin, which is what the arche under this node forbids.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -183,10 +135,254 @@ under:
 This repository exists so that a person can keep long-horizon AI work aligned with their intent. Dialogue with an AI maintains the person's dispositions as a graph through the alignment skill, rather than executing tasks directly; a harness then directs long-horizon work on that graph. It is something like spec-driven development applied to a software factory, where the specification is the person's standing answers and the factory is the reconciliation of those answers with implementation, in both directions. Its intended readers are humans who want that, and who may arrive here by way of an AI tasked with the same goal.
 
 Two further functions are hypotheses, recorded under this node as hypotheses: that the same record is a projection of its author's hexis, which is what a knowledge store would hold; and that the same discipline helps manage capture of the author's intention in the variety of ways it occurs in daily life, through a variety of institutions, not only misaligned AI writing software.
+```
 
-## Rationale
+#### fold-option-nodes
 
-Why it matters leads up to the archē this node refines. Delegating work to autonomous tools is expected and good; it buys attention at the level where intent is set. What must not be lost is the person's standing as the origin of what is done in their name, and the capacity to notice capture and recover. A record of intent that the tools act under, and that the person can read, amend, and rank, is how the origin stays with the person while the tools work. The graph and the harness both serve this purpose, and the graph gives disposition for both.
+Three option-nodes decide clauses a parent's recommended text already contains: hexis on whether the hexis claim comes first, purpose-criteria on whether purpose carries criteria, second-stop on the model rewrite. The finding's second branch folds each option into its parent's account as an explicit alternative rather than keeping it a node, which is what this re-encoding makes structural; its first branch keeps the option-nodes and has each say it is a sub-ruling that must be ruled first. Either way purpose's account names the option-nodes its text presumes, which it does not today.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
+
+## Answer
+
+Three option-nodes decide clauses a parent's recommended text already contains: hexis on whether the hexis claim comes first, purpose-criteria on whether purpose carries criteria, second-stop on the model rewrite. The finding's second branch folds each option into its parent's account as an explicit alternative rather than keeping it a node, which is what this re-encoding makes structural; its first branch keeps the option-nodes and has each say it is a sub-ruling that must be ruled first. Either way purpose's account names the option-nodes its text presumes, which it does not today.
+```
+
+#### disclose-unstated-arche
+
+Purpose's parent, public/agency, is at the periagogic stage with no author words anywhere on it and an answer written in the author's first person by the AI, and every node at the review or ruling stage descends from it. The placement finding proposes purpose add one clause saying it rests on an archē the author has not yet stated, which frontier-consistency's placement validation requires of any node ruling on periagogic ground. Raised on commons.systems/public/aristotle-arche-of-action, commons.systems/public/agency.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
+
+## Answer
+
+Purpose's parent, public/agency, is at the periagogic stage with no author words anywhere on it and an answer written in the author's first person by the AI, and every node at the review or ruling stage descends from it. The placement finding proposes purpose add one clause saying it rests on an archē the author has not yet stated, which frontier-consistency's placement validation requires of any node ruling on periagogic ground. Raised on commons.systems/public/aristotle-arche-of-action, commons.systems/public/agency.
+```
+
+#### cite-forms
+
+The author's question whether assumption is a form at all, and whether it is correctly encoded as form assumption against form disposition with unvalidated instrumentation, is carried verbatim on knowledge-store, capture and purpose, and forms is the node that answers it. The coverage finding proposes all three cite forms instead of each carrying the quotation, so that one part of one disposition is answered by one node; purpose keeps the quotations that ground the parts it does answer. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/knowledge-store.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
+
+## Answer
+
+The author's question whether assumption is a form at all, and whether it is correctly encoded as form assumption against form disposition with unvalidated instrumentation, is carried verbatim on knowledge-store, capture and purpose, and forms is the node that answers it. The coverage finding proposes all three cite forms instead of each carrying the quotation, so that one part of one disposition is answered by one node; purpose keeps the quotations that ground the parts it does answer. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/knowledge-store.
+```
+
+#### say-instrument-not-criterion
+
+The same finding names purpose's draft, which uses criterion and the criteria frontmatter key that the schema does not hold. Until instruments is ruled the draft says instrument or discloses that the term and the key arrive with instruments. (Raised on commons.systems/disposition-graph/instruments.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
+
+## Answer
+
+The same finding names purpose's draft, which uses criterion and the criteria frontmatter key that the schema does not hold. Until instruments is ruled the draft says instrument or discloses that the term and the key arrive with instruments. (Raised on commons.systems/disposition-graph/instruments.)
+```
+
+#### keep-the-authors-words
+
+Purpose's recommended text keeps a '## Disposition' section rather than dropping all nine dated quotations, and its account names for each quotation either the sentence of the answer that absorbs it or the node it moves to. Verified that the fence carries no author quotation of any date and that two of the three quotations answered elsewhere — the form question and the tradition instruction — have no '## Disposition' section on their target nodes to move into. It is on the table because quotes' recommended answer permits only a roll-up of what the answer absorbed, quotes is unruled, and this would be the first and largest application of a rule whose shape no node describes; the author may equally rule that the record's highest-ranked page should carry the answer alone, with version control holding the words.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
+
+## Answer
+
+Purpose's recommended text keeps a '## Disposition' section rather than dropping all nine dated quotations, and its account names for each quotation either the sentence of the answer that absorbs it or the node it moves to. Verified that the fence carries no author quotation of any date and that two of the three quotations answered elsewhere — the form question and the tradition instruction — have no '## Disposition' section on their target nodes to move into. It is on the table because quotes' recommended answer permits only a roll-up of what the answer absorbed, quotes is unruled, and this would be the first and largest application of a rule whose shape no node describes; the author may equally rule that the record's highest-ranked page should carry the answer alone, with version control holding the words.
+```
+
+#### knowledge-store-first
+
+The recommended text with its second hypothesis in the order the page had, "a knowledge store, a projection of its author's hexis", and otherwise as `draft` has it. It is the second ordering the option-node hexis held, recorded here on 2026-09-04 when the independence test of probe-or-node found that node to be a question on this one, which is the fold `fold-option-nodes` proposes, executed for hexis. Both reviews of 2026-09-03 backed this ordering with the same counter-argument: purpose is the onboarding entry point and the README's source, no node's `defines` carries hexis so the browser cannot link it, and the apposition teaches the term instead of assuming it, the philosophical precision belonging on knowledge-store where the hypothesis and its reading live. Low boldness either way, the ground being the AI's reading of a text the author has not read.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
+
+## Answer
+
+The recommended text with its second hypothesis in the order the page had, "a knowledge store, a projection of its author's hexis", and otherwise as `draft` has it. It is the second ordering the option-node hexis held, recorded here on 2026-09-04 when the independence test of probe-or-node found that node to be a question on this one, which is the fold `fold-option-nodes` proposes, executed for hexis. Both reviews of 2026-09-03 backed this ordering with the same counter-argument: purpose is the onboarding entry point and the README's source, no node's `defines` carries hexis so the browser cannot link it, and the apposition teaches the term instead of assuming it, the philosophical precision belonging on knowledge-store where the hypothesis and its reading live. Low boldness either way, the ground being the AI's reading of a text the author has not read.
+```
+
+#### define-by-its-parts
+
+The repository is defined by its parts, a data structure plus a harness, as
+the incumbent README describes it. It was passed over because that is scope
+and not purpose: it says what is here, not why.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
+
+## Answer
+
+The repository is defined by its parts, a data structure plus a harness, as
+the incumbent README describes it. It was passed over because that is scope
+and not purpose: it says what is here, not why.
+```
+
+#### intent-in-prompts-chat-or-memory
+
+Intent is carried in prompts, chat, or memory rather than in a record. It was
+passed over because it is not durable, not reviewable and not rankable: it is
+the tacit form this repository exists to replace.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
+
+## Answer
+
+Intent is carried in prompts, chat, or memory rather than in a record. It was
+passed over because it is not durable, not reviewable and not rankable: it is
+the tacit form this repository exists to replace.
+```
+
+#### issue-trackers-as-the-record-of-intent
+
+Issue trackers are the record of intent, which was tried here at length. It
+was passed over because they record work and not dispositions, and cannot
+carry authority or rank; the scrum-like workflows on them are designed for a
+different requirement.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
+
+## Answer
+
+Issue trackers are the record of intent, which was tried here at length. It
+was passed over because they record work and not dispositions, and cannot
+carry authority or rank; the scrum-like workflows on them are designed for a
+different requirement.
+```
+
+#### data-structure-the-harness-consumes
+
+The strongest form of the incumbent's framing: the graph is a data structure
+the harness consumes. It was passed over because it makes the harness the
+origin, which is what the arche under this node forbids.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is this repository for?
+form: target
+under:
+  - commons.systems/public/agency
+---
+
+## Answer
+
+The strongest form of the incumbent's framing: the graph is a data structure
+the harness consumes. It was passed over because it makes the harness the
+origin, which is what the arche under this node forbids.
 ```
 
 ## Account
@@ -417,3 +613,7 @@ The independence test of `commons.systems/disposition-graph/probe-or-node`, run 
 Also named: commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/second-stop.
 
 Proposed: Record the independence test as the reason on each existence fact's `prune` option, on `hexis` and on `audience`, and let the author rule the prune at each node's own row, which is what `probe-or-node`'s answer prescribes for a node already standing. Before `audience` is pruned, its surviving content is named: the sentence itself is already in `purpose`, and the enumeration of onboarding surfaces — README, browser opening pages, repository description, discovery tags — belongs to `projection` or `self-documentation` and moves there rather than being deleted with the node. `hexis` needs no survivor: `purpose` already carries its content as the option `knowledge-store-first`.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/purpose stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `draft`; 9 `## Disposition` entries became the ledger entries words/2026-09-02/23, words/2026-09-02/24, words/2026-09-02/25, words/2026-09-02/26, words/2026-09-02/27, words/2026-09-02/28, words/2026-09-02/29, words/2026-09-02/30, words/2026-09-03/68, referenced by 8 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `fold-option-nodes`, `disclose-unstated-arche`, `cite-forms`, `say-instrument-not-criterion`, `keep-the-authors-words`, `knowledge-store-first`, `define-by-its-parts`, `intent-in-prompts-chat-or-memory`, `issue-trackers-as-the-record-of-intent`, `data-structure-the-harness-consumes`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `5d11c3a38fbd5b02874305367c2b21e7183c28c7` was already past the recommendation and is left as it stood. The survey's pin `0d2481cf1b07f9f9afb3f5e76b4afea2a2b0aced` is re-computed for the encoding as `4720df14f032114a26a19af75e8d9d01bd57ef73`; nothing it read changed.

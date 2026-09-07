@@ -5,20 +5,21 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: 976f4e45cbef5225580dbdc4431b57f47978e215
+  of: 3bbe247145845ab8e9e2e89b26bd76be2be09839
   against: "Pruning removes the only node whose question is who the repository is for, and purpose answers it in one subordinate clause that purpose-criteria now recommends leaving permanently unguarded. The requirements tradition the record adopts does state the intended audience inside the purpose section, so the prune is well grounded; the residue is that the audience question was where coverage's survey found the most divergence, and after the prune it can be re-asked only at a periagogic sitting the record has not scheduled."
   survey:
     date: 2026-09-05
-    of: 976f4e45cbef5225580dbdc4431b57f47978e215
+    of: 3bbe247145845ab8e9e2e89b26bd76be2be09839
 facts:
   - name: answer
     options:
       - name: standing
         source: ai
         ref: "2026-09-02"
+        supports:
+          - words/2026-09-02/2
     recommends: standing
     boldness: low
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -36,20 +37,33 @@ form: rule
 under:
   - commons.systems/disposition-graph/purpose
 ---
-## Disposition
 
-The author, 2026-09-02:
-> "Who is this repository for?" to the extent this needs to be recorded right now it is handled by the purpose node already. It can be pruned. We might fold some of this in from the incumbent graph later.
+## Facts
+
+### answer
+
+#### standing
+
+Humans who want to manage the alignment of long-horizon AI agent workflows, or software factories, by something like spec-driven development, and who may arrive here by way of an AI tasked with that goal.
+
+**AI support.** The author's words, 2026-09-02. Purpose, scope, audience, and definitions are the first four things a requirements specification states, in that order, and the onboarding walk of this graph follows the same order (the reading under the purpose node). That the audience may arrive via an AI is why the onboarding pages must be legible to a model as well as to a person: plain statements, defined vocabulary, and stable ids.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Who is this repository for?
+form: rule
+under:
+  - commons.systems/disposition-graph/purpose
+---
 
 ## Answer
 
 Humans who want to manage the alignment of long-horizon AI agent workflows, or software factories, by something like spec-driven development, and who may arrive here by way of an AI tasked with that goal. Everything onboarding-facing is written for them: the README, the graph browser's opening pages, the repository's description and discovery tags.
-
-## Rationale
-
-The author's words, 2026-09-02. Purpose, scope, audience, and definitions are the first four things a requirements specification states, in that order, and the onboarding walk of this graph follows the same order (the reading under the purpose node). That the audience may arrive via an AI is why the onboarding pages must be legible to a model as well as to a person: plain statements, defined vocabulary, and stable ids.
-
-## Facts
+```
 
 ### existence
 
@@ -172,3 +186,7 @@ The independence test of `commons.systems/disposition-graph/probe-or-node`, run 
 Also named: commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/second-stop.
 
 Proposed: Record the independence test as the reason on each existence fact's `prune` option, on `hexis` and on `audience`, and let the author rule the prune at each node's own row, which is what `probe-or-node`'s answer prescribes for a node already standing. Before `audience` is pruned, its surviving content is named: the sentence itself is already in `purpose`, and the enumeration of onboarding surfaces — README, browser opening pages, repository description, discovery tags — belongs to `projection` or `self-documentation` and moves there rather than being deleted with the node. `hexis` needs no survivor: `purpose` already carries its content as the option `knowledge-store-first`.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/audience stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-02/2, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The draft review's pin `976f4e45cbef5225580dbdc4431b57f47978e215` is re-computed for the encoding as `3bbe247145845ab8e9e2e89b26bd76be2be09839`; nothing it read changed. The survey's pin `976f4e45cbef5225580dbdc4431b57f47978e215` is re-computed for the encoding as `3bbe247145845ab8e9e2e89b26bd76be2be09839`; nothing it read changed.

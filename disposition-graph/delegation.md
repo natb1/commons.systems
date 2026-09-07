@@ -10,7 +10,7 @@ review:
   against: "The draft asks the author to ratify a global-tier rule two of whose operative sentences are not in the record. The model a reconciliation session's main thread runs on is delegated to a shim skill's text, and that skill grounds its own choice by citing this node, so ratification would pin a pointer whose target is scheduled for liquidation by a clause that itself reads 'every rule this project runs under is a node or a declared shim'. Beside that, the one ruling on the authority fact covers both the capture-shaped bounds, where ratified is plainly right, and the sizing of units, models and effort, which the author's own quoted words hand to the AI twice ('\"appropriate\" is open question'; right-sized models and effort 'when it would result in token efficiency'), so the author cannot delegate the sizing without denying the bounds. And the oldest objection still stands unmet: the contract, the report and the main thread's read of the conclusion are a fixed cost per unit, the lookup exemption is the only floor, and 'anything larger is a unit' still catches every three-line investigation. What answers all of this is that each defect is an amendment away — state the model here, split the class question into a node beneath, and the rule is the one the author's words already describe."
   survey:
     date: 2026-09-05
-    of: 268d70f221d1724cc6c6ac292bc9d2dc14fa0c60
+    of: 9ede4272e4d4442995d1f49ce024850cbef674ca
 facts:
   - name: answer
     options:
@@ -20,6 +20,12 @@ facts:
       - name: reconciliation-session-writes-options
         source: author
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-03/35
+          - words/2026-09-03/36
+          - words/2026-09-03/37
+          - words/2026-09-04/25
+          - words/2026-09-04/26
       - name: fixed-model-for-every-task
         source: ai
         ref: "6e9efb8c"
@@ -38,7 +44,6 @@ facts:
     recommends: reconciliation-session-writes-options
     boldness: moderate
     against: "The answer generalises past the author's words: they named verbose investigation and gave its cost, and the answer makes everything but the interview and the record a contracted unit. The contract, the report, and the main thread's read of the conclusion are a fixed cost per unit, the lookup exemption is the only floor, and anything larger is a unit catches every three-line investigation."
-    stands: reconciliation-session-writes-options
   - name: authority
     options:
       - name: ratified
@@ -63,32 +68,6 @@ depends:
   - commons.systems/disposition-graph/work-loop
   - commons.systems/disposition-graph/delegation-bounds-and-sizing
 ---
-## Disposition
-
-The author, 2026-09-03:
-> new disposition (should affect both alignment and bootstrap/reconciliation shims): debugging activities like those are prime candidates for subagents - driving a browser with max effort fable is very expensive. Debugging context can be verbose and pollute the main thread.
-
-The author, 2026-09-03, on the work-loop node, on the summary's item that the author owns the graph and subagents work from it:
-> "You own the graph" - correct that implementation is delegated, each bite type gets a skill with "appropriate " recursive subagents ("appropriate" is open question) but reconsiliation does not edit the graph. That is alignment only.
-
-The author, 2026-09-03, on the work-loop node, on bootstrap operations:
-> I will check out the greenfield ref at repo root and launch a new session to act as the reconciliation shim. Ideally, the reconciliation shim instructions are well defined enough to run with sonnet, but recommend the model this shim must run as. Does any work need to be done to prepare for this - for example to prepare the shim to be run as sonnet. Encode the shim as a skill with the recommended model so that I can initialize a session to act as the reconciliation shim by invoking that skill.
-
-The author, 2026-09-04, on the viable-options node, amending their ruling of 2026-09-03 on the work-loop node:
-> Under this model the prior statement that "reconciliation never edits the graph" is incomplete. Whatever persistent state reconciliation requires for reconciliation operations (if any) is stored outside the graph - true. But, AI has the authority record untracked but viable alternative options and to change its recommendation during either reconciliation or rsi. If the recommendation is on ratified node then that triggers the alignment frontier projection described above. Subject to attenuation/breakout controls - if the change of recommendation is on delegated or deffered node then it changes the shape of the reconciliation frontier.
-
-The author, 2026-09-04, on the viable-options node, giving the grant announced there:
-> bootstrap authority granted - delegate to subagents with righ-sized models and effort level (opus, sonnet) when it would result in token efficiency
-
-## Answer
-
-Every session has a main thread, the thread that holds the session's work, launches its units, and reads what they return; a subagent is a session the main thread launches for one unit or one lookup, given its brief and nothing else. The alignment session's main thread holds the interview and the record: it interviews the author, writes and amends nodes, reviews what subagents return, and lands, and it runs on the most capable model at full effort. A reconciliation session's main thread runs on the larger model until the reconciliation skill's instructions are defined well enough for the smaller one, which is the recommendation the author asked the AI to make and the skill to carry; the recommendation is stated here, and the skill encodes it, so the rule stands when the shim the skill is goes. Everything else is delegated: a lookup needs only its question and its answer, and anything larger is a unit. A unit is one deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output; a unit that needs a second contract is two units. Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys. The subagent reports a conclusion and the exact commands it ran; the main thread reads the conclusion and never the context. The model follows the kind of work: the smaller model for mechanical tooling, tests, format work, and anything whose contract determines the answer; the larger model for design and judgment, such as a layout or a survey that classifies what it reads; the smallest for lookups. The effort is stated in the brief. A subagent never runs state-changing version control, never edits a node or the record's scaffolding, writes only the files its brief names, and works only in the worktree it was given. A reconciliation session is bound toward the record as the work-loop node bounds it, and that node owns the bound; a subagent never edits a node.
-
-## Rationale
-
-The author's words of 2026-09-03 on this node, quoted above, name verbose investigation as the case for delegation and give its cost as the reason; that is the clause that is theirs. Their words of 2026-09-03 on the work-loop node, quoted above, say implementation is delegated with "appropriate" recursive subagents and leave "appropriate" open, and ask the reconciliation skill to recommend the model it runs on, ideally the smaller one; their grant of 2026-09-04 on the viable-options node asks for right-sized models and effort levels where they yield token efficiency. The unit contract, the model by kind of work, the effort in the brief, the main thread's model per session, and the subagent's four bounds are the AI's answer to the question those words leave open, grounded in them and in nothing earlier: a ruling of 2026-09-02 that this rationale once cited is quoted nowhere in the record and is cited no longer. The rule binds the alignment session and the reconciliation sessions alike, each through its own main thread; during bootstrap it is projected into the rule file, the alignment skill, and the reconciliation skill. The two implementations that read the model rule had split, the review skills reading the main thread's model as fable and the reconciliation skill running on opus while citing this node; the answer now gives each session's main thread its model, and both stand under it.
-
-Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there amending their ruling of 2026-09-03, quoted on the work-loop node: "the prior statement that 'reconciliation never edits the graph' is incomplete." The bound on the reconciliation session narrows to the write the work-loop node allows and keeps the subagent's bound whole. The answer as it stood is kept as the option `never-writes-the-graph`. The bound itself is the work-loop node's, and this node cites it rather than restating it, so the rule has one home.
 
 ## Facts
 
@@ -100,9 +79,65 @@ Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on t
 
 The answer as it stood from 2026-09-03: the main thread, the unit, the model by kind of work, the subagent's bounds, and a reconciliation session that never writes the graph, which is alignment's alone. Viable if the author prefers the graph written by alignment alone.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is work divided between the main thread and subagents?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - term: main thread
+    gloss: "The thread that holds the session's work, launches its units, and reads what they return."
+  - term: unit
+    gloss: "One deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output."
+  - term: subagent
+    gloss: "A session the main thread launches for one unit or one lookup, given its brief and nothing else."
+---
+
+## Answer
+
+The answer as it stood from 2026-09-03: the main thread, the unit, the model by kind of work, the subagent's bounds, and a reconciliation session that never writes the graph, which is alignment's alone. Viable if the author prefers the graph written by alignment alone.
+```
+
 #### reconciliation-session-writes-options
 
 The sentence binding a reconciliation session never to write the graph is amended as work-loop's is, and this node cites that bound rather than restating it, so the rule has one home there. What stays here is the subagent's bound: a subagent still never edits a node. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
+
+**AI support.** The author's words of 2026-09-03 on this node, quoted above, name verbose investigation as the case for delegation and give its cost as the reason; that is the clause that is theirs. Their words of 2026-09-03 on the work-loop node, quoted above, say implementation is delegated with "appropriate" recursive subagents and leave "appropriate" open, and ask the reconciliation skill to recommend the model it runs on, ideally the smaller one; their grant of 2026-09-04 on the viable-options node asks for right-sized models and effort levels where they yield token efficiency. The unit contract, the model by kind of work, the effort in the brief, the main thread's model per session, and the subagent's four bounds are the AI's answer to the question those words leave open, grounded in them and in nothing earlier: a ruling of 2026-09-02 that this rationale once cited is quoted nowhere in the record and is cited no longer. The rule binds the alignment session and the reconciliation sessions alike, each through its own main thread; during bootstrap it is projected into the rule file, the alignment skill, and the reconciliation skill. The two implementations that read the model rule had split, the review skills reading the main thread's model as fable and the reconciliation skill running on opus while citing this node; the answer now gives each session's main thread its model, and both stand under it.
+
+Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there amending their ruling of 2026-09-03, quoted on the work-loop node: "the prior statement that 'reconciliation never edits the graph' is incomplete." The bound on the reconciliation session narrows to the write the work-loop node allows and keeps the subagent's bound whole. The answer as it stood is kept as the option `never-writes-the-graph`. The bound itself is the work-loop node's, and this node cites it rather than restating it, so the rule has one home.
+
+**AI divergence.** The answer generalises past the author's words: they named verbose investigation and gave its cost, and the answer makes everything but the interview and the record a contracted unit. The contract, the report, and the main thread's read of the conclusion are a fixed cost per unit, the lookup exemption is the only floor, and anything larger is a unit catches every three-line investigation.
+
+**Content.**
+
+```markdown
+---
+question: How is work divided between the main thread and subagents?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - term: main thread
+    gloss: "The thread that holds the session's work, launches its units, and reads what they return."
+  - term: unit
+    gloss: "One deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output."
+  - term: subagent
+    gloss: "A session the main thread launches for one unit or one lookup, given its brief and nothing else."
+---
+
+## Answer
+
+Every session has a main thread, the thread that holds the session's work, launches its units, and reads what they return; a subagent is a session the main thread launches for one unit or one lookup, given its brief and nothing else. The alignment session's main thread holds the interview and the record: it interviews the author, writes and amends nodes, reviews what subagents return, and lands, and it runs on the most capable model at full effort. A reconciliation session's main thread runs on the larger model until the reconciliation skill's instructions are defined well enough for the smaller one, which is the recommendation the author asked the AI to make and the skill to carry; the recommendation is stated here, and the skill encodes it, so the rule stands when the shim the skill is goes. Everything else is delegated: a lookup needs only its question and its answer, and anything larger is a unit. A unit is one deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output; a unit that needs a second contract is two units. Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys. The subagent reports a conclusion and the exact commands it ran; the main thread reads the conclusion and never the context. The model follows the kind of work: the smaller model for mechanical tooling, tests, format work, and anything whose contract determines the answer; the larger model for design and judgment, such as a layout or a survey that classifies what it reads; the smallest for lookups. The effort is stated in the brief. A subagent never runs state-changing version control, never edits a node or the record's scaffolding, writes only the files its brief names, and works only in the worktree it was given. A reconciliation session is bound toward the record as the work-loop node bounds it, and that node owns the bound; a subagent never edits a node.
+```
 
 #### fixed-model-for-every-task
 
@@ -110,11 +145,69 @@ Every unit runs on one fixed model. It was passed over because the cost is
 then set by the most capable model at full effort, and most units do not need
 it.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is work divided between the main thread and subagents?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - term: main thread
+    gloss: "The thread that holds the session's work, launches its units, and reads what they return."
+  - term: unit
+    gloss: "One deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output."
+  - term: subagent
+    gloss: "A session the main thread launches for one unit or one lookup, given its brief and nothing else."
+---
+
+## Answer
+
+Every unit runs on one fixed model. It was passed over because the cost is
+then set by the most capable model at full effort, and most units do not need
+it.
+```
+
 #### main-thread-investigates-small-questions
 
 The main thread investigates itself when a question looks small. It was passed
 over because the size of a debugging context is unknown until it has been
 read.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is work divided between the main thread and subagents?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - term: main thread
+    gloss: "The thread that holds the session's work, launches its units, and reads what they return."
+  - term: unit
+    gloss: "One deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output."
+  - term: subagent
+    gloss: "A session the main thread launches for one unit or one lookup, given its brief and nothing else."
+---
+
+## Answer
+
+The main thread investigates itself when a question looks small. It was passed
+over because the size of a debugging context is unknown until it has been
+read.
+```
 
 #### reconciliation-passes-an-option-over
 
@@ -128,6 +221,42 @@ third act to lengthen and the option moves nothing. Where it still bears is on
 answer names this node among those enumerating two acts and is stale as to it.
 Raised on commons.systems/disposition-graph/viable-options, from the author's
 words of 2026-09-04 recorded there.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is work divided between the main thread and subagents?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - term: main thread
+    gloss: "The thread that holds the session's work, launches its units, and reads what they return."
+  - term: unit
+    gloss: "One deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output."
+  - term: subagent
+    gloss: "A session the main thread launches for one unit or one lookup, given its brief and nothing else."
+---
+
+## Answer
+
+Passed over on 2026-09-05. It proposed a third act in this node's enumeration of
+what a reconciliation session's main thread may do, the passing over of an option
+and the lifting of a status the AI wrote, beside recording an option and moving a
+recommendation. The amendment of that day struck the enumeration from the answer
+and gave the bound its one home on `work-loop`, so there is nothing here for a
+third act to lengthen and the option moves nothing. Where it still bears is on
+`work-loop`, which owns the bound, and on `viable-options`, whose recommended
+answer names this node among those enumerating two acts and is stale as to it.
+Raised on commons.systems/disposition-graph/viable-options, from the author's
+words of 2026-09-04 recorded there.
+```
 
 ### authority
 
@@ -370,3 +499,7 @@ Also named: commons.systems/disposition-graph/decomposition, commons.systems/dis
 Proposed: frontier-consistency's `frontier survey` is the defined term and survives; what moves is decomposition's use of the bare word for a sitting's units, which is where three of the four collisions come from and which unit-skills would multiply into four skill names. The option is recorded on decomposition so the author rules the term once; frontier-consistency, unit-skills and review-skills follow whichever way that ruling goes, and delegation's plural is read as the sitting's units under it.
 
 Recorded as an option on commons.systems/disposition-graph/decomposition's answer fact: `units-are-readings-not-surveys` (source review, 2026-09-07).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/delegation stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `reconciliation-session-writes-options`; the `## Rationale` its `**AI support.**`; 5 `## Disposition` entries became the ledger entries words/2026-09-03/35, words/2026-09-03/36, words/2026-09-03/37, words/2026-09-04/25, words/2026-09-04/26, referenced by 2 options the entry's own date names and by the recommended option for 3 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `never-writes-the-graph`, `fixed-model-for-every-task`, `main-thread-investigates-small-questions`, `reconciliation-passes-an-option-over`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `023105757713119b012579ed2d09ca667e831101` was already past the recommendation and is left as it stood. The survey's pin `268d70f221d1724cc6c6ac292bc9d2dc14fa0c60` is re-computed for the encoding as `9ede4272e4d4442995d1f49ce024850cbef674ca`; nothing it read changed.

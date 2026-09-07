@@ -38,6 +38,10 @@ facts:
       - name: draft
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-03/65
+          - words/2026-09-03/66
+          - words/2026-09-03/67
       - name: narrowing-disclosed
         source: review
         ref: "2026-09-03"
@@ -47,6 +51,11 @@ facts:
       - name: hyperlink-traditions-in-prose
         source: author
         ref: "2026-09-02"
+        supports:
+          - words/2026-09-02/19
+          - words/2026-09-02/20
+          - words/2026-09-02/21
+          - words/2026-09-02/22
       - name: name-what-it-does-not-settle
         source: review
         ref: "2026-09-03"
@@ -85,7 +94,6 @@ facts:
         ref: "2026-09-07"
     recommends: draft
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -108,136 +116,52 @@ shims:
 depends:
   - commons.systems/disposition-graph/self-documentation
 ---
-## Disposition
-
-The author, 2026-09-02:
-> I do not like how the artifact UI has "how to read this" and "vocabulary" sections. These do not seem to be materialized from the graph and so are prone to drift. "how to read this" as well as vocabulary should follow naturally from the onboarding progression of graph review.
-
-The author, 2026-09-02:
-> The artifact does not need to track bootstrapping concerns - those are transient concerns managed by the AI and do not need to be included in greenfield documentation.
-
-The author, 2026-09-02:
-> An authority section projected into the documentation (with notes on pending ratification for deferred authority) would make more sense than a "rejected" section which seems ad-hoc. Notes on deferred ratification could also feed the `/align` dialogue.
-
-The author, 2026-09-02:
-> Projecting "cites" relationships will aid onboarding navigation.
-
-The author, 2026-09-03:
-> general disposition is that all materialized implementation (including the browser) is a projection of the graph - anything not justified by the graph is subject to liquidation through reconciliation.
-
-The author, 2026-09-03:
-> The url in the artifact is not updated on navigation between nodes. This could cause navigation confusion. Record reference to web app routing tradition for disposition. Edit the browser shim to reconcile the disposition.
-
-The author, 2026-09-03:
-> "Tier" (as in global-tier) needs a disposition. As a disposition references in the projected documentation must be hyperlinked.
-
-## Answer
-
-Through projections, never by opening node files, except in alignment sessions. The graph browser is the human projection: one page that renders every node lazily, opens on the purpose node, links every defined term to the node that defines it, and sets readings of tradition apart from the answers they ground. It shows no un-aligned disposition, a node with no answer; every other unanswered node it shows as the draft it is, with its stage, and the alignment page, the projection of the open dialogue that the growth node describes, lists every unanswered node, of both kinds, for the author's ruling. Every node has an address, its id, which the browser writes as the reader moves and reopens when the reader arrives by it; the page keeps the reader's place and shows the address of the node in view, because a viewer that frames the page cannot show it. The README on the main branch is a projection of the purpose node, and the repository's description and discovery tags are projections of the purpose and audience nodes. An implementation session never reads the graph: the global-tier rules it works under are materialized into the repository's rules, the ancestry of the node it serves is materialized into its worktree's `CLAUDE.local.md` at provisioning, pinned at a graph commit, and the orientation page it reads first, `CLAUDE.md`, is projected from the purpose node and this one; what a session loads and where each part comes from is the session-context node under this one. Such a session writes back only through narrow verbs, propose, answer as deferred, record evidence.
-
-## Rationale
-
-The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree. It keeps context focused, keeps legacy vocabulary out of working sessions, and makes the graph commit a session read from a pinned fact. The address rule was recorded at the author's direction on 2026-09-03, after the address was seen not to change on navigation in the framed viewer; the routing tradition is the reading under this node. The author, 2026-09-03: "The url in the artifact is not updated on navigation between nodes. This could cause navigation confusion. Record reference to web app routing tradition for disposition. Edit the browser shim to reconcile the disposition." And, the same day, that unanswered nodes are hidden from the browser and listed by the alignment page, quoted on the transience node. A hosted README cannot embed a live page, so the README renders the purpose page statically or links the browser at the purpose node; that bite on the main branch is unbuilt work, not a disposition.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+Through projections, never by opening node files, except in alignment sessions.
+
+**AI support.** The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree. It keeps context focused, keeps legacy vocabulary out of working sessions, and makes the graph commit a session read from a pinned fact. The address rule was recorded at the author's direction on 2026-09-03, after the address was seen not to change on navigation in the framed viewer; the routing tradition is the reading under this node. The author, 2026-09-03: "The url in the artifact is not updated on navigation between nodes. This could cause navigation confusion. Record reference to web app routing tradition for disposition. Edit the browser shim to reconcile the disposition." And, the same day, that unanswered nodes are hidden from the browser and listed by the alignment page, quoted on the transience node. A hosted README cannot embed a live page, so the README renders the purpose page statically or links the browser at the purpose node; that bite on the main branch is unbuilt work, not a disposition.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+Through projections, never by opening node files, except in alignment sessions. The graph browser is the human projection: one page that renders every node lazily, opens on the purpose node, links every defined term to the node that defines it, and sets readings of tradition apart from the answers they ground. It shows no un-aligned disposition, a node with no answer; every other unanswered node it shows as the draft it is, with its stage, and the alignment page, the projection of the open dialogue that the growth node describes, lists every unanswered node, of both kinds, for the author's ruling. Every node has an address, its id, which the browser writes as the reader moves and reopens when the reader arrives by it; the page keeps the reader's place and shows the address of the node in view, because a viewer that frames the page cannot show it. The README on the main branch is a projection of the purpose node, and the repository's description and discovery tags are projections of the purpose and audience nodes. An implementation session never reads the graph: the global-tier rules it works under are materialized into the repository's rules, the ancestry of the node it serves is materialized into its worktree's `CLAUDE.local.md` at provisioning, pinned at a graph commit, and the orientation page it reads first, `CLAUDE.md`, is projected from the purpose node and this one; what a session loads and where each part comes from is the session-context node under this one. Such a session writes back only through narrow verbs, propose, answer as deferred, record evidence.
+```
+
 #### draft
 
 The draft rewrites the answer so that the browser states nothing of its own: every page shows the question, the answer, the criteria or the word unguarded, the readings set apart from the answer they ground, the nodes it cites and the nodes that cite it, and an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected, and what is pending for a deferred node. The standing answer carries none of that page structure. The draft also narrows the README, the repository description and the discovery tags to projections of the purpose node alone, which presumes the audience prune, and its rationale records the rejection of a how-to-read page, a vocabulary page and a rejected-alternatives section separate from authority. Three of its four projection promises, the criteria, the word unguarded, and the authority section, are unmaterialized in the browser today and are owed by the browser shim.
 
-#### narrowing-disclosed
+**AI support.** The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree, and of the same date that the browser must carry nothing the graph does not, since hand-written orientation and vocabulary drift and the onboarding walk is the orientation.
 
-The answer keeps the amended sentence, that only a node with no answer is hidden from the browser, and adds one clause saying plainly that this narrows the author's earlier words, quoted on transience, that unanswered nodes are hidden from the browser and listed by the alignment page, words the author's later reclassification of every disposition as unanswered would otherwise empty. Three reviews in a row and the supersession finding asked that the author be shown this as a change to what they said rather than as a restatement of it; it is what projection's own counter-argument asks for, and the facts line still does not say so. Raised on commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/transience.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-#### hold-for-self-documentation
-
-Projection is not ruled at all until self-documentation is answered, because that answer decides whether projection is the self-documentation section and scope's order field already encodes the mapping. The finding's sequence is self-documentation first, then scope and projection ruled together, then the periagogic sittings on frontier-metrics and vocabulary-view against a settled projection node.
-
-#### hyperlink-traditions-in-prose
-
-The author's words that references to tradition in the projected documentation should hyperlink to the tradition node, keeping the hyperlinking of target dispositions, are carried on readings and on no other node; projection's Disposition carries seven other quotations and not this one. The redundancy finding recorded here makes projection the survivor of the linking rule, whose draft already says every defined term and every tradition's name links to the node that defines it. The candidate is that projection carry these words as the ground of that rule. (Raised on commons.systems/disposition-graph/readings.)
-
-#### name-what-it-does-not-settle
-
-The answer gains one clause naming which questions it does not settle, since three of projection's children stand at the periagogic or maieutic stage holding author words this answer partly answers: vocabulary-view on repository vocabulary and the layout of tradition references, frontier-metrics on heading metrics, and self-documentation on its placement as a section equal with scope. Projection's recommended text answers half of vocabulary-view's author words, so ruling it settles parts of three dialogues before they have run. The coverage finding offers this against holding projection until self-documentation is answered. Raised on commons.systems/disposition-graph/frontier-metrics, commons.systems/disposition-graph/vocabulary-view.
-
-#### strike-the-field-link-clause
-
-The contradiction finding holds that projection's draft carries a clause the record has since withdrawn: that every field name and value on a page links to the node that defines it, which was this node's recommended option and was withdrawn with it. It is verified unmeetable, at least fifteen field names and sub-keys in use being named by no node's defines. Projection strikes the clause and keeps the defined-term and tradition-name links, which are the author's own request and are implemented; the field-link rule returns whenever tier is answered. (Raised on commons.systems/disposition-graph/tier.)
-
-#### absorb-self-documentation
-
-If the mapping stands, projection is the self-documentation section of the author's order and this node is pruned into it, which makes projection the survivor of the question how the repository documents itself. The coverage finding carried on both nodes proposes projection either be ruled with one clause saying which of self-documentation's, vocabulary-view's and frontier-metrics' questions it does not settle, or be held until self-documentation is answered, since that answer decides whether projection is the section at all. (Raised on commons.systems/disposition-graph/self-documentation.)
-
-#### shim-carries-framed-viewer
-
-Projection's browser shim gains the framed viewer's divergence in its liquidation condition: until the browser is published from the implementation ref, the page keeps the reader's place itself and shows the address of the node in view. The finding is that this stand-in currently lives as a clause in web-routing's answer, where the frontier cannot read it, and the parent's shim is where transience puts a stand-in for an unmade materialization. (Raised on commons.systems/disposition-graph/web-routing.)
-
-#### a-how-to-read-page-in-the-browser
-
-The browser carries a how-to-read page of its own. It was passed over because
-the browser must carry nothing the graph does not: hand-written orientation
-drifts, and the onboarding walk is the orientation.
-
-#### a-vocabulary-page-in-the-browser
-
-The browser carries a vocabulary page of its own. It was passed over because
-the browser must carry nothing the graph does not: hand-written vocabulary
-drifts, and the nodes that define the terms are the vocabulary.
-
-#### a-rejected-alternatives-section-apart
-
-The browser shows the rejected alternatives in a section apart from authority.
-It was passed over because what was rejected is part of how the answer came to
-stand.
-
-#### tradition-linking-cited-to-readings
-
-Strike "and every tradition's name" from the linking clause and cite `readings`,
-which owns how a reference to a tradition is reached, as that node's redundancy
-finding of 2026-09-03 divided them: projection is the survivor for the linking
-rule and readings for the tradition rule. Both texts still carry the tradition
-half, so one question has two standing answers on the frontier at once. Raised by
-the second clean-context reading of `readings` on 2026-09-05, under validation 15,
-as an option and not a merge.
-
-#### rejected-alternative-is-an-option
-
-Strike "the alternatives the rationale rejected" from the authority section the
-draft proposes, and have the browser show a rejection where the record keeps
-it, as a row on the fact it answers carrying its status and reason. The
-`rejected` node's recommended answer decides that the record holds no rejected
-list, no rejected section and no rejected node, and that the projections read
-that structure and never a heading; the draft here still proposes a second home
-for the same thing, so one question has two standing answers on the frontier.
-Raised by the second clean-context reading of `rejected` on 2026-09-05, which
-found that the answer's claim that the record keeps no second home was not yet
-true of the record and named this text; recorded as an option and not a merge,
-since which of the two texts gives way is the author's, and the pair is ruled
-together.
-
-#### browser-renders-the-authors-words
-
-Everything the recommended option says, with the browser rendering each node's
-`## Disposition` section as the node's own words, whole and in the order the
-section keeps them. For it, measured at graph commit `ec6e2300`: 68 of the 140
-nodes carry 222 dated entries and the browser renders none of them, while
-`authors-words-on-the-page`'s recommended answer puts the author's words on the
-alignment page only as quotations on the option rows whose references name them,
-which reach 101 of the 222, so the majority of what the author has said to this
-record would be rendered in no projection at all; and this node's own answer says
-the record is read through projections and never by opening node files, which is
-what makes that a gap rather than a preference. Against it: the browser is the
-projection for a reader who is not the author, and what the alignment page owes
-its one reader may not be what a public page owes everyone; the entries are the
-author's side of an open dialogue rather than the record's answers, and how they
-are retained and rolled up is `quotes`'. Raised by the clean-context reading of
-`authors-words-on-the-page` on 2026-09-07, under validation 15, as an option and
-not a merge.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -257,10 +181,485 @@ shims:
 ## Answer
 
 Through projections, never by opening node files, except in alignment sessions. The graph browser is the human projection, and it states nothing of its own: one page that renders every node lazily and opens on the purpose node, each page showing the question, the answer, the criteria or the word unguarded, the readings under the node set apart from the answer they ground, the nodes it cites and the nodes that cite it, and an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected, and, for a deferred node, what is pending for the author. It shows no un-aligned disposition, a node with no answer; every other unanswered node it shows as the draft it is, with its stage, and the alignment page, the projection of the open dialogue that the growth node describes, lists every unanswered node, of both kinds, for the author's ruling. Every defined term and every tradition's name links to the node that defines it. Every node has an address, its id, which the browser writes as the reader moves and reopens when the reader arrives by it; the page keeps the reader's place and shows the address of the node in view, because a viewer that frames the page cannot show it. The README on the main branch, the repository's description, and its discovery tags are projections of the purpose node. An implementation session never reads the graph: the global-tier rules it works under are materialized into the repository's rules, the ancestry of the node it serves is materialized into its worktree's `CLAUDE.local.md` at provisioning, pinned at a graph commit, and the orientation page it reads first, `CLAUDE.md`, is projected from the purpose node and this one; what a session loads and where each part comes from is the session-context node under this one. Such a session writes back only through narrow verbs, propose, answer as deferred, record evidence.
+```
 
-## Rationale
+#### narrowing-disclosed
 
-The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree, and of the same date that the browser must carry nothing the graph does not, since hand-written orientation and vocabulary drift and the onboarding walk is the orientation.
+The answer keeps the amended sentence, that only a node with no answer is hidden from the browser, and adds one clause saying plainly that this narrows the author's earlier words, quoted on transience, that unanswered nodes are hidden from the browser and listed by the alignment page, words the author's later reclassification of every disposition as unanswered would otherwise empty. Three reviews in a row and the supersession finding asked that the author be shown this as a change to what they said rather than as a restatement of it; it is what projection's own counter-argument asks for, and the facts line still does not say so. Raised on commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/transience.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+The answer keeps the amended sentence, that only a node with no answer is hidden from the browser, and adds one clause saying plainly that this narrows the author's earlier words, quoted on transience, that unanswered nodes are hidden from the browser and listed by the alignment page, words the author's later reclassification of every disposition as unanswered would otherwise empty. Three reviews in a row and the supersession finding asked that the author be shown this as a change to what they said rather than as a restatement of it; it is what projection's own counter-argument asks for, and the facts line still does not say so. Raised on commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/transience.
+```
+
+#### hold-for-self-documentation
+
+Projection is not ruled at all until self-documentation is answered, because that answer decides whether projection is the self-documentation section and scope's order field already encodes the mapping. The finding's sequence is self-documentation first, then scope and projection ruled together, then the periagogic sittings on frontier-metrics and vocabulary-view against a settled projection node.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+Projection is not ruled at all until self-documentation is answered, because that answer decides whether projection is the self-documentation section and scope's order field already encodes the mapping. The finding's sequence is self-documentation first, then scope and projection ruled together, then the periagogic sittings on frontier-metrics and vocabulary-view against a settled projection node.
+```
+
+#### hyperlink-traditions-in-prose
+
+The author's words that references to tradition in the projected documentation should hyperlink to the tradition node, keeping the hyperlinking of target dispositions, are carried on readings and on no other node; projection's Disposition carries seven other quotations and not this one. The redundancy finding recorded here makes projection the survivor of the linking rule, whose draft already says every defined term and every tradition's name links to the node that defines it. The candidate is that projection carry these words as the ground of that rule. (Raised on commons.systems/disposition-graph/readings.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+The author's words that references to tradition in the projected documentation should hyperlink to the tradition node, keeping the hyperlinking of target dispositions, are carried on readings and on no other node; projection's Disposition carries seven other quotations and not this one. The redundancy finding recorded here makes projection the survivor of the linking rule, whose draft already says every defined term and every tradition's name links to the node that defines it. The candidate is that projection carry these words as the ground of that rule. (Raised on commons.systems/disposition-graph/readings.)
+```
+
+#### name-what-it-does-not-settle
+
+The answer gains one clause naming which questions it does not settle, since three of projection's children stand at the periagogic or maieutic stage holding author words this answer partly answers: vocabulary-view on repository vocabulary and the layout of tradition references, frontier-metrics on heading metrics, and self-documentation on its placement as a section equal with scope. Projection's recommended text answers half of vocabulary-view's author words, so ruling it settles parts of three dialogues before they have run. The coverage finding offers this against holding projection until self-documentation is answered. Raised on commons.systems/disposition-graph/frontier-metrics, commons.systems/disposition-graph/vocabulary-view.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+The answer gains one clause naming which questions it does not settle, since three of projection's children stand at the periagogic or maieutic stage holding author words this answer partly answers: vocabulary-view on repository vocabulary and the layout of tradition references, frontier-metrics on heading metrics, and self-documentation on its placement as a section equal with scope. Projection's recommended text answers half of vocabulary-view's author words, so ruling it settles parts of three dialogues before they have run. The coverage finding offers this against holding projection until self-documentation is answered. Raised on commons.systems/disposition-graph/frontier-metrics, commons.systems/disposition-graph/vocabulary-view.
+```
+
+#### strike-the-field-link-clause
+
+The contradiction finding holds that projection's draft carries a clause the record has since withdrawn: that every field name and value on a page links to the node that defines it, which was this node's recommended option and was withdrawn with it. It is verified unmeetable, at least fifteen field names and sub-keys in use being named by no node's defines. Projection strikes the clause and keeps the defined-term and tradition-name links, which are the author's own request and are implemented; the field-link rule returns whenever tier is answered. (Raised on commons.systems/disposition-graph/tier.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+The contradiction finding holds that projection's draft carries a clause the record has since withdrawn: that every field name and value on a page links to the node that defines it, which was this node's recommended option and was withdrawn with it. It is verified unmeetable, at least fifteen field names and sub-keys in use being named by no node's defines. Projection strikes the clause and keeps the defined-term and tradition-name links, which are the author's own request and are implemented; the field-link rule returns whenever tier is answered. (Raised on commons.systems/disposition-graph/tier.)
+```
+
+#### absorb-self-documentation
+
+If the mapping stands, projection is the self-documentation section of the author's order and this node is pruned into it, which makes projection the survivor of the question how the repository documents itself. The coverage finding carried on both nodes proposes projection either be ruled with one clause saying which of self-documentation's, vocabulary-view's and frontier-metrics' questions it does not settle, or be held until self-documentation is answered, since that answer decides whether projection is the section at all. (Raised on commons.systems/disposition-graph/self-documentation.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+If the mapping stands, projection is the self-documentation section of the author's order and this node is pruned into it, which makes projection the survivor of the question how the repository documents itself. The coverage finding carried on both nodes proposes projection either be ruled with one clause saying which of self-documentation's, vocabulary-view's and frontier-metrics' questions it does not settle, or be held until self-documentation is answered, since that answer decides whether projection is the section at all. (Raised on commons.systems/disposition-graph/self-documentation.)
+```
+
+#### shim-carries-framed-viewer
+
+Projection's browser shim gains the framed viewer's divergence in its liquidation condition: until the browser is published from the implementation ref, the page keeps the reader's place itself and shows the address of the node in view. The finding is that this stand-in currently lives as a clause in web-routing's answer, where the frontier cannot read it, and the parent's shim is where transience puts a stand-in for an unmade materialization. (Raised on commons.systems/disposition-graph/web-routing.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+Projection's browser shim gains the framed viewer's divergence in its liquidation condition: until the browser is published from the implementation ref, the page keeps the reader's place itself and shows the address of the node in view. The finding is that this stand-in currently lives as a clause in web-routing's answer, where the frontier cannot read it, and the parent's shim is where transience puts a stand-in for an unmade materialization. (Raised on commons.systems/disposition-graph/web-routing.)
+```
+
+#### a-how-to-read-page-in-the-browser
+
+The browser carries a how-to-read page of its own. It was passed over because
+the browser must carry nothing the graph does not: hand-written orientation
+drifts, and the onboarding walk is the orientation.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+The browser carries a how-to-read page of its own. It was passed over because
+the browser must carry nothing the graph does not: hand-written orientation
+drifts, and the onboarding walk is the orientation.
+```
+
+#### a-vocabulary-page-in-the-browser
+
+The browser carries a vocabulary page of its own. It was passed over because
+the browser must carry nothing the graph does not: hand-written vocabulary
+drifts, and the nodes that define the terms are the vocabulary.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+The browser carries a vocabulary page of its own. It was passed over because
+the browser must carry nothing the graph does not: hand-written vocabulary
+drifts, and the nodes that define the terms are the vocabulary.
+```
+
+#### a-rejected-alternatives-section-apart
+
+The browser shows the rejected alternatives in a section apart from authority.
+It was passed over because what was rejected is part of how the answer came to
+stand.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+The browser shows the rejected alternatives in a section apart from authority.
+It was passed over because what was rejected is part of how the answer came to
+stand.
+```
+
+#### tradition-linking-cited-to-readings
+
+Strike "and every tradition's name" from the linking clause and cite `readings`,
+which owns how a reference to a tradition is reached, as that node's redundancy
+finding of 2026-09-03 divided them: projection is the survivor for the linking
+rule and readings for the tradition rule. Both texts still carry the tradition
+half, so one question has two standing answers on the frontier at once. Raised by
+the second clean-context reading of `readings` on 2026-09-05, under validation 15,
+as an option and not a merge.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+Strike "and every tradition's name" from the linking clause and cite `readings`,
+which owns how a reference to a tradition is reached, as that node's redundancy
+finding of 2026-09-03 divided them: projection is the survivor for the linking
+rule and readings for the tradition rule. Both texts still carry the tradition
+half, so one question has two standing answers on the frontier at once. Raised by
+the second clean-context reading of `readings` on 2026-09-05, under validation 15,
+as an option and not a merge.
+```
+
+#### rejected-alternative-is-an-option
+
+Strike "the alternatives the rationale rejected" from the authority section the
+draft proposes, and have the browser show a rejection where the record keeps
+it, as a row on the fact it answers carrying its status and reason. The
+`rejected` node's recommended answer decides that the record holds no rejected
+list, no rejected section and no rejected node, and that the projections read
+that structure and never a heading; the draft here still proposes a second home
+for the same thing, so one question has two standing answers on the frontier.
+Raised by the second clean-context reading of `rejected` on 2026-09-05, which
+found that the answer's claim that the record keeps no second home was not yet
+true of the record and named this text; recorded as an option and not a merge,
+since which of the two texts gives way is the author's, and the pair is ruled
+together.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+Strike "the alternatives the rationale rejected" from the authority section the
+draft proposes, and have the browser show a rejection where the record keeps
+it, as a row on the fact it answers carrying its status and reason. The
+`rejected` node's recommended answer decides that the record holds no rejected
+list, no rejected section and no rejected node, and that the projections read
+that structure and never a heading; the draft here still proposes a second home
+for the same thing, so one question has two standing answers on the frontier.
+Raised by the second clean-context reading of `rejected` on 2026-09-05, which
+found that the answer's claim that the record keeps no second home was not yet
+true of the record and named this text; recorded as an option and not a merge,
+since which of the two texts gives way is the author's, and the pair is ruled
+together.
+```
+
+#### browser-renders-the-authors-words
+
+Everything the recommended option says, with the browser rendering each node's
+`## Disposition` section as the node's own words, whole and in the order the
+section keeps them.
+
+**AI support.** For it, measured at graph commit `ec6e2300`: 68 of the 140
+nodes carry 222 dated entries and the browser renders none of them, while
+`authors-words-on-the-page`'s recommended answer puts the author's words on the
+alignment page only as quotations on the option rows whose references name them,
+which reach 101 of the 222, so the majority of what the author has said to this
+record would be rendered in no projection at all; and this node's own answer says
+the record is read through projections and never by opening node files, which is
+what makes that a gap rather than a preference.
+
+**AI divergence.** Against it: the browser is the
+projection for a reader who is not the author, and what the alignment page owes
+its one reader may not be what a public page owes everyone; the entries are the
+author's side of an open dialogue rather than the record's answers, and how they
+are retained and rolled up is `quotes`'. Raised by the clean-context reading of
+`authors-words-on-the-page` on 2026-09-07, under validation 15, as an option and
+not a merge.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+Everything the recommended option says, with the browser rendering each node's
+`## Disposition` section as the node's own words, whole and in the order the
+section keeps them.
 ```
 
 ## Account
@@ -447,3 +846,7 @@ Two vocabulary questions are each pending as an unruled option on four separate 
 Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/node, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/instruments.
 
 Proposed: Strike the eight options and replace each with a citation. `commons.systems/disposition-graph/rejected` is the survivor for what a rejected alternative is, and `commons.systems/disposition-graph/authority` is the survivor for what a proposal is; each of the six bearer nodes cites the survivor's sentence where it currently carries the option. Where a bearer node believes its option means something the survivor's answer does not cover, that difference is the option, stated as the difference, and everything the survivor already says comes out. If the author would rather rule the two words once explicitly, mint the settling option on the survivor in the shape `instruments`' `one-ruling-for-the-word` takes, without a count in its prose.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/projection stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `draft`; 7 `## Disposition` entries became the ledger entries words/2026-09-02/19, words/2026-09-02/20, words/2026-09-02/21, words/2026-09-02/22, words/2026-09-03/65, words/2026-09-03/66, words/2026-09-03/67, referenced by 4 options the entry's own date names and by the recommended option for 3 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `narrowing-disclosed`, `hold-for-self-documentation`, `hyperlink-traditions-in-prose`, `name-what-it-does-not-settle`, `strike-the-field-link-clause`, `absorb-self-documentation`, `shim-carries-framed-viewer`, `a-how-to-read-page-in-the-browser`, `a-vocabulary-page-in-the-browser`, `a-rejected-alternatives-section-apart`, `tradition-linking-cited-to-readings`, `rejected-alternative-is-an-option`, `browser-renders-the-authors-words`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `5a1158c3c67eaa7e81097e7faeb737b46aeb8ede` was already past the recommendation and is left as it stood.

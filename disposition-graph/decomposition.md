@@ -59,6 +59,8 @@ facts:
       - name: no-carrier-and-the-questions-are-progressed
         source: author
         ref: "2026-09-05"
+        supports:
+          - words/2026-09-05/1
       - name: unit-models-left-to-delegation
         source: review
         ref: "2026-09-05"
@@ -70,6 +72,14 @@ facts:
       - name: a-unit-returns-the-amendment
         source: ai
         ref: "2026-09-07"
+        supports:
+          - words/2026-09-04/23
+          - words/2026-09-04/24
+          - words/2026-09-07/5
+          - words/2026-09-07/6
+          - words/2026-09-07/7
+          - words/2026-09-07/8
+          - words/2026-09-07/10
       - name: citation-moves-to-unit-sizing
         source: review
         ref: "2026-09-07"
@@ -91,12 +101,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: dd59cbca7f78752bac9704bc5eff7ed7a2b27990
+  of: 5e56e6b8fed51a4739882eb744083fd913ec916e
   commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
   against: "The measured byte totals for the eight design units (16,432 to 44,306 bytes, 281,879 total) recompute today to 282,151 bytes across the same files, roughly 0.1% over the stated figure, which is within noise (the files may have been touched fractionally after the cited commit) and not a material misstatement. No other gap found."
   survey:
     date: 2026-09-07
-    of: dd59cbca7f78752bac9704bc5eff7ed7a2b27990
+    of: 5e56e6b8fed51a4739882eb744083fd913ec916e
 form: rule
 under:
   - commons.systems/disposition-graph/delegation
@@ -107,70 +117,6 @@ depends:
   - commons.systems/disposition-graph/frontier-consistency#split-survey-from-per-draft
   - commons.systems/disposition-graph/tier
 ---
-## Disposition
-
-The author, 2026-09-04, opening the sitting (the two examples were each fenced in the original):
-
-> /align dispositions provided to the alignment skill may require complex and multi-faceted analysis. Look at the two appended examples. Do not begin dialogue or analysis of those examples, other than to recommend standard seams by which complex dispositions like those can be broken down and distributed to subagents (with right sized models and effort level) then integrated by this main alignment dialogue thread. Analyze from the perpective of token/context efficiency and also management of AI attention. Subagent strategy must include a step after establishing recommendations to pass the more complex recommendations to a fable subagent to review. Help me think through, does this replace the current disposition for adversarial `/align-review` with a disposition that adversarial review happens at any point in the dialogue that a "complex" recommendation is made? Would we retain coverage of "settling"/"untangling" analysis? How would this affect batching disposition of the adversarial review? What solution provides the quality of adversarial review while maintaining token/context efficiency (esp. avoiding redundant analysis - the serialized batching of adversarial review already seems like a bit of a hack)?
->
-> Do not act on the following example dispositions, they are provided for reference to analyze how they might be decomposed for token/context efficiency and management of AI attention:
-> 1.
-> ```
-> /align refinement to purpose disposition. 
-> - Help me think more thoroughly about how this purpose serves both my personal, public disposition. My personal disposition as recorded does not yet fully support dispositions like those listed below. Does it fully support the purpose disposition as it stands?
-> - Help me evaluate how the purpose engages target personas to progress through two journeys a) supporting the project through claude affiliation and services purchase (independent contracting by the author) b) the learning funnel (periagogic) where the target personas are actively engaging in and applying the concepts. As highest ranking node the purpose document in the browser is where personas from a variety of channels land - eg. github.
-> - For example, this answer seems to lack a diagnosis of the problem it is solving. Would including the diagnosis here make it more compelling for readers to optimize progression through the sales and learning funnels? What other principles of good writing and good marketing tradition can be applied here?
-> - Help me think through disclosure of dispositions. For example, some private information must not be disclosed - like names of real people used as prototypes for personas. Disclosing some dispositions would conflict with other recorded disposition - most enterprises have dispositions that they consider to be proprietary. i.e. disclosing some dispositions would conflict with their business interests. Gated disclosure must not conflict with disposition against gatekeeping knowledge, and disclosure must not be gated reflexively. that would also create conflict with recorded disposition such as feeding the funnels. What traditions can be referenced on this. Help me untangle and settle these surface conflicts in disposition.
-> - since there will be at least some non-disclosed disposition, we can no longer delay that disposition. Non-disclosed disposition is persisted to a private git repo and is mounted by the disposition graph in this repo. This is essentially the same as a "delegate to claude" mounted node where the hypothetical disposition of claude is not transparent and so can effectively be reduced to a single mount node. The only difference is that the transparency of the private graph is based on role. The author must have transparency into the private graph and the public graph (and/or disposition-graph) must make addressable references to the private graph. Information must not leak via those references (eg. a node id with the real name of a persona's prototype).
-> - disposition to support a sales and learning funnels will involve recording of both personas and channels (disclosed or not). 
-> - The sales funnel will need to be supported by CTA in the browser since that is where some channels dump. That could look like (rendered into the top navigation) a "support this project" CTA with links to "ask claude about this document" (to capture anthropic affiliation revenue/tokens) and "ask the author about this document" (to capture independently contracted service revenue).
-> ```
-> 2.
-> ```
-> /align before proceeding with the bootstrap I want to start managing the rules and settings in the harness as reconciliations of the graph. That includes CLAUDE.md, .claude/rules, per-worktree CLAUDE.local.md, .claude/settings.json, claude code cli status line configuration and any other configuration in .claude that might be reconciled by disposition. 
-> - Note: some bootstrap work has already been done to reconcile essential skill configuration. Recommend improvements if necessary, but be careful not to clobber `/align` and `/align-review` skills which the bootstrap operations rely on. (all other skills/rules/etc. are in play without caveat)
-> - One essential motivating disposition is disposition on greenfield recomendations. It states (something like): Whenever asked for a recommendation claude must do a greenfield evaluation and describe brownfield costs. this is especially true for `/align` and `/align-review`.
-> - If there is configuration that is not yet relevant to existing disposition, does that suggest areas where disposition needs to be fleshed out. eg. I rely heavily on skill configuration and not agent configuration. Is that a gap? Would layering on reconciled agent configuration buy me something? 
-> - reconciled context (rules, skills, etc.) must be kept tight. We must mechanically avoid bloat that is not justified by disposition which is in turn justified by evidence that claude requires steering. Permissions configuration has a similar requirement - the permission frontier must not ratchet without pruning of what's actually required. How do the existing graph principles of reconciliation/liquidation, instrumentation and evidence gathering play into this?
-> - CLAUDE.local.md must be provisioned automatically with graph context relevant to work being done in that worktree. This is so all of the relevant decisions in the graph affect decision making for the work unit and mitigate the risk of greedy solutions at a single node level - what rationale justifies this work unit (what is the node for this work unit "under"), what traditions are in play that support this work unit (so that work can lean on references to that tradition), what traditions diverge (so that work doesn't incorporate default tradition that has been rejected), what adjacent work is being performed (to avoid scope overreach or conflicts), etc. Is creating the CLAUDE.local.md an initialization step for "bite" skills? Is there a common subskill or script for provisioning CLAUDE.local.md? Evaluate the applicability of this for `/align` and `/align-review` where the scope of work may change as the dialogue progresses.
-> - give me options for what to include on the status line which I can choose from to set disposition
->
-> evaluate this tangential disposition in parallel because it may overlap with disposition on CLAUDE.local.md for alignment dialogue: `/align` and `/align-review` must be network concurrency safe. Consider write concurrency and also how to avoid thrashing of disposition when concurrent sessions are "settling"/"untangling" overlapping subgraphs (which can happen during periagoge and adversarial review). Mechanically enforced serialization is acceptable as long as the author can queue disposition in multiple concurrent alignment sessions until persistence in the graph is resolved. As part of this re-consider nested disposition worktree as pattern - is this the ideal greenfield pattern or is there a better way to manage state of the disposition ref. Consider that only the `/align` and `/align-review` skills have authority to mutate the graph. All other work is read only and only if a required part of the graph falls out of the compaction floor for materialized context. Does this affect the design?
->
-> Make sure concurrency strategy is air-tight against integrity loss.
->
-> Proceed through meiutic, stop before adversarial review. Then request booststrap authority to reconcile the unanswered dispositions along with a list of all things that will be materialized.
-> ```
-
-The author, 2026-09-04, on the recommendation above, the probe, and the grant asked for at its close:
-
-> go, and bootrap authority granted
-
-The author, 2026-09-05, in the periagogic movement of the sitting on `alignment-page-observations`, on what a decomposition mints and what becomes of the nodes it makes:
-
-> carrier is not inferred by disposition input. Nodes may not even be siblings. Prune it if it carries nothing.
-
-> But the nodes that are created are expected to be progressed through dialogue.
-
-The author, 2026-09-07, on the cost of the clean-context reading, asked of the session after a wave of readings on the alignment page's children:
-
-> this iterative clean-context reading is very expensive. Are there token/context optimizations that would achieve similar quality results? eg. is the model choice (fable/opus/sonnet) right sized for the task?
-
-The author, 2026-09-07, in the same turn's continuation:
-
-> also consider optimzations to the dialogue workflow
-
-The author, 2026-09-07, after the session's assessment of where the cost goes:
-
-> record the recommended optimizations as dispositions, progress them up to confirmation, and include them in the list of reconciliations of alignment dialogue/review/survey/artifact
-
-The author, 2026-09-07, later in the same turn:
-
-> begin applying the optimizations as you progress
-
-The author, 2026-09-07, on the sitting's units and the skills that carry them, said after the session had launched design, survey and reconciliation units on ad-hoc briefs beside the two review skills:
-
-> also include this in the list of dispositions we are progressing up to confirmation and reconciling: it sounds like recommended alignment subagents have extended beyond (or superceded) align-review and align-survey. If so, each subagent have its instructions codified in a skill. And if align-review or align-survey are superceded, they must be liquidated by reconciliation.
 
 ## Facts
 
@@ -186,13 +132,70 @@ Moderate boldness. What rests on the author is the criterion, twice stated, and 
 
 Five seams, the question, the movement, the kind of analysis, the fact, and the dependency, each dividing a sitting's work into units the main thread integrates from their conclusions alone; the order the units run in, the surveys together, the design after them, the review after the design; and the review divided by its object, which is the division the clean-context-review node carries as the option `per-draft-and-survey` and now recommends as part of `pointers-for-what-grows-with-the-record`, and the option `split-survey-from-per-draft` on the frontier-consistency node, both in `depends` at the option the author is being asked to confirm, so that a confirmation here confers the seams and the order and not the review's shape. The recommended text sets it out.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: a-unit-returns-the-amendment
+
+```diff
+@@ -20,4 +20,4 @@
+ 
+ The dependency. The questions a decomposition yields carry depends among themselves. Their surveys run in parallel regardless; a design waits on the recommendation, not the ruling, of the question it depends on; the main thread integrates the questions in their ruling order; and the review of each draft runs the moment its recommendation is recorded, while the others are still in hand, so that the counter-argument reaches the main thread with the node it concerns and never as a batch of findings on nodes it has stopped seeing.
+ 
+-Every unit returns its conclusion as data with the commands it ran and writes nothing to the record, and a unit whose conclusion is a change to a text that already stands returns the change and not the text: each locus it would amend as the exact bytes it replaces and the exact bytes it puts in their place, and never a node, a section or a recommendation fence redrawn whole. A redraw hands the main thread a text it must diff against the record to learn what the unit decided, so the thread reads the whole of what it already has in order to find the part it does not; the pairs are that difference written down, and they are what the thread validates, what its own adversarial reading is over, what the applying step needs, and what the re-reading's object already is by the review-cost node's rule. A unit that cannot name the bytes it is replacing has not located its own change. Where a unit's conclusion is a new text and not a change to one, a node the sitting is minting or a fence the node has never carried, there is nothing to pair it against and it is returned whole. the main thread writes the conclusion into the node's account at the next checkpoint, so that the record and not the session carries it, and a session that loses its context resumes from the node. This answer is materialized by the alignment skill's list of a sitting's units, under the shim the growth node declares on that skill, with two gaps this node discloses rather than presumes closed: the skill's list still carries the escalation trigger this answer superseded, and the reconciliation of it is owed; and the shim's own scope reaches the growth node and its siblings, where this node is that node's grandchild, which is recorded as an option there.
++Every unit returns its conclusion as data with the commands it ran and writes nothing to the record; the main thread writes the conclusion into the node's account at the next checkpoint, so that the record and not the session carries it, and a session that loses its context resumes from the node. This answer is materialized by the alignment skill's list of a sitting's units, under the shim the growth node declares on that skill, with two gaps this node discloses rather than presumes closed: the skill's list still carries the escalation trigger this answer superseded, and the reconciliation of it is owed; and the shim's own scope reaches the growth node and its siblings, where this node is that node's grandchild, which is recorded as an option there.
+```
+
 #### pre-review-under-the-batch
 
 The same five seams, with the review the author requires added inside the sitting as a pre-review whose findings go into the node's account, while the batch review of the clean-context-review node's standing answer stays the only review of record and the only thing that forwards a node to the ruling stage. Viable if the author holds that no node reaches the ruling stage except through one reading of the whole frontier, which is what their words of 2026-09-03 say; its cost is that validations one to six run twice on every draft, and that the batch still returns its findings on a sitting's children after the sitting has moved on from them.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+The same five seams, with the review the author requires added inside the sitting as a pre-review whose findings go into the node's account, while the batch review of the clean-context-review node's standing answer stays the only review of record and the only thing that forwards a node to the ruling stage. Viable if the author holds that no node reaches the ruling stage except through one reading of the whole frontier, which is what their words of 2026-09-03 say; its cost is that validations one to six run twice on every draft, and that the batch still returns its findings on a sitting's children after the sitting has moved on from them.
+```
+
 #### decomposition-before-minting
 
 The decomposition is put to the author before the queued nodes are minted: the author's words are checkpointed on the node the disposition refines, the survey's proposal is put at the periagogic stage, and the nodes are minted after the author's response. Raised by the reading of 2026-09-05, which observed that a node once minted is refusable only by a prune the author rules, where a probe is refusable by a word. Viable if the author would rather rule once on a decomposition than rule prunes on nodes they refuse; its cost is that the queue is invisible on the alignment page until the author answers, and that a session lost between the words and the response resumes from the parent alone.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+The decomposition is put to the author before the queued nodes are minted: the author's words are checkpointed on the node the disposition refines, the survey's proposal is put at the periagogic stage, and the nodes are minted after the author's response. Raised by the reading of 2026-09-05, which observed that a node once minted is refusable only by a prune the author rules, where a probe is refusable by a word. Viable if the author would rather rule once on a decomposition than rule prunes on nodes they refuse; its cost is that the queue is invisible on the alignment page until the author answers, and that a session lost between the words and the response resumes from the parent alone.
+```
 
 #### main-thread-performs-the-surveys
 
@@ -200,16 +203,81 @@ The main thread performs the surveys itself rather than delegating them. It
 was passed over because the delegation node already rejects it: the size of a
 survey is unknown until it is read.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+The main thread performs the surveys itself rather than delegating them. It
+was passed over because the delegation node already rejects it: the size of a
+survey is unknown until it is read.
+```
+
 #### one-unit-per-disposition
 
 A sitting is decomposed into one unit per disposition. It was passed over
 because it hands a subagent the interview, which is the main thread's.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+A sitting is decomposed into one unit per disposition. It was passed over
+because it hands a subagent the interview, which is the main thread's.
+```
 
 #### decomposition-by-the-author
 
 The author decides how a complex disposition is decomposed. It was passed over
 because the sitting can propose the decomposition and the author need only
 refuse it.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+The author decides how a complex disposition is decomposed. It was passed over
+because the sitting can propose the decomposition and the author need only
+refuse it.
+```
 
 #### reviewer-on-a-fixed-model
 
@@ -219,6 +287,31 @@ model, and the reader's model became the review-model node's question, where
 its recommended option fable-for-both-readings is this option decided there;
 it stays passed over on this fact only because the model is not this node's
 question.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+The reviewer is chosen by a fixed model rather than by the draft's boldness.
+On 2026-09-04 the author's words put both readings on one
+model, and the reader's model became the review-model node's question, where
+its recommended option fable-for-both-readings is this option decided there;
+it stays passed over on this fact only because the model is not this node's
+question.
+```
 
 #### no-carrier-and-the-questions-are-progressed
 
@@ -240,6 +333,42 @@ evidence that the rule is not in the answer today; its existence fact already
 recommended `prune` before these words, on the independence test, and the
 author's words are what the rule would be, not what that prune rests on.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+It would add to the first seam two sentences the answer does not carry, in the
+author's words of 2026-09-05. That a decomposition mints no carrier: the node
+standing for the bundled input as a whole is not implied by the input being
+bundled, so a sitting that decomposes records the questions and leaves the
+words on the node the disposition refines, where this answer already puts the
+ones a question refuses. And that the questions the decomposition mints are
+progressed through dialogue rather than merely recorded, so that decomposing is
+not a way of closing a sitting. It would also make explicit what the answer
+already implies in the clause "where each sits under the record", which the
+author's second sentence affirms: the questions a decomposition yields need not
+be siblings and need not share a parent.
+
+The record minted such a carrier on 2026-09-05,
+`commons.systems/disposition-graph/alignment-page-observations`, which is the
+evidence that the rule is not in the answer today; its existence fact already
+recommended `prune` before these words, on the independence test, and the
+author's words are what the rule would be, not what that prune rests on.
+```
+
 #### unit-models-left-to-delegation
 
 The node names the five seams, the units, and the order they run in, and leaves
@@ -252,6 +381,34 @@ turned down in prose in the reply to the reading before it and never put on the
 fact, where the viable-options node holds that a candidate never silently leaves
 the list.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+The node names the five seams, the units, and the order they run in, and leaves
+each unit's model to the delegation node's rule that the model follows the kind
+of work, applied by the sitting rather than fixed here. Passed over because the
+assignment of each seam to a model is what the rationale calls new, and a seam
+named without a model leaves each sitting the choice the author asked to be
+standardized. Raised by the clean-context reading of 2026-09-05, which found it
+turned down in prose in the reply to the reading before it and never put on the
+fact, where the viable-options node holds that a candidate never silently leaves
+the list.
+```
+
 #### units-carried-by-their-own-skills
 
 The five seams, the units and their order are unchanged, and the answer's
@@ -263,14 +420,18 @@ skill and the models, while each kind's object, brief, launch and integration
 move into that kind's `SKILL.md`. Raised by
 `commons.systems/disposition-graph/unit-skills`, minted under this node on
 2026-09-07 from the author's words of that day, which asks whether each unit of
-a sitting is its own skill and answers yes. For it: the materialization this
+a sitting is its own skill and answers yes.
+
+**AI support.** For it: the materialization this
 sentence claims is already the weaker of the two things this node's reading of
 2026-09-05 disclosed about it — the alignment skill still carries a superseded
 escalation trigger, and `growth`'s shim is declared for that node and its
 siblings while this node is its grandchild — so the sentence points at an
 artifact that neither matches this answer nor is covered by the shim it cites;
 seven skills, each a declared shim on the node it projects, replace both
-defects with a declaration that reaches. Against it: the kinds and their models
+defects with a declaration that reaches.
+
+**AI divergence.** Against it: the kinds and their models
 are this node's answer, and moving their instructions into seven files puts
 seven hand-written projections of this node's list in the interval
 `hand-written-projection-drift` asks about, where one file stands today. The
@@ -278,29 +439,46 @@ option acts on nothing until the author rules; the child's answer names this
 sentence as what the sitting would amend and does not amend it, since another
 unit is amending this node's fence in the same sitting.
 
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+The five seams, the units and their order are unchanged, and the answer's
+closing sentence on how it is materialized moves: instead of "This answer is
+materialized by the alignment skill's list of a sitting's units, under the shim
+the growth node declares on that skill", each kind of unit is carried by a
+skill of its own, and the alignment skill keeps the seams, the map from kind to
+skill and the models, while each kind's object, brief, launch and integration
+move into that kind's `SKILL.md`. Raised by
+`commons.systems/disposition-graph/unit-skills`, minted under this node on
+2026-09-07 from the author's words of that day, which asks whether each unit of
+a sitting is its own skill and answers yes.
+```
+
 #### a-unit-returns-the-amendment
 
 Everything `seams-and-split-review` says, with one clause on the last paragraph, which says what every unit returns. A unit whose conclusion is a change to a text that already stands returns the change: each locus as the exact bytes it replaces and the exact bytes it puts in their place, and never a node, a section or a recommendation fence redrawn whole. A unit whose conclusion is a new text -- a node the sitting is minting, a fence the node has never carried -- returns it whole, since there is nothing to pair it against.
 
-For it: a redraw makes the main thread diff a text against the record to learn what the unit decided, so the thread reads the whole of what it already has to find the part it does not; the pairs are that difference written down, and they are what the thread validates, what the applying step needs, and what the re-reading's object already is by the `review-cost` node's rule. A unit that cannot name the bytes it is replacing has not located its own change. Measured: the eight design units of 2026-09-06 and 2026-09-07 returned 281,879 bytes in all, each a whole redraw of the sections it touched.
+**AI support.** For it: a redraw makes the main thread diff a text against the record to learn what the unit decided, so the thread reads the whole of what it already has to find the part it does not; the pairs are that difference written down, and they are what the thread validates, what the applying step needs, and what the re-reading's object already is by the `review-cost` node's rule. A unit that cannot name the bytes it is replacing has not located its own change. Measured: the eight design units of 2026-09-06 and 2026-09-07 returned 281,879 bytes in all, each a whole redraw of the sections it touched.
 
-Against it, and on the fact: no whole text is written by anybody until the main thread splices, so the coherence of the amended answer is checked by nobody in between, and a design whose parts each read well and whose whole does not is what a redraw shows and a pair hides. A pair is also unreadable without the record in hand, which moves reading cost onto the thread the `delegation` node says is never delegated.
+The author's words of 2026-09-04, quoted on this node: complex dispositions need multi-faceted analysis, to be divided along standard seams among subagents with right-sized models and effort and integrated by the main thread, judged by token and context efficiency and by the management of the AI's attention, with a step after a recommendation is established that passes the complex ones to the most capable model for review. The seams are the record's own and this node only names them as seams: the question seam is the node node's rule that a text answering two questions is two nodes, which the dialogue node applies to a decision the author would rule on separately; the movement seam is the sitting's stages; the analysis seam is the delegation node's rule that a verbose investigation is a unit whatever its size and that the model follows the kind of work; the fact seam is the dialogue node's four reserved facts; the dependency seam is the depends field and the ruling order. What is new is the assignment of each seam to a model and an order; the reader's model is the review-model node's question. The cost of the design is the fixed cost of a contract per unit, of the main thread's integration turn after each, and of a brief per draft reviewed, the brief carrying the draft's neighbourhood whole and the rest of the record as one line a node, as the review-cost node decides; the lookup exemption on delegation is the floor beneath it, and a disposition that asks one question runs one design unit and one review and no decomposition. Measured on 2026-09-05, after that node's lever was pulled: this node's own brief is 268,598 bytes for one draft, roughly a third of the 838,923-byte batch brief of 2026-09-03 it replaces, and the survey's brief is 1,083,638 bytes, larger than the whole batch, since the survey alone needs the whole graph and reads it without the accounts. A per-draft brief is paid once per draft, so a sitting of many drafts reads several times the batch's tokens; that is the design's cost, taken for the attention and the timing it buys. The integration turn is priced the same way and by the same author's words. Measured at implementation commit 87e4b24e, the eight design units of 2026-09-06 and 2026-09-07 returned between 16,432 and 44,306 bytes each and 281,879 bytes in all, every one of them a whole redraw of the sections it touched; the main thread reads all of that to find the sentences that moved, and the reading that follows is handed a redrawn text whose difference from the pinned one is the only thing it is judging. What the pairs cost is that a unit must quote the record exactly, so a unit given a stale copy of a node produces pairs that will not apply, which a redraw hides and a pair makes fail loudly. The traditions this design draws on are registered on the stub-traditions node, where the record keeps the lists whose readings are owed; their relations are claimed and unread, and no rationale of this node states them as adoptions.
+
+**AI divergence.** Against it, and on the fact: no whole text is written by anybody until the main thread splices, so the coherence of the amended answer is checked by nobody in between, and a design whose parts each read well and whose whole does not is what a redraw shows and a pair hides. A pair is also unreadable without the record in hand, which moves reading cost onto the thread the `delegation` node says is never delegated.
 
 Raised from the author's words of 2026-09-07 and from the measurement of this sitting's own design units. It is recorded here rather than on `review-cost` or `clean-context-review` because what a unit returns and how the main thread integrates it is this node's question; the reading's object is already the amendment on `review-cost`, and this clause makes the amendment a thing the record has rather than a thing each reader recomputes.
 
-#### citation-moves-to-unit-sizing
+A per-draft brief carried the index of every standing answer, so a sitting of several questions read several times the tokens of the one batch it replaced, and the author's first-named judge is token efficiency; the design stood on their second, attention, and on timing, and the index was the lever against the cost. The `review-cost` node pulled that lever on 2026-09-05: the index is one line a node and a brief is roughly a third of what it was, so the case against is now the residue, that a sitting still pays a fixed cost of brief and contract per draft where the batch paid it once.
 
-Everything the recommendation says, with the analysis seam's citation of `delegation` for the model rule redirected to `unit-sizing`, the node delegation-bounds-and-sizing recommends minting beneath `delegation` to carry the sizing clauses. It is on the table because that node's answer says the move is made with the clauses — "the sibling is amended with the parent rather than left pointing at a gap" — and nothing on this node records it, so a ruling there would leave this answer citing a node that no longer carries the rule it cites. It acts on nothing until that node is ruled.
-
-#### units-are-readings-not-surveys
-
-Everything the recommendation says, with the three units of the analysis seam renamed so that "survey" is left to the reading frontier-consistency defines: the record reading, the tradition reading and the implementation reading, or another word the author prefers, with `delegation`'s clause on verbose investigations read as reaching them under the new name. It is on the table because the record uses one word for a sitting's unit and for the reading of the whole frontier, which the eleventh validation forbids, and because unit-skills' recommendation would carry the collision into four skill names; unit-skills' own rationale names the conflict and sends only the skill's name elsewhere, so the term itself is decided by nothing.
-
-### authority
-
-Ratified, at low boldness: the rule binds how every sitting spends the author's tokens and attention and how the adversarial review is run, and a wrong answer here is expensive and compounds across sittings, which is the escalation test the `class-recommendation` node states.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -326,11 +504,59 @@ The fact. The answer fact is the design's to decide; the authority fact follows 
 The dependency. The questions a decomposition yields carry depends among themselves. Their surveys run in parallel regardless; a design waits on the recommendation, not the ruling, of the question it depends on; the main thread integrates the questions in their ruling order; and the review of each draft runs the moment its recommendation is recorded, while the others are still in hand, so that the counter-argument reaches the main thread with the node it concerns and never as a batch of findings on nodes it has stopped seeing.
 
 Every unit returns its conclusion as data with the commands it ran and writes nothing to the record, and a unit whose conclusion is a change to a text that already stands returns the change and not the text: each locus it would amend as the exact bytes it replaces and the exact bytes it puts in their place, and never a node, a section or a recommendation fence redrawn whole. A redraw hands the main thread a text it must diff against the record to learn what the unit decided, so the thread reads the whole of what it already has in order to find the part it does not; the pairs are that difference written down, and they are what the thread validates, what its own adversarial reading is over, what the applying step needs, and what the re-reading's object already is by the review-cost node's rule. A unit that cannot name the bytes it is replacing has not located its own change. Where a unit's conclusion is a new text and not a change to one, a node the sitting is minting or a fence the node has never carried, there is nothing to pair it against and it is returned whole. the main thread writes the conclusion into the node's account at the next checkpoint, so that the record and not the session carries it, and a session that loses its context resumes from the node. This answer is materialized by the alignment skill's list of a sitting's units, under the shim the growth node declares on that skill, with two gaps this node discloses rather than presumes closed: the skill's list still carries the escalation trigger this answer superseded, and the reconciliation of it is owed; and the shim's own scope reaches the growth node and its siblings, where this node is that node's grandchild, which is recorded as an option there.
-
-## Rationale
-
-The author's words of 2026-09-04, quoted on this node: complex dispositions need multi-faceted analysis, to be divided along standard seams among subagents with right-sized models and effort and integrated by the main thread, judged by token and context efficiency and by the management of the AI's attention, with a step after a recommendation is established that passes the complex ones to the most capable model for review. The seams are the record's own and this node only names them as seams: the question seam is the node node's rule that a text answering two questions is two nodes, which the dialogue node applies to a decision the author would rule on separately; the movement seam is the sitting's stages; the analysis seam is the delegation node's rule that a verbose investigation is a unit whatever its size and that the model follows the kind of work; the fact seam is the dialogue node's four reserved facts; the dependency seam is the depends field and the ruling order. What is new is the assignment of each seam to a model and an order; the reader's model is the review-model node's question. The cost of the design is the fixed cost of a contract per unit, of the main thread's integration turn after each, and of a brief per draft reviewed, the brief carrying the draft's neighbourhood whole and the rest of the record as one line a node, as the review-cost node decides; the lookup exemption on delegation is the floor beneath it, and a disposition that asks one question runs one design unit and one review and no decomposition. Measured on 2026-09-05, after that node's lever was pulled: this node's own brief is 268,598 bytes for one draft, roughly a third of the 838,923-byte batch brief of 2026-09-03 it replaces, and the survey's brief is 1,083,638 bytes, larger than the whole batch, since the survey alone needs the whole graph and reads it without the accounts. A per-draft brief is paid once per draft, so a sitting of many drafts reads several times the batch's tokens; that is the design's cost, taken for the attention and the timing it buys. The integration turn is priced the same way and by the same author's words. Measured at implementation commit 87e4b24e, the eight design units of 2026-09-06 and 2026-09-07 returned between 16,432 and 44,306 bytes each and 281,879 bytes in all, every one of them a whole redraw of the sections it touched; the main thread reads all of that to find the sentences that moved, and the reading that follows is handed a redrawn text whose difference from the pinned one is the only thing it is judging. What the pairs cost is that a unit must quote the record exactly, so a unit given a stale copy of a node produces pairs that will not apply, which a redraw hides and a pair makes fail loudly. The traditions this design draws on are registered on the stub-traditions node, where the record keeps the lists whose readings are owed; their relations are claimed and unread, and no rationale of this node states them as adoptions.
 ```
+
+#### citation-moves-to-unit-sizing
+
+Everything the recommendation says, with the analysis seam's citation of `delegation` for the model rule redirected to `unit-sizing`, the node delegation-bounds-and-sizing recommends minting beneath `delegation` to carry the sizing clauses. It is on the table because that node's answer says the move is made with the clauses — "the sibling is amended with the parent rather than left pointing at a gap" — and nothing on this node records it, so a ruling there would leave this answer citing a node that no longer carries the rule it cites. It acts on nothing until that node is ruled.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+Everything the recommendation says, with the analysis seam's citation of `delegation` for the model rule redirected to `unit-sizing`, the node delegation-bounds-and-sizing recommends minting beneath `delegation` to carry the sizing clauses. It is on the table because that node's answer says the move is made with the clauses — "the sibling is amended with the parent rather than left pointing at a gap" — and nothing on this node records it, so a ruling there would leave this answer citing a node that no longer carries the rule it cites. It acts on nothing until that node is ruled.
+```
+
+#### units-are-readings-not-surveys
+
+Everything the recommendation says, with the three units of the analysis seam renamed so that "survey" is left to the reading frontier-consistency defines: the record reading, the tradition reading and the implementation reading, or another word the author prefers, with `delegation`'s clause on verbose investigations read as reaching them under the new name. It is on the table because the record uses one word for a sitting's unit and for the reading of the whole frontier, which the eleventh validation forbids, and because unit-skills' recommendation would carry the collision into four skill names; unit-skills' own rationale names the conflict and sends only the skill's name elsewhere, so the term itself is decided by nothing.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
+form: rule
+under:
+  - commons.systems/disposition-graph/delegation
+defines:
+  - seam
+---
+## Answer
+
+Everything the recommendation says, with the three units of the analysis seam renamed so that "survey" is left to the reading frontier-consistency defines: the record reading, the tradition reading and the implementation reading, or another word the author prefers, with `delegation`'s clause on verbose investigations read as reaching them under the new name. It is on the table because the record uses one word for a sitting's unit and for the reading of the whole frontier, which the eleventh validation forbids, and because unit-skills' recommendation would carry the collision into four skill names; unit-skills' own rationale names the conflict and sends only the skill's name elsewhere, so the term itself is decided by nothing.
+```
+
+### authority
+
+Ratified, at low boldness: the rule binds how every sitting spends the author's tokens and attention and how the adversarial review is run, and a wrong answer here is expensive and compounds across sittings, which is the escalation test the `class-recommendation` node states.
 
 ## Account
 
@@ -603,3 +829,7 @@ Recorded as an option on this node's answer fact: `units-are-readings-not-survey
 ### Amended after the frontier survey, 2026-09-07
 
 Two findings of the survey named this node and each is recorded as an option on the answer fact, `citation-moves-to-unit-sizing` and `units-are-readings-not-surveys`; neither is adopted. The first acts only when delegation-bounds-and-sizing is ruled, and the author meets it here. The second proposes "reading" for the three units, a word the record already gives to a tradition's node and to the two readings of the clean-context review, so the collision it would cure it would also move; which word the units take is the author's, and the option stands for the ruling that decides it. No text moves, both pins hold, and the node returns to ruling.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/decomposition stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `a-unit-returns-the-amendment`; 8 `## Disposition` entries became the ledger entries words/2026-09-04/24, words/2026-09-04/23, words/2026-09-05/1, words/2026-09-07/5, words/2026-09-07/6, words/2026-09-07/7, words/2026-09-07/8, words/2026-09-07/10, referenced by 1 option the entry's own date names and by the recommended option for 7 the date named none. The content of `seams-and-split-review (at 4337d260)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `pre-review-under-the-batch`, `decomposition-before-minting`, `main-thread-performs-the-surveys`, `one-unit-per-disposition`, `decomposition-by-the-author`, `reviewer-on-a-fixed-model`, `no-carrier-and-the-questions-are-progressed`, `unit-models-left-to-delegation`, `units-carried-by-their-own-skills`, `citation-moves-to-unit-sizing`, `units-are-readings-not-surveys`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `dd59cbca7f78752bac9704bc5eff7ed7a2b27990` is re-computed for the encoding as `5e56e6b8fed51a4739882eb744083fd913ec916e`; nothing it read changed. The survey's pin `dd59cbca7f78752bac9704bc5eff7ed7a2b27990` is re-computed for the encoding as `5e56e6b8fed51a4739882eb744083fd913ec916e`; nothing it read changed.

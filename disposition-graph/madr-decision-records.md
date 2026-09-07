@@ -30,7 +30,6 @@ facts:
     recommends: storage-and-supersession-diverge
     boldness: high
     against: "The reading is the record's only examination of the tradition behind its central encoding and is drawn from the AI's memory of a template no one here has read; two divergences recorded from memory may be two misreadings, and a tradition the encoding was drawn from on purpose will always read as adopted, so the relation proves less than it seems."
-    stands: storage-and-supersession-diverge
   - name: authority
     options:
       - name: ratified
@@ -84,13 +83,6 @@ bears:
 depends:
   - commons.systems/disposition-graph/viable-options
 ---
-## Answer
-
-Supports it, and the record adopts its form with two divergences of its own. A MADR record states the context and the problem, lists the considered options, states the chosen option with the reasons that decided it, keeps the pros and cons of every considered option beside the decision, and carries a status that moves from proposed through accepted or rejected to deprecated or superseded by a later record. A fact on a node is that record kept live: the options with their sources are the considered options, and every option considered stays listed, which the record matches under the viable-options node's option `passed-over-options-stay` and not under its standing text, where a dominated option leaves the list; the recommended option is the decision outcome as proposed, and the confirmed choice with the author's reason is the outcome as accepted; the reasons each other option was not taken are the pros and cons kept beside the decision; and the reasons a candidate was passed over are the same pros and cons, carried on the option as `status: passed` with its clause. MADR's proposed and accepted are a recommendation without a ruling and a recommendation with one; its rejected and deprecated are statuses of the record, so here of the fact, and this record stores neither, a refused recommendation leaving no mark at all and only the author's words in the kickback, which is the first divergence read once more. The first divergence is in what is stored. MADR stores the status on the record; this record stores the stage while the dialogue is open, derives the node's class from the rulings on the facts, and lets the stage die at the recording where MADR's status lives on, since a stored status drifts from the rulings that confer it. The second is supersession. A MADR record once accepted is immutable, and a change is a new record kept beside the old with the old marked superseded by it; this record amends the fact in place, the displaced option staying on the fact with its sentence and the text it carried surviving only in version control, as the node node says. MADR's decision-makers, consulted, and informed are one person and one AI here: the decision-makers are the author's ruling and, before it, the recommendation the ruling answers; the consulted are the readings that bear on the option; informed has no counterpart. An option's `source` answers to none of the three, because it names who put the candidate on the table and not who decided, as the viable-options node says in as many words.
-
-## Rationale
-
-Surfaced in the sitting on the dialogue node on 2026-09-03, when the author asked for the unanswered frontier to be encoded as a recommendation with dialogue state and a list of alternatives, and recorded under that node's rationale as the tradition the encoding adopts; named again in the author's words of 2026-09-04 on the viable-options node, "a clear mechanical encoding for ADR style 'alternatives considered' documentation", which is why the relation on the options it bears on is adopted. Validated by the AI from its own knowledge of the template, version 4 as `source` cites it; the author has not read it and has not been asked to. Delegated is what the AI recommends for a reading the author has not asked to rule on, and it is not the case the readings node describes as declining to review, nor the deferral that node describes as accepting a reading for now and queueing the source: the author has done neither here, this node carrying no `## Disposition` and the record no words of theirs about the template. Deferred stands beside it on the fact. This reading is one of the five the viable-options node's account names as having informed `passed-over-options-stay`, and it is re-pointed onto that option on the same occasion as `pareto-frontier`'s second entry, 2026-09-05; the re-reading that account owes is of the six readings under that node, which this one, mounted under dialogue, is not.
 
 ## Facts
 
@@ -102,9 +94,187 @@ Surfaced in the sitting on the dialogue node on 2026-09-03, when the author aske
 
 The reading as it stood from 2026-09-03: MADR supports the dialogue state, whose alternatives with their sources are the considered options and whose rejected lines in the rationale are the options' cons after the ruling, with two divergences, the status derived from the stamp and the stage, and the decision-makers folded into the source. Passed over on 2026-09-05: it presumes a stamp the authority node's answer says is not written, and its only route back is the option `options-folded-into-the-rationale`, which the viable-options node passed over and which a ruling on the recording node's `stamp-written-at-the-recording` would have to revive.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Do architecture decision records in the MADR form support encoding the dialogue state as alternatives with a recommendation among them?
+form: reading
+under:
+  - commons.systems/disposition-graph/dialogue
+source: Markdown Architectural Decision Records (MADR), the template at adr.github.io/madr, version 4 (Context and Problem Statement, Decision Drivers, Considered Options, Decision Outcome with its chosen option, consequences, and confirmation, Pros and Cons of the Options, More Information; a status of proposed, rejected, accepted, deprecated, or superseded by another record; decision-makers, consulted, and informed), descending from Michael Nygard's architecture decision records of 2011 (Context, Decision, Status, Consequences).
+bears:
+  - fact: answer
+    option: facts-carry-options
+    relation: adopted
+  - fact: answer
+    option: alternatives-beside-facts
+    relation: adopted
+  - fact: answer
+    option: every-part-in-the-record
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: grant-from-a-ruling
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: passed-over-options-stay
+    relation: adopted
+  - node: commons.systems/disposition-graph/prose-and-structure
+    fact: answer
+    option: prose-argues-structure-records
+    relation: adopted
+  - node: commons.systems/disposition-graph/authority
+    fact: answer
+    option: authority-derived
+    relation: diverged
+  - node: commons.systems/disposition-graph/node
+    fact: answer
+    option: four-form-draft
+    relation: diverged
+  - node: commons.systems/disposition-graph/how-a-fact-is-headed
+    fact: answer
+    option: glosses-written-with-this-ruling
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: confirmed-is-a-derived-label-and-every-option-carries-its-content
+    relation: adopted
+---
+
+## Answer
+
+The reading as it stood from 2026-09-03: MADR supports the dialogue state, whose alternatives with their sources are the considered options and whose rejected lines in the rationale are the options' cons after the ruling, with two divergences, the status derived from the stamp and the stage, and the decision-makers folded into the source. Passed over on 2026-09-05: it presumes a stamp the authority node's answer says is not written, and its only route back is the option `options-folded-into-the-rationale`, which the viable-options node passed over and which a ruling on the recording node's `stamp-written-at-the-recording` would have to revive.
+```
+
 #### divergence-narrows
 
 Under the viable-options model the considered options persist after the decision as MADR keeps them, with the reasons each was not taken, so the recorded divergence narrows to what is stored: the stage is stored and the status is derived from the rulings on the facts, where MADR stores the status. The review's finding that the divergence as written was half wrong is met by the same narrowing. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 there. Passed over on 2026-09-05: it records one divergence where supersession is a second, and what it describes, every considered option kept, holds only under that node's recommended option and not under `grant-from-a-ruling`, which this reading bore on.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Do architecture decision records in the MADR form support encoding the dialogue state as alternatives with a recommendation among them?
+form: reading
+under:
+  - commons.systems/disposition-graph/dialogue
+source: Markdown Architectural Decision Records (MADR), the template at adr.github.io/madr, version 4 (Context and Problem Statement, Decision Drivers, Considered Options, Decision Outcome with its chosen option, consequences, and confirmation, Pros and Cons of the Options, More Information; a status of proposed, rejected, accepted, deprecated, or superseded by another record; decision-makers, consulted, and informed), descending from Michael Nygard's architecture decision records of 2011 (Context, Decision, Status, Consequences).
+bears:
+  - fact: answer
+    option: facts-carry-options
+    relation: adopted
+  - fact: answer
+    option: alternatives-beside-facts
+    relation: adopted
+  - fact: answer
+    option: every-part-in-the-record
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: grant-from-a-ruling
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: passed-over-options-stay
+    relation: adopted
+  - node: commons.systems/disposition-graph/prose-and-structure
+    fact: answer
+    option: prose-argues-structure-records
+    relation: adopted
+  - node: commons.systems/disposition-graph/authority
+    fact: answer
+    option: authority-derived
+    relation: diverged
+  - node: commons.systems/disposition-graph/node
+    fact: answer
+    option: four-form-draft
+    relation: diverged
+  - node: commons.systems/disposition-graph/how-a-fact-is-headed
+    fact: answer
+    option: glosses-written-with-this-ruling
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: confirmed-is-a-derived-label-and-every-option-carries-its-content
+    relation: adopted
+---
+
+## Answer
+
+Supports it, and the record adopts its form. A MADR record lists the considered options, states the chosen option with the reasons that decided it, keeps the pros and cons of every option beside the decision, and carries a status that moves from proposed through accepted, rejected, deprecated, or superseded. A fact on a node is that record kept live: the options with their sources are the considered options, the recommended option is the decision outcome as proposed, the confirmed choice with the author's reason is the outcome as accepted, the options that persist after the ruling with the reasons they were not taken are the pros and cons kept beside the decision, and the stage is the status while the dialogue is open. One difference is recorded as this project's own: MADR stores the status, and this record stores the stage and derives the status and the class from the rulings on the facts, since a stored status drifts from the rulings that confer it. MADR's decision-makers, consulted, and informed are one person and one AI here, and the source of each option, the author, the AI, the review, or the instrument or node that raised it, carries what those fields carry.
+```
+
+#### storage-and-supersession-diverge
+
+Supports it, and the record adopts its form with two divergences of its own.
+
+**AI support.** Surfaced in the sitting on the dialogue node on 2026-09-03, when the author asked for the unanswered frontier to be encoded as a recommendation with dialogue state and a list of alternatives, and recorded under that node's rationale as the tradition the encoding adopts; named again in the author's words of 2026-09-04 on the viable-options node, "a clear mechanical encoding for ADR style 'alternatives considered' documentation", which is why the relation on the options it bears on is adopted. Validated by the AI from its own knowledge of the template, version 4 as `source` cites it; the author has not read it and has not been asked to. Delegated is what the AI recommends for a reading the author has not asked to rule on, and it is not the case the readings node describes as declining to review, nor the deferral that node describes as accepting a reading for now and queueing the source: the author has done neither here, this node carrying no `## Disposition` and the record no words of theirs about the template. Deferred stands beside it on the fact. This reading is one of the five the viable-options node's account names as having informed `passed-over-options-stay`, and it is re-pointed onto that option on the same occasion as `pareto-frontier`'s second entry, 2026-09-05; the re-reading that account owes is of the six readings under that node, which this one, mounted under dialogue, is not.
+
+**AI divergence.** The reading is the record's only examination of the tradition behind its central encoding and is drawn from the AI's memory of a template no one here has read; two divergences recorded from memory may be two misreadings, and a tradition the encoding was drawn from on purpose will always read as adopted, so the relation proves less than it seems.
+
+**Content.**
+
+```markdown
+---
+question: Do architecture decision records in the MADR form support encoding the dialogue state as alternatives with a recommendation among them?
+form: reading
+under:
+  - commons.systems/disposition-graph/dialogue
+source: Markdown Architectural Decision Records (MADR), the template at adr.github.io/madr, version 4 (Context and Problem Statement, Decision Drivers, Considered Options, Decision Outcome with its chosen option, consequences, and confirmation, Pros and Cons of the Options, More Information; a status of proposed, rejected, accepted, deprecated, or superseded by another record; decision-makers, consulted, and informed), descending from Michael Nygard's architecture decision records of 2011 (Context, Decision, Status, Consequences).
+bears:
+  - fact: answer
+    option: facts-carry-options
+    relation: adopted
+  - fact: answer
+    option: alternatives-beside-facts
+    relation: adopted
+  - fact: answer
+    option: every-part-in-the-record
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: grant-from-a-ruling
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: passed-over-options-stay
+    relation: adopted
+  - node: commons.systems/disposition-graph/prose-and-structure
+    fact: answer
+    option: prose-argues-structure-records
+    relation: adopted
+  - node: commons.systems/disposition-graph/authority
+    fact: answer
+    option: authority-derived
+    relation: diverged
+  - node: commons.systems/disposition-graph/node
+    fact: answer
+    option: four-form-draft
+    relation: diverged
+  - node: commons.systems/disposition-graph/how-a-fact-is-headed
+    fact: answer
+    option: glosses-written-with-this-ruling
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: confirmed-is-a-derived-label-and-every-option-carries-its-content
+    relation: adopted
+---
+
+## Answer
+
+Supports it, and the record adopts its form with two divergences of its own. A MADR record states the context and the problem, lists the considered options, states the chosen option with the reasons that decided it, keeps the pros and cons of every considered option beside the decision, and carries a status that moves from proposed through accepted or rejected to deprecated or superseded by a later record. A fact on a node is that record kept live: the options with their sources are the considered options, and every option considered stays listed, which the record matches under the viable-options node's option `passed-over-options-stay` and not under its standing text, where a dominated option leaves the list; the recommended option is the decision outcome as proposed, and the confirmed choice with the author's reason is the outcome as accepted; the reasons each other option was not taken are the pros and cons kept beside the decision; and the reasons a candidate was passed over are the same pros and cons, carried on the option as `status: passed` with its clause. MADR's proposed and accepted are a recommendation without a ruling and a recommendation with one; its rejected and deprecated are statuses of the record, so here of the fact, and this record stores neither, a refused recommendation leaving no mark at all and only the author's words in the kickback, which is the first divergence read once more. The first divergence is in what is stored. MADR stores the status on the record; this record stores the stage while the dialogue is open, derives the node's class from the rulings on the facts, and lets the stage die at the recording where MADR's status lives on, since a stored status drifts from the rulings that confer it. The second is supersession. A MADR record once accepted is immutable, and a change is a new record kept beside the old with the old marked superseded by it; this record amends the fact in place, the displaced option staying on the fact with its sentence and the text it carried surviving only in version control, as the node node says. MADR's decision-makers, consulted, and informed are one person and one AI here: the decision-makers are the author's ruling and, before it, the recommendation the ruling answers; the consulted are the readings that bear on the option; informed has no counterpart. An option's `source` answers to none of the three, because it names who put the candidate on the table and not who decided, as the viable-options node says in as many words.
+```
 
 ### authority
 
@@ -306,3 +476,7 @@ Findings:
 
 
 Strongest counter-argument (weak): The reading's `bears` list gained an `adopted` entry on how-a-fact-is-headed's option `glosses-written-with-this-ruling`, and the argument for it is written on that node's account and not in this reading's answer, so a reader of this node meets a relation it does not argue. That widens the fact's own case against rather than answering it: the record's only examination of the tradition behind its central encoding is drawn from a template no one here has read, and it is now load-bearing on one more decision than when the case against was written.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/madr-decision-records stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `storage-and-supersession-diverge`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The content of `divergence-narrows (at 546fdbec)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `status-derived-from-stamp`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `9c0f951e94dee8342bfeeb9b8b99f7b81f2b127f` was already past the recommendation and is left as it stood. The survey's pin `5d80f9d0b0e57e6f006ecee3d51f568437f00e34` was already past the recommendation and is left as it stood.

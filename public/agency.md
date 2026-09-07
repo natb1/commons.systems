@@ -29,7 +29,6 @@ facts:
         ref: "1920badc"
         status: passed
         reason: "it is dogma, and dogma needs power to maintain"
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -45,29 +44,101 @@ instrument:
   ref: re-grasp on event, never on a calendar
   note: the triggers are recorded under the instruments node
 ---
-## Answer
-
-I am. Delegation and atrophy are expected and buy attention at the level where intent is set. What must not atrophy is the capacity to notice that I have been captured and to recover, because an origin that cannot recover has been replaced.
-
-## Rationale
-
-This is the graph's first principle in both senses of archē: the starting point from which every recorded disposition descends, and the origin of the actions taken under it. Aristotle identifies the two. A person is an archē of actions the way the first principles of mathematics are starting points of proofs, and Politics I.4 contains the delegation case: instruments that do their own work when told, the shuttle weaving by itself, and the question of what a master then is. The readings under this node carry the loci.
-
-The word chosen for this node is agency, the state of being that origin. Authorship names the same thing from the side of the act: an action is mine when I am its author, and the person who ratifies answers in this graph is called the author for that reason (Korsgaard, Self-Constitution, on when an action is one's own). "Philosophical mobility", the name this disposition carried in the legacy record, is retired: mobility was a metaphor for the capacity this answer names directly.
-
-The modal content is the point: capacity, not exercise. Being unable to recover is capture even if the delegatee never misbehaves; freedom is the capability to act, not the acting; exit and voice are the two recovery moves.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+I am.
+
+**AI support.** This is the graph's first principle in both senses of archē: the starting point from which every recorded disposition descends, and the origin of the actions taken under it. Aristotle identifies the two. A person is an archē of actions the way the first principles of mathematics are starting points of proofs, and Politics I.4 contains the delegation case: instruments that do their own work when told, the shuttle weaving by itself, and the question of what a master then is. The readings under this node carry the loci.
+
+The word chosen for this node is agency, the state of being that origin. Authorship names the same thing from the side of the act: an action is mine when I am its author, and the person who ratifies answers in this graph is called the author for that reason (Korsgaard, Self-Constitution, on when an action is one's own). "Philosophical mobility", the name this disposition carried in the legacy record, is retired: mobility was a metaphor for the capacity this answer names directly.
+
+The modal content is the point: capacity, not exercise. Being unable to recover is capture even if the delegatee never misbehaves; freedom is the capability to act, not the acting; exit and voice are the two recovery moves.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Who is the origin of what is done in my name?
+form: arche
+defines:
+  - archē
+  - agency
+  - capture
+instrument:
+  kind: assessment
+  ref: re-grasp on event, never on a calendar
+  note: the triggers are recorded under the instruments node
+---
+
+## Answer
+
+I am. Delegation and atrophy are expected and buy attention at the level where intent is set. What must not atrophy is the capacity to notice that I have been captured and to recover, because an origin that cannot recover has been replaced.
+```
+
 #### structural-test
 
 The review's strongest counter-argument is that the answer's 'capacity, not exercise' makes the archē unfalsifiable: no observable state of the world contradicts it, an author who had in fact been captured would read the same answer and find nothing failing, and the node's only instrument is a re-grasp on events that carries no date and records no judgment. Pettit is adopted as support, but Pettit's test is structural — does another hold arbitrary power over you — and the record records no structural test of its own. The alternative is an archē stated so that something could fail it, which is what the reading under this node already supplies.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Who is the origin of what is done in my name?
+form: arche
+defines:
+  - archē
+  - agency
+  - capture
+instrument:
+  kind: assessment
+  ref: re-grasp on event, never on a calendar
+  note: the triggers are recorded under the instruments node
+---
+
+## Answer
+
+The review's strongest counter-argument is that the answer's 'capacity, not exercise' makes the archē unfalsifiable: no observable state of the world contradicts it, an author who had in fact been captured would read the same answer and find nothing failing, and the node's only instrument is a re-grasp on events that carries no date and records no judgment. Pettit is adopted as support, but Pettit's test is structural — does another hold arbitrary power over you — and the record records no structural test of its own. The alternative is an archē stated so that something could fail it, which is what the reading under this node already supplies.
+```
+
 #### authors-own-arche
 
 Agency is at the periagogic stage after a kickback with no Disposition section and no author words anywhere, and its answer is written in the author's first person by the AI, while every node at the review or ruling stage descends from it. The finding proposes nothing be ruled before the author's own account of who is the origin of what is done in their name is in the record, the next sitting being a periagogic one on agency whose product is a Disposition section in the author's words, after which the two readings under it are re-read. (Raised on commons.systems/public/pettit-non-domination.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Who is the origin of what is done in my name?
+form: arche
+defines:
+  - archē
+  - agency
+  - capture
+instrument:
+  kind: assessment
+  ref: re-grasp on event, never on a calendar
+  note: the triggers are recorded under the instruments node
+---
+
+## Answer
+
+Agency is at the periagogic stage after a kickback with no Disposition section and no author words anywhere, and its answer is written in the author's first person by the AI, while every node at the review or ruling stage descends from it. The finding proposes nothing be ruled before the author's own account of who is the origin of what is done in their name is in the record, the next sitting being a periagogic one on agency whose product is a Disposition section in the author's words, after which the two readings under it are re-read. (Raised on commons.systems/public/pettit-non-domination.)
+```
 
 #### detachment-as-retention
 
@@ -75,10 +146,63 @@ The archē is read as detachment, asking how detached the person is. It was
 passed over because it measures the wrong thing: dependence is fine, and it is
 unrecoverable dependence that is capture.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Who is the origin of what is done in my name?
+form: arche
+defines:
+  - archē
+  - agency
+  - capture
+instrument:
+  kind: assessment
+  ref: re-grasp on event, never on a calendar
+  note: the triggers are recorded under the instruments node
+---
+
+## Answer
+
+The archē is read as detachment, asking how detached the person is. It was
+passed over because it measures the wrong thing: dependence is fine, and it is
+unrecoverable dependence that is capture.
+```
+
 #### forced-detachment
 
 The archē requires detachment from delegated instruments. It was passed over
 as dogma, and dogma needs power to maintain.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Who is the origin of what is done in my name?
+form: arche
+defines:
+  - archē
+  - agency
+  - capture
+instrument:
+  kind: assessment
+  ref: re-grasp on event, never on a calendar
+  note: the triggers are recorded under the instruments node
+---
+
+## Answer
+
+The archē requires detachment from delegated instruments. It was passed over
+as dogma, and dogma needs power to maintain.
+```
 
 ## Account
 
@@ -214,3 +338,7 @@ and the stage on the node, and the account carries what remains of it. The
 readings it named are still owed under this node: Sen on capability,
 Hirschman on exit and voice, Korsgaard on authorship. The provenance it stated
 is in the recording section above.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/public/agency stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `structural-test`, `authors-own-arche`, `detachment-as-retention`, `forced-detachment`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `b33788c35f071c2873d8b1bb6d951a3f0c89bbed` was already past the recommendation and is left as it stood.

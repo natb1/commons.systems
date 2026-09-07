@@ -9,7 +9,7 @@ review:
   against: "Option 3, keeping all five forms, deserves the line the node does not give it. The author asked three questions — whether target is synonymous with disposition, what rule adds, and whether assumption is a form at all — and the recommended option answers only the second. Assumption as a form is still doing work: knowledge-store and capture carry `form: assumption` today and both recommended texts keep it, while instruments' recommended text calls assumption a criterion kind, so the record after this ruling holds assumption as a form and as a criterion kind at once. The question the author actually asked is settled by neither surviving option."
   survey:
     date: 2026-09-05
-    of: 833fdba640c9a120173d2e210c8d5cc4bb8ee647
+    of: 188aec4e9a74cdb7ceef402f5e9330c2aad0a96a
 facts:
   - name: answer
     options:
@@ -45,6 +45,7 @@ facts:
 under:
   - commons.systems/disposition-graph/node
 ---
+
 ## Facts
 
 ### answer
@@ -53,30 +54,11 @@ under:
 
 Keep rule as a form beside disposition and migrate nothing, which is where the recommendation moved after the first review's strong counter-argument. The merge it replaced rested on a carrier no criterion has: nothing in the graph says whether an answer is to be achieved or maintained, almost every node is unguarded, and instruments' operational reading of a failure as work or as a variance would lose its class. Nothing migrates under it, which the second review verified is the strongest fact in its favour.
 
-#### all-five-forms
+**AI support.** The author asked what a rule adds that a target does not, and the answer is the reading of its failure: work in the one case, a variance that gates work in the other, which is how the frontier decides what to do next. The merge that would have dissolved the question rests on a carrier the record does not have, and almost every node is unguarded, so the distinction it removes would have nowhere to live. Keeping the names also costs nothing, where the merge would make twenty-two nodes non-conforming at once and change the validator's accepted set. The goal-oriented requirements tradition, which carries achieve and maintain on the goal's criterion rather than on its kind, is owed as a reading here.
 
-Keep all five forms, target, rule, assumption, archē and reading, of low boldness. The second review's counter-argument argues for it: the author asked three separate questions and the recommended option answers only the second, while assumption as a form is still doing work, two nodes carrying form assumption today and their drafts keeping it, so the recommended option leaves the record with assumption as a form and instruments' draft calling it a criterion kind.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-#### mint-assumption-question
-
-Take the recommended option and mint the author's unanswered question, whether assumption is a form at all, as its own question under this node rather than letting instruments' draft carry it. The session's reply offers this to the author beside the third option, and the contradiction finding recorded here proposes the same.
-
-#### authors-form-questions
-
-Three of the five author quotations carried on node are the ground of forms' whole sitting, which paraphrases them as the author asking whether target is synonymous with disposition, what rule adds, and whether assumption is a form at all. The last, whether this is correctly encoded as form assumption against form disposition with unvalidated instrumentation, is carried verbatim on capture, knowledge-store and purpose and on no node that answers it, while forms carries no Disposition section of its own and stands at the ruling stage recommending ratified, which authority makes invalid without the ruling in the record. The candidate is that forms carry these words as its ground, node keeping them as context on the part it answers. Raised on commons.systems/disposition-graph/node, commons.systems/disposition-graph/capture.
-
-#### assumption-is-instrumentation
-
-The author's words carried on instruments state that assumption is not a form but instrumentation, the condition under which an answer stays valid. Forms' option that carried this was withdrawn after its review, and its surviving recommendation, keeping rule beside disposition, leaves the question the author asked unanswered, as forms' own reply and the contradiction finding both say. The author's leaning is therefore a candidate answer with no option representing it. (Raised on commons.systems/disposition-graph/instruments.) Also raised on commons.systems/disposition-graph/purpose.
-
-#### four-forms-with-assumption-as-a-criterion
-
-Four forms, with target and rule merged as disposition and assumption made a
-criterion kind. It was passed over because the distinction it removes has no
-carrier in the record, and the migration touches twenty-two nodes and the
-validator.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -88,10 +70,122 @@ under:
 ## Answer
 
 One of five: a target, something that should become true; a rule, something that must stay true while working; an assumption, something about the world the answer relies on; an arche, a first principle held and never derived; and a reading, what a tradition says about the answer above it. Rule stays beside target rather than merging with it into a single disposition form, because the difference between them is what a failing check means: a target's failing check is work, and a rule's failing check is a variance that gates the work that broke it. That difference has no other carrier, since no criterion says whether its answer is to be achieved or maintained and an unguarded node has no criterion at all, so a merge would leave a failure with no class for the frontier to read. Nothing migrates under this answer: the five names stand as the validator already accepts them, and no node is rewritten. Whether assumption is a form at all is not settled here; it stands as its own question under this node.
+```
 
-## Rationale
+#### all-five-forms
 
-The author asked what a rule adds that a target does not, and the answer is the reading of its failure: work in the one case, a variance that gates work in the other, which is how the frontier decides what to do next. The merge that would have dissolved the question rests on a carrier the record does not have, and almost every node is unguarded, so the distinction it removes would have nowhere to live. Keeping the names also costs nothing, where the merge would make twenty-two nodes non-conforming at once and change the validator's accepted set. The goal-oriented requirements tradition, which carries achieve and maintain on the goal's criterion rather than on its kind, is owed as a reading here.
+Keep all five forms, target, rule, assumption, archē and reading, of low boldness. The second review's counter-argument argues for it: the author asked three separate questions and the recommended option answers only the second, while assumption as a form is still doing work, two nodes carrying form assumption today and their drafts keeping it, so the recommended option leaves the record with assumption as a form and instruments' draft calling it a criterion kind.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which forms may an answer take?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+---
+## Answer
+
+Keep all five forms, target, rule, assumption, archē and reading, of low boldness. The second review's counter-argument argues for it: the author asked three separate questions and the recommended option answers only the second, while assumption as a form is still doing work, two nodes carrying form assumption today and their drafts keeping it, so the recommended option leaves the record with assumption as a form and instruments' draft calling it a criterion kind.
+```
+
+#### mint-assumption-question
+
+Take the recommended option and mint the author's unanswered question, whether assumption is a form at all, as its own question under this node rather than letting instruments' draft carry it. The session's reply offers this to the author beside the third option, and the contradiction finding recorded here proposes the same.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which forms may an answer take?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+---
+## Answer
+
+Take the recommended option and mint the author's unanswered question, whether assumption is a form at all, as its own question under this node rather than letting instruments' draft carry it. The session's reply offers this to the author beside the third option, and the contradiction finding recorded here proposes the same.
+```
+
+#### authors-form-questions
+
+Three of the five author quotations carried on node are the ground of forms' whole sitting, which paraphrases them as the author asking whether target is synonymous with disposition, what rule adds, and whether assumption is a form at all. The last, whether this is correctly encoded as form assumption against form disposition with unvalidated instrumentation, is carried verbatim on capture, knowledge-store and purpose and on no node that answers it, while forms carries no Disposition section of its own and stands at the ruling stage recommending ratified, which authority makes invalid without the ruling in the record. The candidate is that forms carry these words as its ground, node keeping them as context on the part it answers. Raised on commons.systems/disposition-graph/node, commons.systems/disposition-graph/capture.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which forms may an answer take?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+---
+## Answer
+
+Three of the five author quotations carried on node are the ground of forms' whole sitting, which paraphrases them as the author asking whether target is synonymous with disposition, what rule adds, and whether assumption is a form at all. The last, whether this is correctly encoded as form assumption against form disposition with unvalidated instrumentation, is carried verbatim on capture, knowledge-store and purpose and on no node that answers it, while forms carries no Disposition section of its own and stands at the ruling stage recommending ratified, which authority makes invalid without the ruling in the record. The candidate is that forms carry these words as its ground, node keeping them as context on the part it answers. Raised on commons.systems/disposition-graph/node, commons.systems/disposition-graph/capture.
+```
+
+#### assumption-is-instrumentation
+
+The author's words carried on instruments state that assumption is not a form but instrumentation, the condition under which an answer stays valid. Forms' option that carried this was withdrawn after its review, and its surviving recommendation, keeping rule beside disposition, leaves the question the author asked unanswered, as forms' own reply and the contradiction finding both say. The author's leaning is therefore a candidate answer with no option representing it. (Raised on commons.systems/disposition-graph/instruments.) Also raised on commons.systems/disposition-graph/purpose.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which forms may an answer take?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+---
+## Answer
+
+The author's words carried on instruments state that assumption is not a form but instrumentation, the condition under which an answer stays valid. Forms' option that carried this was withdrawn after its review, and its surviving recommendation, keeping rule beside disposition, leaves the question the author asked unanswered, as forms' own reply and the contradiction finding both say. The author's leaning is therefore a candidate answer with no option representing it. (Raised on commons.systems/disposition-graph/instruments.) Also raised on commons.systems/disposition-graph/purpose.
+```
+
+#### four-forms-with-assumption-as-a-criterion
+
+Four forms, with target and rule merged as disposition and assumption made a
+criterion kind. It was passed over because the distinction it removes has no
+carrier in the record, and the migration touches twenty-two nodes and the
+validator.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which forms may an answer take?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+---
+## Answer
+
+Four forms, with target and rule merged as disposition and assumption made a
+criterion kind. It was passed over because the distinction it removes has no
+carrier in the record, and the migration touches twenty-two nodes and the
+validator.
 ```
 
 ## Account
@@ -204,3 +298,7 @@ Findings:
 - The question "Which forms may an answer take?" is being asked after the answer has been built: the graph already carries `form: reading` on fifty-nine nodes and `form: rule` on nodes including `commons.systems/disposition-graph/bootstrap-exit-conditions`, and `packages/disposition/validate.mjs` validates the field. By `commons.systems/disposition-graph/evaluation`'s greenfield lens the incumbent encoding is evidence of a past decision and never authority over this one, and the node's recommendation `rule-beside-disposition` is the incumbent set; the node should say why the incumbent is also right, or the recommendation rests on the fact that it exists.
 
 Strongest counter-argument (moderate): Three other nodes — `purpose`, `model` and `node` — carry unruled `cite-forms` options that would point at this node's answer, so the form vocabulary is being settled here and cited from three places that have not adopted the citation, which is the copy this record's own validations 9 and 12 exist to catch, forming before it is ratified. And the recommendation is the shape already implemented and validated, chosen without a stated reason why the alternative sets fail; on the record's own lens that is not yet a recommendation made.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/forms stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `rule-beside-disposition`. The record wrote no text of its own for `all-five-forms`, `mint-assumption-question`, `authors-form-questions`, `assumption-is-instrumentation`, `four-forms-with-assumption-as-a-criterion`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `52159a4998c58c1bfd23568bddb5537f47afe196` was already past the recommendation and is left as it stood. The survey's pin `833fdba640c9a120173d2e210c8d5cc4bb8ee647` is re-computed for the encoding as `188aec4e9a74cdb7ceef402f5e9330c2aad0a96a`; nothing it read changed.

@@ -5,7 +5,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-07
-  of: f701b46afcd3803f812e58620dd48e6e22049906
+  of: ea8b73d6fbbfec2c2de3f24ab6cb809ea0779a8c
   commit: cd53e4b67305b50128b2a2dd557228b6cde15aff
   against: "Socrates' midwifery rests on his own bareness: he claims to originate nothing and only tests what the interlocutor already carries. The AI drafts first, and a visible, refusable draft still anchors the author's response before they have spoken -- so what the maieutic label buys may be a guarantee about whose answer emerges that the mechanism does not actually provide, and 'propose-and-critique' may be the more honest name for the interview's real method."
   survey:
@@ -30,7 +30,6 @@ facts:
         reason: "absorbed by the answer, which now carries the paragraph this option proposed"
     recommends: standing
     boldness: high
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -55,15 +54,6 @@ bears:
     option: a-turn-that-reports-an-impediment
     relation: adopted
 ---
-## Answer
-
-Yes, for the conduct in which the answer lives in the author, unrecorded. Socrates claims to bring forth what the interlocutor already carries and to contribute nothing of his own (150c to d), and then to test whether the offspring is genuine or a wind-egg (151e); the interview under this conduct draws the author's disposition out with visible drafts that the author may refuse, and the test of the draft against the author's intention is the midwife's test.
-
-The alignment page's option `every-fact-every-option` departs from this conduct, and the departure is the record's: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which the midwife does not do; the record takes that for the legitimacy the full listing buys, every candidate the AI considered on the table with its status, so that what the author refuses is a draft they can see whole. The relation recorded on that option is diverged for that reason.
-
-## Rationale
-
-Adopted as the name and the ground of the maieutic conduct. The divergence to keep in view: the AI is not barren; it drafts, and the draft can lead. That is why the draft must be visible and refusable, and why the periagogic conduct runs first when the ground is already recorded.
 
 ## Facts
 
@@ -71,18 +61,151 @@ Adopted as the name and the ground of the maieutic conduct. The divergence to ke
 
 The reading keeps its standing relation, adopted with the divergence named, because the conduct is what the maieutic stage is named for and the divergence is in the drafter and not in the conduct; `relation-diverged` stays viable for the author.
 
+#### standing
+
+Yes, for the conduct in which the answer lives in the author, unrecorded.
+
+**AI support.** Adopted as the name and the ground of the maieutic conduct. The divergence to keep in view: the AI is not barren; it drafts, and the draft can lead. That is why the draft must be visible and refusable, and why the periagogic conduct runs first when the ground is already recorded.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does Plato's midwifery ground the maieutic conduct of the interview?
+form: reading
+under:
+  - commons.systems/disposition-graph/growth
+source: Plato, Theaetetus 148e to 151d (Socrates practises his mother's art of midwifery on souls, is himself barren of wisdom, and delivers what the other carries) and 151e, 157d, 160e to 161a (the offspring is tested, and a wind-egg is exposed and set aside).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+  - node: commons.systems/disposition-graph/alignment-page
+    fact: answer
+    option: every-fact-every-option
+    relation: diverged
+  - node: commons.systems/disposition-graph/turn-form
+    fact: answer
+    option: a-turn-that-reports-an-impediment
+    relation: adopted
+---
+
+## Answer
+
+Yes, for the conduct in which the answer lives in the author, unrecorded. Socrates claims to bring forth what the interlocutor already carries and to contribute nothing of his own (150c to d), and then to test whether the offspring is genuine or a wind-egg (151e); the interview under this conduct draws the author's disposition out with visible drafts that the author may refuse, and the test of the draft against the author's intention is the midwife's test.
+
+The alignment page's option `every-fact-every-option` departs from this conduct, and the departure is the record's: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which the midwife does not do; the record takes that for the legitimacy the full listing buys, every candidate the AI considered on the table with its status, so that what the author refuses is a draft they can see whole. The relation recorded on that option is diverged for that reason.
+```
+
 #### relation-diverged
 
 Both readings found the divergence named in the rationale, that the AI is not barren but drafts and the draft can lead, standing under a relation of adopted, which evaluation calls an unrecorded conflict with a cited tradition. The session's reply says in terms that the author may rule the relation diverged while the session keeps adopted with the divergence named. This alternative is the reading with relation diverged, the answer otherwise unchanged.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does Plato's midwifery ground the maieutic conduct of the interview?
+form: reading
+under:
+  - commons.systems/disposition-graph/growth
+source: Plato, Theaetetus 148e to 151d (Socrates practises his mother's art of midwifery on souls, is himself barren of wisdom, and delivers what the other carries) and 151e, 157d, 160e to 161a (the offspring is tested, and a wind-egg is exposed and set aside).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+  - node: commons.systems/disposition-graph/alignment-page
+    fact: answer
+    option: every-fact-every-option
+    relation: diverged
+  - node: commons.systems/disposition-graph/turn-form
+    fact: answer
+    option: a-turn-that-reports-an-impediment
+    relation: adopted
+---
+
+## Answer
+
+Both readings found the divergence named in the rationale, that the AI is not barren but drafts and the draft can lead, standing under a relation of adopted, which evaluation calls an unrecorded conflict with a cited tradition. The session's reply says in terms that the author may rule the relation diverged while the session keeps adopted with the divergence named. This alternative is the reading with relation diverged, the answer otherwise unchanged.
+```
 
 #### propose-and-critique
 
 The strong counter-argument, twice recorded: Socrates' midwifery rests on his being barren, and the AI is the opposite, drafting first while the author reacts, so the visible refusable draft is an anchor and what is delivered is the drafter's. On this reading the interview's actual method is a propose-and-critique loop, and calling it maieutic imports a guarantee about whose answer emerges that the mechanism does not provide. The alternative answers the question with a qualified no: the tradition names the test of the offspring and not the conduct, and the conduct is described in its own terms, which growth compounds by making the maieutic stage the one where the ruling is taken.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does Plato's midwifery ground the maieutic conduct of the interview?
+form: reading
+under:
+  - commons.systems/disposition-graph/growth
+source: Plato, Theaetetus 148e to 151d (Socrates practises his mother's art of midwifery on souls, is himself barren of wisdom, and delivers what the other carries) and 151e, 157d, 160e to 161a (the offspring is tested, and a wind-egg is exposed and set aside).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+  - node: commons.systems/disposition-graph/alignment-page
+    fact: answer
+    option: every-fact-every-option
+    relation: diverged
+  - node: commons.systems/disposition-graph/turn-form
+    fact: answer
+    option: a-turn-that-reports-an-impediment
+    relation: adopted
+---
+
+## Answer
+
+The strong counter-argument, twice recorded: Socrates' midwifery rests on his being barren, and the AI is the opposite, drafting first while the author reacts, so the visible refusable draft is an anchor and what is delivered is the drafter's. On this reading the interview's actual method is a propose-and-critique loop, and calling it maieutic imports a guarantee about whose answer emerges that the mechanism does not provide. The alternative answers the question with a qualified no: the tradition names the test of the offspring and not the conduct, and the conduct is described in its own terms, which growth compounds by making the maieutic stage the one where the ruling is taken.
+```
+
 #### answer-argues-the-page-divergence
 
 Everything `standing` says, with a paragraph saying why the alignment page's option `every-fact-every-option` departs from the tradition: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which is the one thing the midwife may not do, and the record accepts it for the legitimacy the listing buys. It is on the table because this node's frontmatter already carries `diverged` on that option and `readings` requires "diverged, where the option departs from it and the reading's own answer says why", so the relation stands today on an argument written on the node it bears on and nowhere in the reading itself. Adopted into the answer on 2026-09-07: the paragraph is written. Passed over on 2026-09-07, absorbed by the answer as amended after the frontier survey, which carries the paragraph whole.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does Plato's midwifery ground the maieutic conduct of the interview?
+form: reading
+under:
+  - commons.systems/disposition-graph/growth
+source: Plato, Theaetetus 148e to 151d (Socrates practises his mother's art of midwifery on souls, is himself barren of wisdom, and delivers what the other carries) and 151e, 157d, 160e to 161a (the offspring is tested, and a wind-egg is exposed and set aside).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+  - node: commons.systems/disposition-graph/alignment-page
+    fact: answer
+    option: every-fact-every-option
+    relation: diverged
+  - node: commons.systems/disposition-graph/turn-form
+    fact: answer
+    option: a-turn-that-reports-an-impediment
+    relation: adopted
+---
+
+## Answer
+
+Everything `standing` says, with a paragraph saying why the alignment page's option `every-fact-every-option` departs from the tradition: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which is the one thing the midwife may not do, and the record accepts it for the legitimacy the listing buys. It is on the table because this node's frontmatter already carries `diverged` on that option and `readings` requires "diverged, where the option departs from it and the reading's own answer says why", so the relation stands today on an argument written on the node it bears on and nowhere in the reading itself. Adopted into the answer on 2026-09-07: the paragraph is written. Passed over on 2026-09-07, absorbed by the answer as amended after the frontier survey, which carries the paragraph whole.
+```
 
 ## Account
 
@@ -203,3 +326,7 @@ On the viability of the options: The answer fact's three drafted alternatives (`
 Strongest counter-argument (moderate): Socrates' midwifery rests on his own bareness: he claims to originate nothing and only tests what the interlocutor already carries. The AI drafts first, and a visible, refusable draft still anchors the author's response before they have spoken -- so what the maieutic label buys may be a guarantee about whose answer emerges that the mechanism does not actually provide, and 'propose-and-critique' may be the more honest name for the interview's real method.
 
 The session's reply: Validated on the main thread: the account's claim was false and is corrected; the duplicate option is marked passed over as absorbed; the bears entry on turn-form's impediment option is unargued in the answer and is recorded in the account as owed at the answer's next amendment, since adding it now would move the pin the two readings judged.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/plato-maieutics stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `relation-diverged`, `propose-and-critique`, `answer-argues-the-page-divergence`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `f701b46afcd3803f812e58620dd48e6e22049906` is re-computed for the encoding as `ea8b73d6fbbfec2c2de3f24ab6cb809ea0779a8c`; nothing it read changed. The survey's pin `d1547e2467c59de6618c9afedd3fd1d5cdcc7588` was already past the recommendation and is left as it stood.

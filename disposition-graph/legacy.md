@@ -5,7 +5,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 6f0617ffb66143e3b524d06ba416e9c27bda7d43
+  of: b625d6df3a2e2e1b1ca71d9f705c47e5a07e5074
   against: "The node makes 'read it when a question needs it' the only path in and carries nothing by default, while nothing derives which legacy knowledge a question needs: work-loop assigns the drain to a second direction the frontier does not derive at all, and materialization's shim prunes at the swap whatever no disposition supports. The session's answer — that the swap is gated on the coverage ruling — is verified and does prevent loss by omission. What survives is milder and real: the drain sits on an eleven-clause exit condition that nothing reads, so it will be done at exit under time pressure or not at all."
 facts:
   - name: answer
@@ -13,6 +13,8 @@ facts:
       - name: standing
         source: ai
         ref: "2026-09-02"
+        supports:
+          - words/2026-09-04/20
       - name: add-a-disposition-section
         source: review
         ref: "2026-09-03"
@@ -27,7 +29,6 @@ facts:
         ref: "2026-09-05"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -41,45 +42,137 @@ under:
 defines:
   - legacy record
 ---
-## Disposition
-
-The author, 2026-09-04, during the `author-questions` sitting, stopping a sweep
-whose brief had sent it to the legacy tree for evidence:
-
-> stop the sweep. this is not valid
-
-> Ignore the legacy tree on main entirely. Never load the legacy tree unless explicitly instructed. Evaluate on content. If author quote exists that justifies disposition then that's an easy one. Otherwise apply your other content checks.
-
-
-## Answer
-
-Evidence. The tree under `intentions/` on the main branch, its kinds and its vocabulary (virtue, strategy, tactic, phase, clarification, condition), the skills and rules that projected it, and the incumbent README are records of past decisions and instrument facts. A legacy node is read when a question in this graph needs its knowledge and is then cited as evidence; nothing carries over by default, and that kind vocabulary does not enter this graph. Doctrine the new record overrules is not amended in place: it appears as a rejected alternative in the new node's rationale.
-
-## Rationale
-
-The author's ruling of 2026-09-02 that this session was over-bound by legacy disposition and that incumbent code is context, never doctrine. The legacy record neither matched its own specification nor served long-horizon dispatch, so starting fresh regresses nothing; only the knowledge needs re-encoding, and the work loop's second direction is how it gets pulled in.
-
-Evidence for the claim that the legacy record neither matched its own specification nor served long-horizon dispatch: the two transient-disposition surveys on the implementation ref, `bootstrap/transient-disposition-graph-survey.md` and `bootstrap/transient-disposition-transcript-survey.md`, which the transience node cites. The rejected-alternative mechanism is unexercised until a legacy doctrine is overruled.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+Evidence.
+
+**AI support.** The author's ruling of 2026-09-02 that this session was over-bound by legacy disposition and that incumbent code is context, never doctrine. The legacy record neither matched its own specification nor served long-horizon dispatch, so starting fresh regresses nothing; only the knowledge needs re-encoding, and the work loop's second direction is how it gets pulled in.
+
+Evidence for the claim that the legacy record neither matched its own specification nor served long-horizon dispatch: the two transient-disposition surveys on the implementation ref, `bootstrap/transient-disposition-graph-survey.md` and `bootstrap/transient-disposition-transcript-survey.md`, which the transience node cites. The rejected-alternative mechanism is unexercised until a legacy doctrine is overruled.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is the legacy record to this graph?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - legacy record
+---
+
+## Answer
+
+Evidence. The tree under `intentions/` on the main branch, its kinds and its vocabulary (virtue, strategy, tactic, phase, clarification, condition), the skills and rules that projected it, and the incumbent README are records of past decisions and instrument facts. A legacy node is read when a question in this graph needs its knowledge and is then cited as evidence; nothing carries over by default, and that kind vocabulary does not enter this graph. Doctrine the new record overrules is not amended in place: it appears as a rejected alternative in the new node's rationale.
+```
+
 #### add-a-disposition-section
 
 Both reviews found that the node has no Disposition section and that its ground, the author's ruling of 2026-09-02 that the session was over-bound by legacy disposition and that incumbent code is context and never doctrine, is paraphrased rather than quoted. Authority makes a ratified stamp whose ruling is not in the record invalid, so this alternative adds the section with the ruling and its date before any stamp is written.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is the legacy record to this graph?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - legacy record
+---
+
+## Answer
+
+Both reviews found that the node has no Disposition section and that its ground, the author's ruling of 2026-09-02 that the session was over-bound by legacy disposition and that incumbent code is context and never doctrine, is paraphrased rather than quoted. Authority makes a ratified stamp whose ruling is not in the record invalid, so this alternative adds the section with the ruling and its date before any stamp is written.
+```
 
 #### deferred-rather-than-ratified
 
 The placement finding's other branch, for each of the twenty-two nodes with no Disposition section: if the ruling is not brought into the node, the recommendation changes from ratified to deferred, since a ratified stamp the node cannot support is worse than an honest deferral.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is the legacy record to this graph?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - legacy record
+---
+
+## Answer
+
+The placement finding's other branch, for each of the twenty-two nodes with no Disposition section: if the ruling is not brought into the node, the recommendation changes from ratified to deferred, since a ratified stamp the node cannot support is worse than an honest deferral.
+```
+
 #### drain-as-an-exit-criterion
 
 The reviewers' surviving counter-argument is that the drain of the legacy record has no owner and no rank, so it will be done at exit under time pressure or not at all: reading a legacy node when a question needs it is the only path in, and nothing derives which knowledge a question needs. The session replied that the author's words after compaction make the drain an exit criterion, on the exit list rather than on a rank, with the exit as its owner. That answer is in the reply and not in the node's answer, so it stands as a candidate edit.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is the legacy record to this graph?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - legacy record
+---
+
+## Answer
+
+The reviewers' surviving counter-argument is that the drain of the legacy record has no owner and no rank, so it will be done at exit under time pressure or not at all: reading a legacy node when a question needs it is the only path in, and nothing derives which knowledge a question needs. The session replied that the author's words after compaction make the drain an exit criterion, on the exit list rather than on a rank, with the exit as its owner. That answer is in the reply and not in the node's answer, so it stands as a candidate edit.
+```
+
 #### rejected-alternative-is-an-option
 
 The standing answer's sentence "Doctrine the new record overrules is not amended in place: it appears as a rejected alternative in the new node's rationale." places a rejected alternative in the rationale, and under the rejected node's recommended text that is the wrong place: a rejected alternative is an option on the fact it answers, with its status and the reason it was not taken, and the rationale argues and may name it but does not hold it. Raised by the rejected node from its reading of 2026-09-05; the amendment is the one clause, and it acts on nothing until the author rules.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What is the legacy record to this graph?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - legacy record
+---
+
+## Answer
+
+The standing answer's sentence "Doctrine the new record overrules is not amended in place: it appears as a rejected alternative in the new node's rationale." places a rejected alternative in the rationale, and under the rejected node's recommended text that is the wrong place: a rejected alternative is an option on the fact it answers, with its status and the reason it was not taken, and the rationale argues and may name it but does not hold it. Raised by the rejected node from its reading of 2026-09-05; the amendment is the one clause, and it acts on nothing until the author rules.
+```
 
 ## Account
 
@@ -228,3 +321,7 @@ Two vocabulary questions are each pending as an unruled option on four separate 
 Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/node, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/instruments.
 
 Proposed: Strike the eight options and replace each with a citation. `commons.systems/disposition-graph/rejected` is the survivor for what a rejected alternative is, and `commons.systems/disposition-graph/authority` is the survivor for what a proposal is; each of the six bearer nodes cites the survivor's sentence where it currently carries the option. Where a bearer node believes its option means something the survivor's answer does not cover, that difference is the option, stated as the difference, and everything the survivor already says comes out. If the author would rather rule the two words once explicitly, mint the settling option on the survivor in the shape `instruments`' `one-ruling-for-the-word` takes, without a count in its prose.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/legacy stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/20, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `add-a-disposition-section`, `deferred-rather-than-ratified`, `drain-as-an-exit-criterion`, `rejected-alternative-is-an-option`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `6f0617ffb66143e3b524d06ba416e9c27bda7d43` is re-computed for the encoding as `b625d6df3a2e2e1b1ca71d9f705c47e5a07e5074`; nothing it read changed.

@@ -9,13 +9,15 @@ review:
   against: "The node fixes the shape of the record before the record knows what it contains: its own answer says 'What it leaves out is open', coverage names four recorded functions outside the purpose as worded, and the order field is now enforced by the validator, so a seventh section would reset every boost the list names. The session's answer — that a seventh section is a new word from the author, recorded then — is honest, but the cost is asymmetric: the order is data the validator refuses to contradict, so the author's next new section is a landing that fails until scope is re-answered."
   survey:
     date: 2026-09-05
-    of: df46ba10cc4c4a5b59795bd633a6fffe2e2ff135
+    of: b1b472547e53b49d994c302c001ec408a2745c4d
 facts:
   - name: answer
     options:
       - name: standing
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-03/75
       - name: derived-boosts
         source: ai
         ref: "2026-09-03"
@@ -40,7 +42,6 @@ facts:
         reason: "that is the drift this disposition guards against"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -65,12 +66,45 @@ defines:
 depends:
   - commons.systems/disposition-graph/self-documentation
 ---
-## Disposition
 
-The author, 2026-09-03:
-> new disposition (alignment shim): I want a new disposition with the rationale for high level ranking. As onboarding documentation flow/ranking this sits just after the purpose and serves as the scope section following the purpose and also serves as a table of contents onboarding documentation. It records this disposition for high level ranking: purpose -> [scope, self documentation (via the graph browser)] (equal) -> alignment -> harness context management -> reconciliation -> rsi
->
-> High level rank (but not all rank) should be materialized from this node to avoid drift. Recommend how to do that using existing primitives (materialized linting? or somthing else?).
+## Facts
+
+### answer
+
+#### standing
+
+The purpose and six sections after it, two of them equal and listed together, in one order that is at once the reading order of the record, the order in which its parts are reconciled, and the order of the author's attention.
+
+**AI support.** The author's ruling of 2026-09-03, quoted above: a disposition that carries the rationale for high-level ranking, sits just after purpose, serves as the scope section and as the table of contents of the onboarding walk, records the order purpose, then scope and self-documentation through the browser as equals, then alignment, harness context management, reconciliation, and rsi, and materializes high-level rank so that it cannot drift. The order is the author's; the boost values, the node texts, and the choice of mechanism below are the AI's, deferred.
+
+Why this order. Each section is what the next depends on, for a reader and for the work. Purpose gives the criterion everything else is judged by. Scope and the browser give what there is and how it is read; nothing can be found or reviewed before them. Alignment is the only way the record grows, so it precedes every harness that acts on the record. Harness context management is how a session sees the record, and nothing a session derives can be trusted before what it loads is settled. Reconciliation derives the implementation from all of the above. The loop's improvement of itself presupposes the loop. A dependency order, a reading order, and a priority order therefore coincide, which is what the attention node says rank is.
+
+The boosts of 2026-09-03 realize the order: this node 9 under purpose, above model's 8, so that it is the first thing after purpose; projection 5, growth 4, the work loop 3, and rsi 1 under model; session-context 6 under projection, raised from 2, because at 2 its rank fell below the work loop's, harness context management ranking after reconciliation against the author's order of the same day. That is the drift this disposition guards against, present in the record within a day of the boosts being set by hand. The equality of this node and projection cannot be exact, since projection's rank is a share of model's and this node's a share of purpose's; it is realized as each being outranked by nothing but its own ancestors. Whether self-documentation is a node of its own under purpose, equal to this one by construction, is the self-documentation node's open question.
+
+How high-level rank is materialized from this node, the recommendation. The order is recorded on this node as data, the field `order`, an ordered list of steps, each step one node or several that are equal, and the validator refuses a graph whose derived ranks do not realize it: every member of a step outranks every member of every later step, and the members of the first step are outranked by nothing under this node's parent but their own ancestors and descendants. The boosts remain the one mechanism of rank and the frontier and browser keep showing them; the order is recorded once; and since every landing on the graph is validated first, a boost that contradicts the order cannot land, which is what avoiding drift requires. This is the way the record already keeps its other invariants that span nodes, acyclicity and resolved parents. This node defines the field, and the validator has held the ranks to it since 2026-09-03; the hand-set boosts declared as a shim that day were liquidated the same day.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does this repository cover, and in what order?
+form: rule
+boost: 9
+order:
+  - [commons.systems/disposition-graph/scope, commons.systems/disposition-graph/projection]
+  - commons.systems/disposition-graph/growth
+  - commons.systems/disposition-graph/session-context
+  - commons.systems/disposition-graph/work-loop
+  - commons.systems/disposition-graph/rsi
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - table of contents
+  - section
+  - order
+---
 
 ## Answer
 
@@ -86,36 +120,143 @@ The purpose and six sections after it, two of them equal and listed together, in
 What the repository covers is what these sections cover: the record, its projections, the dialogue that writes it, the context a session loads, the loop that derives the implementation, and the loop's improvement of itself; the two hypotheses under purpose are within scope as hypotheses. What it leaves out is open: the coverage node under purpose names four recorded functions outside the purpose as worded, for the author to bring in or exclude.
 
 High-level rank is materialized from this node. The order above is recorded once, here, as the field `order`; the rank of every node it names is held to it, and a boost that contradicts it is invalid. Every other rank stays with each node's own boost, as the attention node describes.
-
-## Rationale
-
-The author's ruling of 2026-09-03, quoted above: a disposition that carries the rationale for high-level ranking, sits just after purpose, serves as the scope section and as the table of contents of the onboarding walk, records the order purpose, then scope and self-documentation through the browser as equals, then alignment, harness context management, reconciliation, and rsi, and materializes high-level rank so that it cannot drift. The order is the author's; the boost values, the node texts, and the choice of mechanism below are the AI's, deferred.
-
-Why this order. Each section is what the next depends on, for a reader and for the work. Purpose gives the criterion everything else is judged by. Scope and the browser give what there is and how it is read; nothing can be found or reviewed before them. Alignment is the only way the record grows, so it precedes every harness that acts on the record. Harness context management is how a session sees the record, and nothing a session derives can be trusted before what it loads is settled. Reconciliation derives the implementation from all of the above. The loop's improvement of itself presupposes the loop. A dependency order, a reading order, and a priority order therefore coincide, which is what the attention node says rank is.
-
-The boosts of 2026-09-03 realize the order: this node 9 under purpose, above model's 8, so that it is the first thing after purpose; projection 5, growth 4, the work loop 3, and rsi 1 under model; session-context 6 under projection, raised from 2, because at 2 its rank fell below the work loop's, harness context management ranking after reconciliation against the author's order of the same day. That is the drift this disposition guards against, present in the record within a day of the boosts being set by hand. The equality of this node and projection cannot be exact, since projection's rank is a share of model's and this node's a share of purpose's; it is realized as each being outranked by nothing but its own ancestors. Whether self-documentation is a node of its own under purpose, equal to this one by construction, is the self-documentation node's open question.
-
-How high-level rank is materialized from this node, the recommendation. The order is recorded on this node as data, the field `order`, an ordered list of steps, each step one node or several that are equal, and the validator refuses a graph whose derived ranks do not realize it: every member of a step outranks every member of every later step, and the members of the first step are outranked by nothing under this node's parent but their own ancestors and descendants. The boosts remain the one mechanism of rank and the frontier and browser keep showing them; the order is recorded once; and since every landing on the graph is validated first, a boost that contradicts the order cannot land, which is what avoiding drift requires. This is the way the record already keeps its other invariants that span nodes, acyclicity and resolved parents. This node defines the field, and the validator has held the ranks to it since 2026-09-03; the hand-set boosts declared as a shim that day were liquidated the same day.
-
-## Facts
-
-### answer
+```
 
 #### derived-boosts
 
 Instead of validating the boosts against the order, derive them from it: a solver reads the order field and writes the boosts of the named nodes, so the order is the only hand-written record of high-level rank. The rationale considered and did not recommend it, because the solver must lift ancestors to lift a descendant, cannot make ranks equal at different depths, and hides the boosts the projections display; the Proposal nonetheless puts the mechanism to the author against the three alternatives it names.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does this repository cover, and in what order?
+form: rule
+boost: 9
+order:
+  - [commons.systems/disposition-graph/scope, commons.systems/disposition-graph/projection]
+  - commons.systems/disposition-graph/growth
+  - commons.systems/disposition-graph/session-context
+  - commons.systems/disposition-graph/work-loop
+  - commons.systems/disposition-graph/rsi
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - table of contents
+  - section
+  - order
+---
+
+## Answer
+
+Instead of validating the boosts against the order, derive them from it: a solver reads the order field and writes the boosts of the named nodes, so the order is the only hand-written record of high-level rank. The rationale considered and did not recommend it, because the solver must lift ancestors to lift a descendant, cannot make ranks equal at different depths, and hides the boosts the projections display; the Proposal nonetheless puts the mechanism to the author against the three alternatives it names.
+```
+
 #### check-instrument
 
 Instead of a validator rule, hang a check instrument on this node that measures the ranks against the order and reports a failure as work for the reconciliation loop. The rationale prefers the validator on the ground that an order the ranks contradict is an inconsistency of the record that must not land at all, rather than a gap between record and implementation; the author may prefer the instrument, which lets a contradicting boost land and be reconciled.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does this repository cover, and in what order?
+form: rule
+boost: 9
+order:
+  - [commons.systems/disposition-graph/scope, commons.systems/disposition-graph/projection]
+  - commons.systems/disposition-graph/growth
+  - commons.systems/disposition-graph/session-context
+  - commons.systems/disposition-graph/work-loop
+  - commons.systems/disposition-graph/rsi
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - table of contents
+  - section
+  - order
+---
+
+## Answer
+
+Instead of a validator rule, hang a check instrument on this node that measures the ranks against the order and reports a failure as work for the reconciliation loop. The rationale prefers the validator on the ground that an order the ranks contradict is an inconsistency of the record that must not land at all, rather than a gap between record and implementation; the author may prefer the instrument, which lets a contradicting boost land and be reconciled.
+```
 
 #### say-instrument-not-criterion
 
 The vocabulary finding makes instruments the survivor of criterion and holds that it must be ruled before the nodes that use the word. Until then scope's answer says instrument, the term instruments actually defines, or discloses that the term arrives with instruments. (Raised on commons.systems/disposition-graph/instruments.)
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does this repository cover, and in what order?
+form: rule
+boost: 9
+order:
+  - [commons.systems/disposition-graph/scope, commons.systems/disposition-graph/projection]
+  - commons.systems/disposition-graph/growth
+  - commons.systems/disposition-graph/session-context
+  - commons.systems/disposition-graph/work-loop
+  - commons.systems/disposition-graph/rsi
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - table of contents
+  - section
+  - order
+---
+
+## Answer
+
+The vocabulary finding makes instruments the survivor of criterion and holds that it must be ruled before the nodes that use the word. Until then scope's answer says instrument, the term instruments actually defines, or discloses that the term arrives with instruments. (Raised on commons.systems/disposition-graph/instruments.)
+```
+
 #### order-names-self-documentation
 
 Scope's order field substitutes the projection node for the author's own item, self documentation via the graph browser, and its validator rule materializes that substitution. If self-documentation becomes a node of its own the first step of the order must name it instead, so the alternative is that scope's answer say the mapping stands only until self-documentation is ruled, and that the substitution is the one item the AI changed in the author's list. (Raised on commons.systems/disposition-graph/self-documentation.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does this repository cover, and in what order?
+form: rule
+boost: 9
+order:
+  - [commons.systems/disposition-graph/scope, commons.systems/disposition-graph/projection]
+  - commons.systems/disposition-graph/growth
+  - commons.systems/disposition-graph/session-context
+  - commons.systems/disposition-graph/work-loop
+  - commons.systems/disposition-graph/rsi
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - table of contents
+  - section
+  - order
+---
+
+## Answer
+
+Scope's order field substitutes the projection node for the author's own item, self documentation via the graph browser, and its validator rule materializes that substitution. If self-documentation becomes a node of its own the first step of the order must name it instead, so the alternative is that scope's answer say the mapping stands only until self-documentation is ruled, and that the substitution is the one item the AI changed in the author's list. (Raised on commons.systems/disposition-graph/self-documentation.)
+```
 
 #### order-as-sibling-order
 
@@ -123,12 +264,77 @@ The ordered nodes move under this one so that the recorded order becomes
 sibling order. It was passed over because it would make the tree carry
 priority, which is the conflation the attention node rejects.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does this repository cover, and in what order?
+form: rule
+boost: 9
+order:
+  - [commons.systems/disposition-graph/scope, commons.systems/disposition-graph/projection]
+  - commons.systems/disposition-graph/growth
+  - commons.systems/disposition-graph/session-context
+  - commons.systems/disposition-graph/work-loop
+  - commons.systems/disposition-graph/rsi
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - table of contents
+  - section
+  - order
+---
+
+## Answer
+
+The ordered nodes move under this one so that the recorded order becomes
+sibling order. It was passed over because it would make the tree carry
+priority, which is the conflation the attention node rejects.
+```
+
 #### boosts-as-the-only-record
 
 The hand-set boosts stay the only record of the high-level order, with nothing
 holding them to it. It was passed over because that is the drift this
 disposition guards against, found in the record within a day of the boosts
 being set.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does this repository cover, and in what order?
+form: rule
+boost: 9
+order:
+  - [commons.systems/disposition-graph/scope, commons.systems/disposition-graph/projection]
+  - commons.systems/disposition-graph/growth
+  - commons.systems/disposition-graph/session-context
+  - commons.systems/disposition-graph/work-loop
+  - commons.systems/disposition-graph/rsi
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - table of contents
+  - section
+  - order
+---
+
+## Answer
+
+The hand-set boosts stay the only record of the high-level order, with nothing
+holding them to it. It was passed over because that is the drift this
+disposition guards against, found in the record within a day of the boosts
+being set.
+```
 
 ## Account
 
@@ -249,3 +455,7 @@ Findings:
 
 
 Strongest counter-argument (moderate): The answer's binding clause is "the rank of every node named here is held to this list", and the mechanism that holds it is boost, which `attention` says is "an allocation only the author may ratify" and of which it says "every boost in the record today is the AI's and unratified". Ratifying the table of contents therefore ratifies an order enforced by numbers the record says are not the author's, and the numbers are what a session actually reads. Either the list is the authority and rank is derived from it, or rank is the authority and the list is a projection; the answer asserts both.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/scope stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-03/75, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `derived-boosts`, `check-instrument`, `say-instrument-not-criterion`, `order-names-self-documentation`, `order-as-sibling-order`, `boosts-as-the-only-record`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `33d06c42cce07aa1778d00c2c928ebb9fd4479e0` was already past the recommendation and is left as it stood. The survey's pin `df46ba10cc4c4a5b59795bd633a6fffe2e2ff135` is re-computed for the encoding as `b1b472547e53b49d994c302c001ec408a2745c4d`; nothing it read changed.

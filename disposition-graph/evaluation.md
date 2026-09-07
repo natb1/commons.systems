@@ -28,9 +28,10 @@ facts:
       - name: overrule-by-class
         source: author
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-03/51
     recommends: overrule-by-class
     boldness: moderate
-    stands: overrule-by-class
   - name: authority
     options:
       - name: ratified
@@ -48,23 +49,6 @@ defines:
 depends:
   - commons.systems/disposition-graph/viable-options
 ---
-## Disposition
-
-The author, 2026-09-03, during the sitting on the alignment page, directing that this node's definition be made operational:
-
-> disposition: always make recommendations from this greenfield perspective - record this definition of greenfield you provided.
-
-The definition the author refers to is the one the sitting stated when briefing the greenfield validation of `commons.systems/disposition-graph/dialogue`'s recommendation the same day, and it is written into the answer above.
-
-## Answer
-
-Against the full solution frontier. Nothing is sacred: no doctrine is implied by what exists, least of all by the incumbent implementation, which is evidence of past decisions and never authority over future ones; that is what greenfield means here. Greenfield is the lens every recommendation is made through, not an occasional one, and it is operational rather than a sentiment. A class of argument is struck from the choosing: what a change would cost to migrate, how many files or nodes it touches, what reviews or assessments it would spend, what tooling it would rework, and that the incumbent already does it the other way. None of those bear on whether a design is right, and a recommendation resting on one of them has not been made. The positive test replaces them: judge the design as if the record were being written from scratch, with nothing in it to preserve. The error to hunt is an incumbent fact doing the work of a design constraint, which is the failure this lens exists to catch; a recommendation found resting on one is named as such and redrawn. Cost is not thereby unsayable, and a recommendation still states what its design will cost: it is a consequence of a design chosen on its merits and never a reason for choosing it. A ratified answer is not unchangeable; changing it takes an interview with the author, and the alignment skill is that interview. Delegated and deferred answers need no interview: the AI may move their recommendation on its best judgment, and what a move does is read from the node's class. On a ratified node the confirmed choice keeps its full authority and the node returns to the author for re-confirmation, at the review stage where only the recommendation moved. On a deferred node the recommendation acts, the reconciliation frontier changes with it, and the node is on the alignment frontier already. On a delegated node the recommendation moves freely within the delegation's scope and the node stays off the alignment frontier, since the author asked not to be asked again; a move that would leave the scope is not the AI's to recommend, is recorded as an option, and returns the node to the author with its class intact. On an unanswered node nothing acts and the move is dialogue. A recommendation moved at the ruling stage sends the node back to the review stage, and the frontier and the alignment page show it as changed since its review. Every evaluation runs twice, once as fresh best judgment and once with reference to tradition, including traditions shelved by pre-agent constraints, and every tradition surfaced is recorded as a reading with the resolution it informed. Work under an answer that cites a tradition is grounded in the tradition itself within its recorded support scope; a recorded divergence is the author's decision, which the tradition cannot overrule, and an unrecorded conflict is a frontier item deferred to neither side. Adversarial review of one's own recorded output is part of producing it, and a disposition recommended to the author is reviewed once more, in clean context, before the author rules on it, as the recording node describes. A shim declared on the record is applied by default; a prompt is required only to bypass it.
-
-## Rationale
-
-The author's rulings in the legacy bootstrap of 2026-08-31 to 2026-09-02, given again to this bootstrap as the standing rule for the AI's evaluations: reference the incumbent for principles, never as authority. The legacy rule projection on `main` and the ratified clarifications behind it are the evidence. The overrule rules are the authority node's attenuation seen from the evaluator's side. Traditions to record as readings: the Pareto frontier of multi-objective choice, adopted for the sense of "frontier"; Chesterton's fence (The Thing, 1929), diverged from in part, since here the record, not the fence, carries the reason, and a fence without a recorded reason is a prune-by-default proposal. The clean-context review is the author's disposition of 2026-09-03, recorded on the recording node under growth.
-
-Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Delegated means the node is removed from the alignment frontier and deferred means it remains"; "Subject to attenuation/breakout controls - if the change of recommendation is on delegated or deffered node then it changes the shape of the reconciliation frontier." A rule that returned a delegated node to the author on every change delegated nothing; the bound that rule wanted is the delegation's scope, which is what `bounded-overrule` asked for, and a move that would leave it does return the node. The shim sentence at the end now holds without exception, since the explicit grant for an unanswered node is a standing rule of the authority node and no longer a shim, which is what `two-kinds-of-shim` was asking about. The answer as it stood is kept as the option `overrule-to-deferred`, and the review of this text is owed.
 
 ## Facts
 
@@ -74,25 +58,165 @@ Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on t
 
 The answer as it stood from 2026-09-02: the greenfield lens, the struck class of argument, the positive test, and an overrule rule stated once for every class, a delegated answer overruled becoming deferred and a deferred answer staying deferred. Viable if the author prefers every overrule to return the node to them.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a design or a proposal evaluated?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+tier: global
+defines:
+  - greenfield
+  - adversarial review
+---
+
+## Answer
+
+The answer as it stood from 2026-09-02: the greenfield lens, the struck class of argument, the positive test, and an overrule rule stated once for every class, a delegated answer overruled becoming deferred and a deferred answer staying deferred. Viable if the author prefers every overrule to return the node to them.
+```
+
 #### deferred-until-ruling-quoted
 
 Evaluation carries no Disposition section and quotes no ruling of any date, resting its whole answer on the author's rulings in the legacy bootstrap, which legacy and this node itself make evidence and never authority. Authority's rule is that a ratified stamp whose ruling is not in the record is invalid. The alternative is that the recommendation change from ratified to deferred until a dated ruling is quoted in the node, since a ratified stamp the record cannot support is worse than an honest deferral.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a design or a proposal evaluated?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+tier: global
+defines:
+  - greenfield
+  - adversarial review
+---
+
+## Answer
+
+Evaluation carries no Disposition section and quotes no ruling of any date, resting its whole answer on the author's rulings in the legacy bootstrap, which legacy and this node itself make evidence and never authority. Authority's rule is that a ratified stamp whose ruling is not in the record is invalid. The alternative is that the recommendation change from ratified to deferred until a dated ruling is quoted in the node, since a ratified stamp the record cannot support is worse than an honest deferral.
+```
 
 #### two-kinds-of-shim
 
 Evaluation holds that a shim declared on the record is applied by default and a prompt is required only to bypass it, while the bootstrap-authority shim declared on authority is a permission that does nothing until the author invokes it, so applying it by default would be the capture it guards against. The alternative amends this answer to cover two kinds of shim, a stopgap artifact standing in for a projection and a standing permission exercised on demand; the other branch is that bootstrap authority is not a shim at all but a second class of authority, which authority would define. The tension was put to this node from authority's sitting, whose account says so explicitly, and is undecided. Raised on commons.systems/disposition-graph/authority.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a design or a proposal evaluated?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+tier: global
+defines:
+  - greenfield
+  - adversarial review
+---
+
+## Answer
+
+Evaluation holds that a shim declared on the record is applied by default and a prompt is required only to bypass it, while the bootstrap-authority shim declared on authority is a permission that does nothing until the author invokes it, so applying it by default would be the capture it guards against. The alternative amends this answer to cover two kinds of shim, a stopgap artifact standing in for a projection and a standing permission exercised on demand; the other branch is that bootstrap authority is not a shim at all but a second class of authority, which authority would define. The tension was put to this node from authority's sitting, whose account says so explicitly, and is undecided. Raised on commons.systems/disposition-graph/authority.
+```
+
 #### traditions-to-readings
 
 This node's own rule is that every tradition surfaced is recorded as a reading with the resolution it informed, and its rationale carries a prose tradition list, the Pareto frontier and Chesterton's fence, which readings' recommended text forbids. The alternative strikes the list from the rationale and mints the two as readings, which is the remedy stub-traditions holds and which the session deferred to the readings ruling. Fourteen rationales are in the same position.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a design or a proposal evaluated?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+tier: global
+defines:
+  - greenfield
+  - adversarial review
+---
+
+## Answer
+
+This node's own rule is that every tradition surfaced is recorded as a reading with the resolution it informed, and its rationale carries a prose tradition list, the Pareto frontier and Chesterton's fence, which readings' recommended text forbids. The alternative strikes the list from the rationale and mints the two as readings, which is the remedy stub-traditions holds and which the session deferred to the readings ruling. Fourteen rationales are in the same position.
+```
 
 #### bounded-overrule
 
 The answer lets the AI overrule delegated and deferred answers on its best judgment without limit, and since nothing is ratified that is the whole record between two sittings. The brake the session named, that an overrule at the ruling stage sends the node back to review and shows on the frontier, is real but covers only that stage; an overrule at the review or maieutic stage leaves no review state to go stale. The alternative bounds the rule so that an overrule of any unanswered node re-opens its dialogue at the stage the change touches, which is also what the amendment review asked authority to add.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a design or a proposal evaluated?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+tier: global
+defines:
+  - greenfield
+  - adversarial review
+---
+
+## Answer
+
+The answer lets the AI overrule delegated and deferred answers on its best judgment without limit, and since nothing is ratified that is the whole record between two sittings. The brake the session named, that an overrule at the ruling stage sends the node back to review and shows on the frontier, is real but covers only that stage; an overrule at the review or maieutic stage leaves no review state to go stale. The alternative bounds the rule so that an overrule of any unanswered node re-opens its dialogue at the stage the change touches, which is also what the amendment review asked authority to add.
+```
+
 #### overrule-by-class
 
 What an overrule does is read from the node's class rather than stated as one rule. On a ratified node the confirmed choice keeps its full authority and the node returns to the author for re-confirmation. On a deferred node the recommendation acts and the node is on the alignment frontier already. On a delegated node the recommendation moves freely within the delegation's scope and the node stays off the alignment frontier, since the author asked not to be asked again; a move that would leave the scope is an option, not a recommendation, and returns the node to the author with its class intact. This replaces "a delegated answer overruled becoming deferred", keeps it for the one case it was for, and gives `bounded-overrule` its bound. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
+
+**AI support.** The author's rulings in the legacy bootstrap of 2026-08-31 to 2026-09-02, given again to this bootstrap as the standing rule for the AI's evaluations: reference the incumbent for principles, never as authority. The legacy rule projection on `main` and the ratified clarifications behind it are the evidence. The overrule rules are the authority node's attenuation seen from the evaluator's side. Traditions to record as readings: the Pareto frontier of multi-objective choice, adopted for the sense of "frontier"; Chesterton's fence (The Thing, 1929), diverged from in part, since here the record, not the fence, carries the reason, and a fence without a recorded reason is a prune-by-default proposal. The clean-context review is the author's disposition of 2026-09-03, recorded on the recording node under growth.
+
+Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Delegated means the node is removed from the alignment frontier and deferred means it remains"; "Subject to attenuation/breakout controls - if the change of recommendation is on delegated or deffered node then it changes the shape of the reconciliation frontier." A rule that returned a delegated node to the author on every change delegated nothing; the bound that rule wanted is the delegation's scope, which is what `bounded-overrule` asked for, and a move that would leave it does return the node. The shim sentence at the end now holds without exception, since the explicit grant for an unanswered node is a standing rule of the authority node and no longer a shim, which is what `two-kinds-of-shim` was asking about. The answer as it stood is kept as the option `overrule-to-deferred`, and the review of this text is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is a design or a proposal evaluated?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+tier: global
+defines:
+  - greenfield
+  - adversarial review
+---
+
+## Answer
+
+Against the full solution frontier. Nothing is sacred: no doctrine is implied by what exists, least of all by the incumbent implementation, which is evidence of past decisions and never authority over future ones; that is what greenfield means here. Greenfield is the lens every recommendation is made through, not an occasional one, and it is operational rather than a sentiment. A class of argument is struck from the choosing: what a change would cost to migrate, how many files or nodes it touches, what reviews or assessments it would spend, what tooling it would rework, and that the incumbent already does it the other way. None of those bear on whether a design is right, and a recommendation resting on one of them has not been made. The positive test replaces them: judge the design as if the record were being written from scratch, with nothing in it to preserve. The error to hunt is an incumbent fact doing the work of a design constraint, which is the failure this lens exists to catch; a recommendation found resting on one is named as such and redrawn. Cost is not thereby unsayable, and a recommendation still states what its design will cost: it is a consequence of a design chosen on its merits and never a reason for choosing it. A ratified answer is not unchangeable; changing it takes an interview with the author, and the alignment skill is that interview. Delegated and deferred answers need no interview: the AI may move their recommendation on its best judgment, and what a move does is read from the node's class. On a ratified node the confirmed choice keeps its full authority and the node returns to the author for re-confirmation, at the review stage where only the recommendation moved. On a deferred node the recommendation acts, the reconciliation frontier changes with it, and the node is on the alignment frontier already. On a delegated node the recommendation moves freely within the delegation's scope and the node stays off the alignment frontier, since the author asked not to be asked again; a move that would leave the scope is not the AI's to recommend, is recorded as an option, and returns the node to the author with its class intact. On an unanswered node nothing acts and the move is dialogue. A recommendation moved at the ruling stage sends the node back to the review stage, and the frontier and the alignment page show it as changed since its review. Every evaluation runs twice, once as fresh best judgment and once with reference to tradition, including traditions shelved by pre-agent constraints, and every tradition surfaced is recorded as a reading with the resolution it informed. Work under an answer that cites a tradition is grounded in the tradition itself within its recorded support scope; a recorded divergence is the author's decision, which the tradition cannot overrule, and an unrecorded conflict is a frontier item deferred to neither side. Adversarial review of one's own recorded output is part of producing it, and a disposition recommended to the author is reviewed once more, in clean context, before the author rules on it, as the recording node describes. A shim declared on the record is applied by default; a prompt is required only to bypass it.
+```
 
 ## Account
 
@@ -262,3 +386,7 @@ instrument is what the instrument exists to prevent.
 The finding, as the survey wrote it: Thirty of the forty-four nodes at the ruling stage carry a review whose pinned recommendation no longer matches the recommendation as it stands; the projector marks each "changed since its review" and reports "Ready to rule: 0 of 44 at the ruling stage." The thirty are the first thirty nodes listed above, all of them in the judged set. Three standing texts disagree about what that state is. `commons.systems/disposition-graph/evaluation`'s `## Answer` says, without condition: "A recommendation moved at the ruling stage sends the node back to the review stage, and the frontier and the alignment page show it as changed since its review." `commons.systems/disposition-graph/dialogue`'s `## Answer` says instead: "A recommendation moved on a node with a class re-opens the dialogue at the movement the recording node's classification calls for, the review where only the recommendation moved" — conditioned on having a class, which none of these thirty has, every one of them being unanswered. `commons.systems/disposition-graph/clean-context-review` and `commons.systems/disposition-graph/unanswered` supply the third position: a node is ready to rule only when its pins name the recommendation as it stands, and "A node reaches the ruling stage only with a forward verdict." Under `evaluation` all thirty should be at the review stage and are not; under `dialogue` none of them moves and the stage is correct; the projector implements neither, marking them stale and leaving the stage where it is. The consequence is not cosmetic: `commons.systems/disposition-graph/alignment-target` instructs a session given nothing to trust the stage — "A movement already behind the node is not repeated: the stage is the record of what the dialogue has done, and the session trusts it" — so a sitting will take up a ruling on a node the projector says is not ready. Four further nodes at the review stage and thirteen below it carry stale reviews too; forty-seven in all.
 
 Its proposal: Settle which of the two sentences governs an unanswered node whose recommendation has moved, and make the projector and the stage agree with the answer. If `evaluation` governs, the thirty return to the review stage now and the survey's verdicts land there; if `dialogue` governs, `evaluation`'s sentence is qualified to say that it speaks of nodes with a class, and the projector's "changed since its review" becomes advisory rather than a bar. Either way `alignment-target`'s trust clause needs the qualification that a session checks the pin before trusting the stage, since it is the clause that turns a stale field into a wrong movement. The survivor for the general rule is `evaluation`, which owns how a moved recommendation is treated; `dialogue` and `alignment-target` cite it rather than restating it.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/evaluation stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `overrule-by-class`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-03/51, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `overrule-to-deferred`, `deferred-until-ruling-quoted`, `two-kinds-of-shim`, `traditions-to-readings`, `bounded-overrule`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `6d87ee51ffab4195c5465354a36d4a2bc1f4fa1e` was already past the recommendation and is left as it stood.

@@ -14,7 +14,6 @@ facts:
     recommends: as-read
     boldness: high
     against: "The node's question asks where the answer departs from the guarantee, and after the repair no `bears` entry on it reads diverged at all: the departure is carried by prose and by the chosen-over derivation, and an author reading the option rows alone sees a tradition that supports the delta survey twice over and never sees what the record gave up."
-    stands: as-read
   - name: authority
     options:
       - name: ratified
@@ -27,7 +26,7 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: e9714fc7b20b79583a4d5f084416bdbb0c0eb80f
+  of: 5893cbbdb934fe7d41d77e1043225aaec0019490
   commit: edbe507a81c4bfe51308f5fb96845b8bbdaff4c8
   against: "The repair's own account of itself claims account entries are 'not rewritten, since an account entry is the record of its day,' yet its remedy for the previous finding is to rewrite the `### Repaired after the reading of d35b0014` entry a second time (restoring it to its pre-ed7d78d3 text). One could argue this is still an edit to a dated historical entry and so brushes the same principle the previous finding turned on. This does not hold up on inspection, though: the previous reading's own suggested edit was exactly 'revert the d35b0014 entry to its prior text and instead add the acknowledgment ... as a new dated entry,' which is precisely what the repair does — reverting an erroneous later insertion restores the entry's true historical state rather than adding new interpretive content to it, and the justification sentence itself is relocated to a fresh, separately dated entry rather than left duplicated in place."
 under:
@@ -41,6 +40,39 @@ bears:
     option: a-whole-graph-reading-every-time
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+`as-read` is recommended, as redrawn on 2026-09-07: the redrawing corrects a statement about the tradition that this node's own `source` field falsifies, and no option that leaves that statement standing is viable. Within the corrected text the recommendation is for the division the tradition itself makes, adoption of the industrial strand that supplied the design and departure from the safety result the record cannot have, with the departure carried where `readings` puts it, as a tradition adopted on the option the record was chosen over. Boldness high, and the two halves of the record's gloss pull apart here, so the fact says which is meant: the share of this reading resting on the AI's own unrecorded knowledge is total — neither cited paper is in the record, neither is quoted, and no words of the author bear on it — while the confidence in the safety result itself is high, it being the best-attested result of the literature the tradition survey recorded at high confidence. Boldness on this record is the share and not the confidence, so it is high, and the confidence is stated here rather than encoded there. The evidence for the reading is that the first drawing carried one of the safety result's two premises and not the other. The case against is on the fact.
+
+#### as-read
+
+Diverges on the guarantee and adopts the practice, and the two strands are the tradition's own.
+
+**AI support.** Recorded in the maieutic movement on `survey-selection`, 2026-09-07, as the tradition pass that node's evaluation requires, from the tradition survey of that day, which is not part of the record and which recorded Rothermel and Harrold and the practice at high confidence; the two papers are cited here more exactly than that survey did, which named one venue and one year, and the citations are the AI's own recollection of them. Redrawn on 2026-09-07 after the clean-context reading of d35b0014, which found the answer misreporting its own recorded support scope, saying the tradition names the industrial posture and does not endorse it when this node's `source` names that practice as part of the tradition and the practice is the posture's design; and grounding the departure on one premise where the safety result rests on two, the sound dependency relation and the controlled regression testing assumption. The redrawing adds the second premise, corrects the scope, names the measurement apparatus the reading does not take, and moves the relation on `the-delta-survey-with-a-periodic-whole` from diverged to adopted with a second entry adopting on the option the record was chosen over, which is the shape the sibling `acceptance-sampling-and-all-or-none` already uses on that same option. Validated by the AI from its own knowledge of the sources. Deferred, because none of `class-recommendation`'s three limbs holds and no words of the author delegate the reading of traditions — that a source is one the author may check is a reason for deferring and not for delegating — so the reading acts and the node stays on the alignment frontier until the author has read the papers.
+
+**AI divergence.** The node's question asks where the answer departs from the guarantee, and after the repair no `bears` entry on it reads diverged at all: the departure is carried by prose and by the chosen-over derivation, and an author reading the option rows alone sees a tradition that supports the delta survey twice over and never sees what the record gave up.
+
+**Content.**
+
+```markdown
+---
+question: Does regression test selection ground the delta survey, and where does the answer depart from its guarantee?
+form: reading
+under:
+  - commons.systems/disposition-graph/survey-selection
+source: Rothermel and Harrold, Analyzing regression test selection techniques, IEEE TSE 22(8), 1996, and A safe, efficient regression test selection technique, TOSEM 6(2), 1997; industrial test-impact analysis as the practice.
+bears:
+  - fact: answer
+    option: candidate-pairs-with-their-nominating-key
+    relation: adopted
+  - fact: answer
+    option: a-whole-graph-reading-every-time
+    relation: adopted
+---
+
 ## Answer
 
 Diverges on the guarantee and adopts the practice, and the two strands are the tradition's own. The safety result is its classical strand: a selection technique is safe when it drops no test that could reveal a fault in the changed program, a consequence the definition delivers over modification-revealing tests and reaches fault-revealing ones only under the controlled regression testing assumption, that the test is deterministic and everything but the changed code is held constant. Safety rests besides on a sound dependency relation between the change and the tests, a control-flow or data-flow graph the technique walks. This record has neither premise for the thing the survey exists to catch. It has no such relation, since two nodes may contradict each other with no ancestry between them, no citation either way and no word in common; and its test is a reader's judgment, which is not deterministic, so a second run over the same pair may return a different finding. The consequence reaches further than the delta: even a whole survey, in which nothing is frozen, gives less than safety gives, and the drift probe measures the reader as much as it measures the selection.
@@ -50,16 +82,7 @@ What the record took is the tradition's other strand, and this node's `source` n
 The relations follow from that division. `the-delta-survey-with-a-periodic-whole` is the industrial strand's own shape and the relation to it is adoption. `a-whole-graph-reading-every-time` is what safety reduces to where no sound dependency relation is available, the identity selection, every test every time, and the tradition supports it; the record is chosen over it, which is what `readings` means by a tradition adopted on an option not chosen, and is where the departure from the guarantee is recorded in the record's own vocabulary rather than in a word on a row.
 
 What this reading does not take from the tradition is its measurement apparatus. Inclusiveness and precision as degrees rather than as a binary, and the cost model that trades them, are what the framework offers a selection that cannot be safe, and they are the vocabulary in which the cadence, the sample and the resemblance threshold could be sized; sizing them is `survey-selection`'s question and not this reading's, and the reading names the apparatus so that the parent's own recorded case against, that its numbers are unstated, has somewhere to go. The entry on `survey-selection` is recorded on `candidate-pairs-with-their-nominating-key`, the option that stands, because the delta survey this reading grounds is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen.
-
-## Rationale
-
-Recorded in the maieutic movement on `survey-selection`, 2026-09-07, as the tradition pass that node's evaluation requires, from the tradition survey of that day, which is not part of the record and which recorded Rothermel and Harrold and the practice at high confidence; the two papers are cited here more exactly than that survey did, which named one venue and one year, and the citations are the AI's own recollection of them. Redrawn on 2026-09-07 after the clean-context reading of d35b0014, which found the answer misreporting its own recorded support scope, saying the tradition names the industrial posture and does not endorse it when this node's `source` names that practice as part of the tradition and the practice is the posture's design; and grounding the departure on one premise where the safety result rests on two, the sound dependency relation and the controlled regression testing assumption. The redrawing adds the second premise, corrects the scope, names the measurement apparatus the reading does not take, and moves the relation on `the-delta-survey-with-a-periodic-whole` from diverged to adopted with a second entry adopting on the option the record was chosen over, which is the shape the sibling `acceptance-sampling-and-all-or-none` already uses on that same option. Validated by the AI from its own knowledge of the sources. Deferred, because none of `class-recommendation`'s three limbs holds and no words of the author delegate the reading of traditions — that a source is one the author may check is a reason for deferring and not for delegating — so the reading acts and the node stays on the alignment frontier until the author has read the papers.
-
-## Facts
-
-### answer
-
-`as-read` is recommended, as redrawn on 2026-09-07: the redrawing corrects a statement about the tradition that this node's own `source` field falsifies, and no option that leaves that statement standing is viable. Within the corrected text the recommendation is for the division the tradition itself makes, adoption of the industrial strand that supplied the design and departure from the safety result the record cannot have, with the departure carried where `readings` puts it, as a tradition adopted on the option the record was chosen over. Boldness high, and the two halves of the record's gloss pull apart here, so the fact says which is meant: the share of this reading resting on the AI's own unrecorded knowledge is total — neither cited paper is in the record, neither is quoted, and no words of the author bear on it — while the confidence in the safety result itself is high, it being the best-attested result of the literature the tradition survey recorded at high confidence. Boldness on this record is the share and not the confidence, so it is high, and the confidence is stated here rather than encoded there. The evidence for the reading is that the first drawing carried one of the safety result's two premises and not the other. The case against is on the fact.
+```
 
 #### adopts-the-industrial-practice-and-diverges-on-the-safety-result
 
@@ -68,6 +91,29 @@ Adopts and diverges, and carries both relations on the option `the-delta-survey-
 **AI support.** It is the shape of the truth: two strands of one tradition, taken and departed from on the same object, and neither verdict swallowing the other. The node's question asks where the answer departs from the guarantee, and the recommended reading answers it in prose while leaving every `bears` entry reading adopted, so an author who reads the option rows and not the readings sees only support. The record has reached for this shape before, on `commons.systems/disposition-graph/progressive-disclosure`, whose draft carried two entries with opposite relations on one option.
 
 **AI divergence.** The record has looked at this encoding and declined it: `readings`' answer allows one net relation per option with the nuance in prose, and the double entry on `progressive-disclosure` was struck for a net verdict in the same landing that found it. The place where the question is open is `readings`' own option `relation-per-holding`, which asks for exactly this and names what it would cost, a stable name for each holding, a second vocabulary the record does not have; deciding it inside a reading of one tradition would settle a rule of the record from underneath the node that owns it. Until `relation-per-holding` is ruled, the divergence has a home in the record's existing vocabulary — a tradition adopted on the option not chosen is what chosen over names — and this reading now uses it.
+
+**Content.**
+
+```markdown
+---
+question: Does regression test selection ground the delta survey, and where does the answer depart from its guarantee?
+form: reading
+under:
+  - commons.systems/disposition-graph/survey-selection
+source: Rothermel and Harrold, Analyzing regression test selection techniques, IEEE TSE 22(8), 1996, and A safe, efficient regression test selection technique, TOSEM 6(2), 1997; industrial test-impact analysis as the practice.
+bears:
+  - fact: answer
+    option: candidate-pairs-with-their-nominating-key
+    relation: adopted
+  - fact: answer
+    option: a-whole-graph-reading-every-time
+    relation: adopted
+---
+
+## Answer
+
+Adopts and diverges, and carries both relations on the option `the-delta-survey-with-a-periodic-whole` at once: adopted on the posture, which is the industrial strand's own design, and diverged on the guarantee, which no selection over this record can have. It is the reading the clean-context review of 2026-09-07 named as missing, and it differs from the recommended answer only in where the divergence is kept, on the relation rather than in the answer's words and in the chosen-over derivation.
+```
 
 ### authority
 
@@ -171,3 +217,7 @@ On the viability of the options: Unaffected. The diff never touches `## Facts`, 
 Strongest counter-argument (weak): The repair's own account of itself claims account entries are 'not rewritten, since an account entry is the record of its day,' yet its remedy for the previous finding is to rewrite the `### Repaired after the reading of d35b0014` entry a second time (restoring it to its pre-ed7d78d3 text). One could argue this is still an edit to a dated historical entry and so brushes the same principle the previous finding turned on. This does not hold up on inspection, though: the previous reading's own suggested edit was exactly 'revert the d35b0014 entry to its prior text and instead add the acknowledgment ... as a new dated entry,' which is precisely what the repair does — reverting an erroneous later insertion restores the entry's true historical state rather than adding new interpretive content to it, and the justification sentence itself is relocated to a fresh, separately dated entry rather than left duplicated in place.
 
 The session's reply: [object Object]
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/regression-test-selection stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `as-read`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `adopts-the-industrial-practice-and-diverges-on-the-safety-result`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `e9714fc7b20b79583a4d5f084416bdbb0c0eb80f` is re-computed for the encoding as `5893cbbdb934fe7d41d77e1043225aaec0019490`; nothing it read changed.

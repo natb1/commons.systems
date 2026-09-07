@@ -18,11 +18,6 @@ facts:
 under:
   - commons.systems/disposition-graph/projection
 ---
-## Disposition
-
-The author, 2026-09-02:
-
-> Before bootstrap exit technical repo vocabulary like 'disposition', 'ratified', 'doctine' will need to be recorded on the onboarding path of the graph and clearly identified with appropriate layout in the documentation projection. References to tradition also need to be clearly called out with appropriate layout.
 
 ## Facts
 
@@ -32,9 +27,17 @@ The author, 2026-09-02:
 
 One of the two candidates the account holds open for the sitting: the `defines` field and the browser as published already satisfy the author's disposition, because the browser links every occurrence of a defined term to the node that defines it and renders readings as a block set apart with source, locus and relation. On this reading nothing further is owed but a statement of where on the onboarding path vocabulary is met.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### vocabulary-page-projected
 
 The alternative: a vocabulary page projected from the `defines` fields is owed, restoring in projected form what the first browser carried as a hand-written vocabulary page and what the author removed on 2026-09-03 because the browser states nothing of its own. It would place vocabulary and the calling-out of traditions explicitly on the onboarding path rather than leaving them to inline links.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 ## Account
 
@@ -57,3 +60,7 @@ Alternatives pending, with their sources: `links-and-readings-block-suffice` (ai
 Merge analysis of the author's words: 2026-09-02, own-question: Before bootstrap exit, technical repository vocabulary such as disposition, ratified and doctrine must be recorded on the graph's onboarding path and clearly identified with appropriate layout in the documentation projection, and references to tradition must likewise be clearly called out with appropriate layout.
 Moved to other nodes as alternatives: `name-what-it-does-not-settle` on commons.systems/disposition-graph/projection.
 The census unit's note: The node has no answer and no recommendation, so `adopts` is null, but its account does hold two candidate answers open for the sitting and I recorded both: that the term links and the readings block already satisfy the author's disposition, or that a vocabulary page projected from the `defines` fields is owed. Where on the onboarding path vocabulary is met is a further question with no candidate answer, so it is not a third alternative. The author's single block answers this node's own question. The frontier finding's proposal for projection is moved there; its sequencing advice — answer self-documentation, then rule scope and projection together, then run the two periagogic sittings — is an ordering recommendation rather than a change to any node's text, so I did not mint it as an alternative anywhere.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/vocabulary-view stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 1 `## Disposition` entry became the ledger entry words/2026-09-02/38, referenced by 0 options the entry's own date names. No content is recorded for `links-and-readings-block-suffice`, `vocabulary-page-projected`: the record never wrote one and the migration invents none.

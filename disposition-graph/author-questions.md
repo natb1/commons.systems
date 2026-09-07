@@ -7,6 +7,14 @@ facts:
       - name: probes-on-the-node
         source: author
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-04/15
+          - words/2026-09-04/16
+          - words/2026-09-04/17
+          - words/2026-09-04/18
+          - words/2026-09-04/19
+          - words/2026-09-04/20
+          - words/2026-09-04/21
       - name: probes-per-fact
         source: ai
         ref: "2026-09-04"
@@ -40,6 +48,14 @@ facts:
       - name: nothing-on-the-page
         source: author
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-04/15
+          - words/2026-09-04/16
+          - words/2026-09-04/17
+          - words/2026-09-04/18
+          - words/2026-09-04/19
+          - words/2026-09-04/20
+          - words/2026-09-04/21
       - name: no-stated-cap
         source: ai
         ref: "2026-09-04"
@@ -49,6 +65,9 @@ facts:
       - name: the-sitting-stops-only-on-intent
         source: author
         ref: "2026-09-06"
+        supports:
+          - words/2026-09-06/4
+          - words/2026-09-06/5
       - name: cap-warned-by-the-instrument
         source: review
         ref: "2026-09-05"
@@ -60,7 +79,6 @@ facts:
         ref: "2026-09-07"
     recommends: probes-on-the-node
     boldness: moderate
-    stands: probes-on-the-node
     against: "The record already carries every function of this field in the accounts, the parent node's own answer names what is open for the author as their home, and a clean-context review of 2026-09-03 ruled that an open question carried as prose is minted as a node or folded into a fact's options; so this answer spends a frontmatter key, a term, a change to what the pin strips, a branch in the applying script and an amendment to the fifteenth frontier validation to buy a structure whose content the drafting session still writes alone, and whose worst failure, the probe a session did not raise because it liked its recommendation, is exactly as invisible in the new field as it was in the prose."
   - name: authority
     options:
@@ -88,7 +106,7 @@ review:
   against: "The one quantitative bound this answer puts on the author's attention, three open probes on a node, is the one part of it that nothing enforces, and the answer chooses that deliberately: \"The cap binds the movement and is checked by the readings ... and not by the graph's reader\". The tree agrees — read.mjs checks only a probe's shape (line 1387), and apply.mjs, the single actor that sees every probe any reading returns and writes it into the node, says at line 818 \"The cap of three open probes is not checked\" and at line 643 that \"the cap binds the movement and not this mechanical step\". So the bound is kept by whichever session is doing the asking; each reading counts only the node it was handed (this brief: \"Check it on the node you read\"), while the answer itself routes a survey's probe onto nodes the survey is not judging, which is exactly where no reading has counted the list. The refusal is argued against making the cap a parse error, but that is not the only mechanism the record has: apply.mjs already emits a non-fatal message when a write would exceed another of the record's caps, two readings on one answer (line 932), so the instrument that could count for free exists, is precedented, and has been told not to. Two nodes, dialogue and coverage, sit at exactly three open probes on the day of this reading, so the bound is live rather than theoretical, and the failure the answer's own economics predict — asking is free, answering costs the one author — is the one it declines to instrument."
   survey:
     date: 2026-09-05
-    of: 3e9ece922ab3f53c55b88a5d838c4e0b0685993e
+    of: 9749b8797588c491c907ecc73acf59d6c486e0b3
 form: rule
 under:
   - commons.systems/disposition-graph/dialogue
@@ -100,63 +118,44 @@ depends:
   - commons.systems/disposition-graph/probe-or-node
   - commons.systems/disposition-graph/viable-options
 ---
-## Disposition
 
-The author, 2026-09-04, stopping the eleven clean-context readings of that day
-and granting the reconciliation of this disposition before they are restarted
-and before the survey:
+## Facts
 
-> stop these reviews. before restarting these reviews, before survey, progress this disposition to survey ready and you have bootstap authority to reconcile it (for pending reviews):
-> make sure we are recording as part of dialogue state of the node: a list of questions for the author needed to disambiguate author intent and make AI recommendations for each of the facts. questions are collected during periagoge, review, survey, and when processing confirmation kickback, or at any point during alignment diologue, review, reconciliation or rsi when reconsidering recorded AI recommendations. These questions feed the meiutic. If review produces questions then it necessarily kicks back to the meiutic. These questions are not presented in the alignment ui, they are presented in the meiutic session.
+### answer
 
-The author, 2026-09-04, answering the two findings this sitting put to them,
-that the record already carries these questions in prose under an undefined
-term and that a clean-context review of 2026-09-03 ruled the other way:
+`probes-on-the-node` is recommended because it is the only shape on the list that holds a probe raised at the periagoge, keeps it off the ruling screen without a projection that reads prose, and leaves the record's two existing senses of "question" alone. The home rests on the author's words and on the parent node's rule that what a ruling or a projection needs is in the record in one place; the per-probe shape rests on IEEE 830's TBD clause with the two fields this record supplies for nothing removed; the admission test rests on four traditions converging on one rule and on the record's own management by exception, already applied to options by the authority node; the `source` field rests on the segregation-of-duties reading the record already holds; the kickback rule is the author's, generalized to every collecting moment by the author's other clause; and the pin's strip rests on the parent's own reasoning for `facts` and for `against`. Moderate boldness: the disposition, the five collecting moments, the kickback and the hiding are the author's words; the term, the seven fields, the three limbs, the cap of three, the count on the stage chip, the strip from the browser's serialization and the two amendments elsewhere are the AI's, each grounded in a rule of the record or in a tradition recorded above. What rests on the AI's knowledge alone is the number three, which no measurement supports, and the empirical claim that context makes a model less likely to ask, which is read from a literature and not from this record. The divergence the author meets first is from their own words: the count of open probes on the node's stage chip is presented in the alignment ui in the plain sense of "These questions are not presented in the alignment ui", and `nothing-on-the-page` is their literal reading, viable on the fact and theirs to rule for.
 
-> Don't conflate questions with answers that indicate author disposition (nodes) with questions AI has to disambiguate the disposition/nodes.
+#### probes-on-the-node
 
+In the dialogue state, as `probes`, one list on the node beside `stage`, `review` and `depends`.
 
-The author, 2026-09-04, on the two questions that clean-context review reached,
-which stand as the options `cap-from-contract-class` and
-`graph-landing-instrument` on `commons.systems/disposition-graph/review`:
+**AI support.** The author, 2026-09-04, stopping the eleven clean-context readings of that day and granting the reconciliation of this disposition: "make sure we are recording as part of dialogue state of the node: a list of questions for the author needed to disambiguate author intent and make AI recommendations for each of the facts. questions are collected during periagoge, review, survey, and when processing confirmation kickback, or at any point during alignment diologue, review, reconciliation or rsi when reconsidering recorded AI recommendations. These questions feed the meiutic. If review produces questions then it necessarily kicks back to the meiutic. These questions are not presented in the alignment ui, they are presented in the meiutic session."
 
-> Also, confirm: the review finding questions are examples of meiutic questions to be ruled on during meiutic dialogue, not the kind of thing to be confirmed as facts in the alignment artifact
+Why the record needs the instrument at all, when it already holds the questions in prose. Two reasons, and neither is that the prose is untidy. The first is that the prose cannot satisfy the author's own constraint: the eleven probes on `viable-options` sit in an account the alignment page renders as a drill-down unconditionally, so they are in front of the author at the ruling today, which is the one place the author said they must not be, and the only way to keep prose off the page is a projection that decides what to hide by matching the text of a heading, which the prose-and-structure node calls unsupported implementation by name. The second is that the AI cannot be trusted to raise these questions at all. The empirical finding is that models recognise ambiguity when asked to judge it and answer anyway, and that retrieved context widens the gap rather than closing it, which is precisely what this record manufactures at every reading. So the obligation to collect probes has to belong to the movement and be checkable in the record, and it can never be a disposition the model is trusted to act on in the moment. Everything else in this answer follows from that: a field a reading can check, an admission test with something behind each limb, a source per probe so that a reader's probe is not the drafter's to drop, and a cap so that the instrument does not defeat itself.
 
+Why the review finding of 2026-09-03 stands, and why this answer does not reverse it. A clean-context review of that day on the review node found two open questions carried as prose in a node at the review stage and asked that they be minted as nodes or folded into the ruling's options; the finding was applied, and the options `cap-from-contract-class` and `graph-landing-instrument` exist today because of it. This sitting put the apparent reversal to the author as one of two findings they would want at the ruling, and their two answers of 2026-09-04, quoted above, settle it. The first is the line: a question with an answer that indicates the author's disposition is a node, and it is not to be conflated with a question the AI must ask to disambiguate a disposition or a node. The second applies the line to the very questions the finding reached, and classifies them as maieutic questions rather than facts for the alignment artifact. So the finding's rule stands and its application to those two was wrong: what the record did in 2026-09-03 was manufacture a candidate answer so that a question would have somewhere to sit, which is what an option must never be, and both sentences say so on their face, each ending by noting that the node's own account puts the matter to the author at ratification. That is a question wearing an option's costume, and it is the failure this answer's `an-option-on-the-fact` option describes, now with an instance in the record rather than only an argument. The other object has no home the record's rules will accept, because an option is a candidate answer and a node is a question with a standing answer, and a probe is neither; having no such home is what earns it a shape of its own. The admission test's third limb is the author's line made checkable, and it keeps the finding in force for everything disposition-shaped, which the survey still proposes minting.
 
-The author, 2026-09-04, on what the reconciliation of this node includes:
+Why the term is `probe` and not `question`. The record used `probe` in fourteen nodes in exactly this sense on 2026-09-04 and defined it nowhere, and `question` is defined once, on the node node, as one line someone could ask the author, with a second sense on this node's parent under `aspects-are-nodes`, a decision the author would rule on separately. A third sense would be minted on a node that has no path to the one defining the term, on the same node that carries `depends`, which the parent describes as the open questions whose rulings this one waits on. Defining the word the record already uses costs nothing and closes the collision; what it does not close is the placement, since `growth` and the other nodes using the word sit above or beside this one, which is why the answer requires the citation.
 
-> When you get to reconciliation, part of the reconciliation will be migrating existing nodes - looking for evidence of open meiutic questions recorded elsewhere which you cannot answer with current context, if found, recoding them with the new encoding for those questions, and resetting dialogue phase to meiutic if there are open meiutic questions.
+Why the cap is a number and not a principle. The admission test alone would bound the list if the test were self-applying, and it is not: the party applying it is the party whose recommendation the probe would unsettle, and the record's own reading on segregation of duties says what that arrangement produces. A number is the one bound that does not depend on the asker's judgment about its own asking. Three is the AI's, and it rests on the argument that a cap must bind below the count of decisions a node carries or it licenses one probe per decision, which is the manufactured doubt the record already refused on the neighbouring instrument; it does not rest on a measurement, and use is what will correct it.
 
+Readings owed under this node, each surfaced by the second evaluation of 2026-09-04 with the resolution it informed, and named here rather than minted in bulk, since a queue of readings is itself the counter-tradition this node is about: the preliminary reference and the certified question, for the stay, for `acte clair` as the admission test, and for the division of labour under which the answerer answers the question and the asker still writes the recommendation; IEEE 830-1998 §4.3.3's TBD clause, for the per-probe shape and for the rule that a document with one open is not complete; Federal Rule of Civil Procedure 33, for the cap, for counting discrete subparts, and for 33(d), the rule that sends the asker back to the record; the accumulation problem in mandated disclosure, as the counterweight to the informed-consent reading this record already holds; satisficing, for the hazard that a long list degrades the answers it gets and degrades the later ones most, which nothing in the record sees; the clarification-seeking behaviour of language models, for the empirical warrant above; the issue log and management by exception, for the admission test stated in the record's own vocabulary; and Bloom's two-sigma problem, as the tradition shelved by a pre-agent constraint whose lesson reverses, the tutorial having been unaffordable because asking was expensive where here it is answering that is scarce. Readings the record already holds gain an entry rather than a node: `plato-maieutics`, adopted, because the probe list is the one instrument in this record where the AI is genuinely barren, delivering no content but the shape of its own ignorance, which speaks to the divergence standing unresolved there; `montgomery-informed-consent` and `bentham-publicity`, diverged on the probe's text and adopted on the count; `segregation-of-duties`, whose control the `source` field supplies; `peirce-paper-doubt`, for none being a complete answer; `value-of-information`, for the second limb and for the ordering; `anchoring-and-adjustment`, for the wording of `asks`; `special-verdict-form`, for one probe to one thing; `non-liquet` and `roberts-rules-commit-or-refer`, for the kickback carrying its instructions; `chenery-reasoned-decision`, for the recommendation saying what was open when it was made; and `file-drawer-and-pre-registration`, for the probe collected and never presented.
 
-The author, 2026-09-04, on what the migration sweep did not ask, and on the
-evidence it must not mistake for absence:
+Why the node stands rather than folding into `fidelity`. The merge was run. `fidelity` asks what preserves the author's intention while the dialogue rationalizes it, and this instrument is a real answer to it, the only mechanism in the record that makes the author's contribution grow rather than fixing it at the moment of speaking; but what this node answers is what a node carries and where a probe is asked, which is the parent's question narrowed to one part of the dialogue's state, and `fidelity`'s five candidates are mechanisms of another kind, a check, a conduct, a measure, a compaction, and nothing. So the two are not one node, and the relation is recorded where it belongs, as an option on `fidelity`'s answer fact with this node as its source, so that the candidate is on the table when that question reaches its own maieutic.
 
-> Did the sweep for meiutic probes include an evaluation of when some of the nodes on the alignment frontier are actually mis-encoded meiutic probes rather than dispositions indicated by the author? Be careful not to read an absence of author quotes (which weren't recorded in the initial bootstrap) as sole evidence of absence of author disposition.
+**AI divergence.** The record already carries every function of this field in the accounts, the parent node's own answer names what is open for the author as their home, and a clean-context review of 2026-09-03 ruled that an open question carried as prose is minted as a node or folded into a fact's options; so this answer spends a frontmatter key, a term, a change to what the pin strips, a branch in the applying script and an amendment to the fifteenth frontier validation to buy a structure whose content the drafting session still writes alone, and whose worst failure, the probe a session did not raise because it liked its recommendation, is exactly as invisible in the new field as it was in the prose.
 
+**Content.**
 
-The author, 2026-09-04, stopping that sweep before it had read anything and
-striking the legacy record from its evidence:
-
-> stop the sweep. this is not valid
-
-> Ignore the legacy tree on main entirely. Never load the legacy tree unless explicitly instructed. Evaluate on content. If author quote exists that justifies disposition then that's an easy one. Otherwise apply your other content checks.
-
-
-The author, 2026-09-04, after the reverse sweep returned no mis-encoded node,
-on the rule that sweep and the migration before it applied:
-
-> I'm not convinced we have a complete disposition to distinguish between disposition and meiutic probe. Can you recommend guidelines for when to record a child disposition vs meiutic probe, then apply those guidelines to the graph.
-
-> Only re-apply the guidelines to the graph if they cover something not already reviewed in the previous sweeps.
-
-
-The author, 2026-09-06, in the sitting on `what-an-option-row-carries`, when the session reported a clean-context reading back to them and offered to run the next one:
-
-> I'm not sure what "run the reading" means. Are there questions for the author to clarify my intent? This is only reason to stop for meiutic. Otherwise, just correct the mechanical/encoding issues with the record and proceed.
-
-The author, 2026-09-06, on what the alignment dialogue is for and what it is not for:
-
-> Record the disposition that alignment dialogue must focus on establishing common grounding (peraigogic) and clarifying ambiguities is author intent (meiutic). use the alignment artifact for confirmation of disposition fact, and otherwise minimize noise about mechanical/encoding concerns.
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
 
 ## Answer
 
@@ -179,60 +178,207 @@ Three things the encoding must hold, and the answer requires them rather than le
 Three amendments this answer requires elsewhere, named here so that they are ruled and not discovered. The fifteenth frontier validation says that a new question carried on another node's dialogue is proposed a node of its own, and read with `probe` defined it already excludes a probe, since the question it means is one the record would answer and a probe's answer is not a disposition; but a reader should not have to make that distinction unaided, so the validation gains one clause saying that a probe is not such a question and that a probe whose answer would be a disposition is, which is the admission test's third limb read from the survey's side. And the growth node, where the term is first used and which sits above this one, cites this node, so that every node using the word has a path to the node defining it, which the eleventh validation requires and which the definition's placement here does not by itself supply. And the dialogue node, which enumerates the parts of the dialogue's state, does not carry `probes` among them, nor among the parts its validator paragraph requires a stage for, while this answer puts the field there: the enumeration gains it, recorded as an option on that node so its ruler meets it, rather than left to be read together with this node as the recording node today reads it.
 
 What this costs, as a consequence of the design and never as a reason for it. In the reader: a key in `FRONTMATTER_KEYS`, a per-entry parsing block modelled on `shims`, the key in `FENCE_FORBIDDEN_KEYS` and in the check that a dialogue part requires a stage. In the pins: the key in the strip that `stripDialogueFrontmatterLines` applies. In the projections: a line in the frontier's per-node block, a count on the alignment page's stage chip, the key kept out of the page's editable fields, and the key dropped from the browser's serialized graph. In the review's package: `probes` in the two readers' output schemas and in the primer on the record's encoding, the admission test and the cap among what each reading checks, a branch before the one line in the applying script that decides a draft reading's next stage, and a splice block beside the one that appends to `depends`. In the three skills: what a reading reports and what the applying step writes. In the graph: an option on `frontier-consistency` for the clause on validation fifteen, an option on `alignment-page` for the count on the chip, a citation on `growth`, and an option on `fidelity`, whose question this instrument partly answers from the other side. And the probes that were carried as prose on eight nodes moved into the field on 2026-09-04, as the persistence fact and the account record.
-
-## Rationale
-
-The author, 2026-09-04, stopping the eleven clean-context readings of that day and granting the reconciliation of this disposition: "make sure we are recording as part of dialogue state of the node: a list of questions for the author needed to disambiguate author intent and make AI recommendations for each of the facts. questions are collected during periagoge, review, survey, and when processing confirmation kickback, or at any point during alignment diologue, review, reconciliation or rsi when reconsidering recorded AI recommendations. These questions feed the meiutic. If review produces questions then it necessarily kicks back to the meiutic. These questions are not presented in the alignment ui, they are presented in the meiutic session."
-
-Why the record needs the instrument at all, when it already holds the questions in prose. Two reasons, and neither is that the prose is untidy. The first is that the prose cannot satisfy the author's own constraint: the eleven probes on `viable-options` sit in an account the alignment page renders as a drill-down unconditionally, so they are in front of the author at the ruling today, which is the one place the author said they must not be, and the only way to keep prose off the page is a projection that decides what to hide by matching the text of a heading, which the prose-and-structure node calls unsupported implementation by name. The second is that the AI cannot be trusted to raise these questions at all. The empirical finding is that models recognise ambiguity when asked to judge it and answer anyway, and that retrieved context widens the gap rather than closing it, which is precisely what this record manufactures at every reading. So the obligation to collect probes has to belong to the movement and be checkable in the record, and it can never be a disposition the model is trusted to act on in the moment. Everything else in this answer follows from that: a field a reading can check, an admission test with something behind each limb, a source per probe so that a reader's probe is not the drafter's to drop, and a cap so that the instrument does not defeat itself.
-
-Why the review finding of 2026-09-03 stands, and why this answer does not reverse it. A clean-context review of that day on the review node found two open questions carried as prose in a node at the review stage and asked that they be minted as nodes or folded into the ruling's options; the finding was applied, and the options `cap-from-contract-class` and `graph-landing-instrument` exist today because of it. This sitting put the apparent reversal to the author as one of two findings they would want at the ruling, and their two answers of 2026-09-04, quoted above, settle it. The first is the line: a question with an answer that indicates the author's disposition is a node, and it is not to be conflated with a question the AI must ask to disambiguate a disposition or a node. The second applies the line to the very questions the finding reached, and classifies them as maieutic questions rather than facts for the alignment artifact. So the finding's rule stands and its application to those two was wrong: what the record did in 2026-09-03 was manufacture a candidate answer so that a question would have somewhere to sit, which is what an option must never be, and both sentences say so on their face, each ending by noting that the node's own account puts the matter to the author at ratification. That is a question wearing an option's costume, and it is the failure this answer's `an-option-on-the-fact` option describes, now with an instance in the record rather than only an argument. The other object has no home the record's rules will accept, because an option is a candidate answer and a node is a question with a standing answer, and a probe is neither; having no such home is what earns it a shape of its own. The admission test's third limb is the author's line made checkable, and it keeps the finding in force for everything disposition-shaped, which the survey still proposes minting.
-
-Why the term is `probe` and not `question`. The record used `probe` in fourteen nodes in exactly this sense on 2026-09-04 and defined it nowhere, and `question` is defined once, on the node node, as one line someone could ask the author, with a second sense on this node's parent under `aspects-are-nodes`, a decision the author would rule on separately. A third sense would be minted on a node that has no path to the one defining the term, on the same node that carries `depends`, which the parent describes as the open questions whose rulings this one waits on. Defining the word the record already uses costs nothing and closes the collision; what it does not close is the placement, since `growth` and the other nodes using the word sit above or beside this one, which is why the answer requires the citation.
-
-Why the cap is a number and not a principle. The admission test alone would bound the list if the test were self-applying, and it is not: the party applying it is the party whose recommendation the probe would unsettle, and the record's own reading on segregation of duties says what that arrangement produces. A number is the one bound that does not depend on the asker's judgment about its own asking. Three is the AI's, and it rests on the argument that a cap must bind below the count of decisions a node carries or it licenses one probe per decision, which is the manufactured doubt the record already refused on the neighbouring instrument; it does not rest on a measurement, and use is what will correct it.
-
-Readings owed under this node, each surfaced by the second evaluation of 2026-09-04 with the resolution it informed, and named here rather than minted in bulk, since a queue of readings is itself the counter-tradition this node is about: the preliminary reference and the certified question, for the stay, for `acte clair` as the admission test, and for the division of labour under which the answerer answers the question and the asker still writes the recommendation; IEEE 830-1998 §4.3.3's TBD clause, for the per-probe shape and for the rule that a document with one open is not complete; Federal Rule of Civil Procedure 33, for the cap, for counting discrete subparts, and for 33(d), the rule that sends the asker back to the record; the accumulation problem in mandated disclosure, as the counterweight to the informed-consent reading this record already holds; satisficing, for the hazard that a long list degrades the answers it gets and degrades the later ones most, which nothing in the record sees; the clarification-seeking behaviour of language models, for the empirical warrant above; the issue log and management by exception, for the admission test stated in the record's own vocabulary; and Bloom's two-sigma problem, as the tradition shelved by a pre-agent constraint whose lesson reverses, the tutorial having been unaffordable because asking was expensive where here it is answering that is scarce. Readings the record already holds gain an entry rather than a node: `plato-maieutics`, adopted, because the probe list is the one instrument in this record where the AI is genuinely barren, delivering no content but the shape of its own ignorance, which speaks to the divergence standing unresolved there; `montgomery-informed-consent` and `bentham-publicity`, diverged on the probe's text and adopted on the count; `segregation-of-duties`, whose control the `source` field supplies; `peirce-paper-doubt`, for none being a complete answer; `value-of-information`, for the second limb and for the ordering; `anchoring-and-adjustment`, for the wording of `asks`; `special-verdict-form`, for one probe to one thing; `non-liquet` and `roberts-rules-commit-or-refer`, for the kickback carrying its instructions; `chenery-reasoned-decision`, for the recommendation saying what was open when it was made; and `file-drawer-and-pre-registration`, for the probe collected and never presented.
-
-Why the node stands rather than folding into `fidelity`. The merge was run. `fidelity` asks what preserves the author's intention while the dialogue rationalizes it, and this instrument is a real answer to it, the only mechanism in the record that makes the author's contribution grow rather than fixing it at the moment of speaking; but what this node answers is what a node carries and where a probe is asked, which is the parent's question narrowed to one part of the dialogue's state, and `fidelity`'s five candidates are mechanisms of another kind, a check, a conduct, a measure, a compaction, and nothing. So the two are not one node, and the relation is recorded where it belongs, as an option on `fidelity`'s answer fact with this node as its source, so that the candidate is on the table when that question reaches its own maieutic.
-
-## Facts
-
-### answer
-
-`probes-on-the-node` is recommended because it is the only shape on the list that holds a probe raised at the periagoge, keeps it off the ruling screen without a projection that reads prose, and leaves the record's two existing senses of "question" alone. The home rests on the author's words and on the parent node's rule that what a ruling or a projection needs is in the record in one place; the per-probe shape rests on IEEE 830's TBD clause with the two fields this record supplies for nothing removed; the admission test rests on four traditions converging on one rule and on the record's own management by exception, already applied to options by the authority node; the `source` field rests on the segregation-of-duties reading the record already holds; the kickback rule is the author's, generalized to every collecting moment by the author's other clause; and the pin's strip rests on the parent's own reasoning for `facts` and for `against`. Moderate boldness: the disposition, the five collecting moments, the kickback and the hiding are the author's words; the term, the seven fields, the three limbs, the cap of three, the count on the stage chip, the strip from the browser's serialization and the two amendments elsewhere are the AI's, each grounded in a rule of the record or in a tradition recorded above. What rests on the AI's knowledge alone is the number three, which no measurement supports, and the empirical claim that context makes a model less likely to ask, which is read from a literature and not from this record. The divergence the author meets first is from their own words: the count of open probes on the node's stage chip is presented in the alignment ui in the plain sense of "These questions are not presented in the alignment ui", and `nothing-on-the-page` is their literal reading, viable on the fact and theirs to rule for.
+```
 
 #### probes-per-fact
 
 The list held inside each fact, as a key beside that fact's `options`, `recommends` and `against`, so that a probe is attached to the decision it blocks by where it is written rather than by a field. What it would answer: the questions are recorded per fact, which is the second reading the author's words admit. Passed over because a node at the periagogic stage carries no facts at all, and the periagoge is the first moment the author names as collecting; the shape cannot hold the first probe it is asked to hold, and a probe on the node's ground has no fact to sit on at any stage. It is also the shape that invites a probe per decision, which the cap exists to refuse.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+The list held inside each fact, as a key beside that fact's `options`, `recommends` and `against`, so that a probe is attached to the decision it blocks by where it is written rather than by a field. What it would answer: the questions are recorded per fact, which is the second reading the author's words admit. Passed over because a node at the periagogic stage carries no facts at all, and the periagoge is the first moment the author names as collecting; the shape cannot hold the first probe it is asked to hold, and a probe on the node's ground has no fact to sit on at any stage. It is also the shape that invites a probe per decision, which the cap exists to refuse.
+```
+
 #### a-node-per-probe
 
 Each probe minted as a node of its own under the node it blocks, and entered in that node's `depends`, which the validator already checks and which already orders the author's queue; the record needs no new field, and the fifteenth frontier validation already requires exactly this. What it would answer: a node carries no probes, because a probe is a node. Passed over because a node is a question with a standing answer, a form among the five, and a class a ruling confers, and a probe's answer is none of those: it binds nothing, stands nowhere, and has no form. Minting one puts the disambiguation on the alignment page as a row of its own in the ruling order, which is the one place the author's words exclude it from, and asks the author for a ruling where what is wanted is an answer. The distinction the option depends on is kept and not discarded: a question whose answer would be a disposition is still a node, which is the admission test's third limb.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+Each probe minted as a node of its own under the node it blocks, and entered in that node's `depends`, which the validator already checks and which already orders the author's queue; the record needs no new field, and the fifteenth frontier validation already requires exactly this. What it would answer: a node carries no probes, because a probe is a node. Passed over because a node is a question with a standing answer, a form among the five, and a class a ruling confers, and a probe's answer is none of those: it binds nothing, stands nowhere, and has no form. Minting one puts the disambiguation on the alignment page as a row of its own in the ruling order, which is the one place the author's words exclude it from, and asks the author for a ruling where what is wanted is an answer. The distinction the option depends on is kept and not discarded: a question whose answer would be a disposition is still a node, which is the admission test's third limb.
+```
 
 #### an-account-section
 
 The probes kept where they are, in `## Account`, under a heading the record fixes, `### Probes outstanding` and `### Probe answered`, which two nodes already improvise; nothing is added to the encoding and the state machine the accounts have invented is simply named. What it would answer: a node carries its probes in prose, in the account, under a defined heading. Passed over because the alignment page renders the account as a drill-down unconditionally, so the author's constraint is met only by a projection that decides what to hide by matching the text of a heading, which the prose-and-structure node names as unsupported implementation and which the same node's rule against prose that enumerates what a projection could render forbids from the other direction. It also leaves the admission test with nothing to check and the `source` with nowhere to live, so a reader's probe stays the drafting session's to reword.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+The probes kept where they are, in `## Account`, under a heading the record fixes, `### Probes outstanding` and `### Probe answered`, which two nodes already improvise; nothing is added to the encoding and the state machine the accounts have invented is simply named. What it would answer: a node carries its probes in prose, in the account, under a defined heading. Passed over because the alignment page renders the account as a drill-down unconditionally, so the author's constraint is met only by a projection that decides what to hide by matching the text of a heading, which the prose-and-structure node names as unsupported implementation and which the same node's rule against prose that enumerates what a projection could render forbids from the other direction. It also leaves the admission test with nothing to check and the `source` with nowhere to live, so a reader's probe stays the drafting session's to reword.
+```
+
 #### an-option-on-the-fact
 
 Each probe folded into the fact it bears on, as an option with its `source` and its `ref`, which is the record's one named route for something the AI needs the author on and is what the review finding of 2026-09-03 asked for and got on the `review` node. What it would answer: a node carries no probes, because a probe is an option. Passed over because an option is a candidate answer and a probe has none: the coverage node's own census says of its four questions that they are open questions with no candidate answer and therefore not alternatives, and manufacturing a candidate so that the question has somewhere to sit records an option the AI does not hold viable, which the viable-options node forbids. The record holds the instance and not only the argument: the two options that finding produced, `cap-from-contract-class` and `graph-landing-instrument`, each end by saying the node's account puts the matter to the author at ratification, and the author classified them on 2026-09-04 as maieutic questions and not facts for the alignment artifact. The option is also unavailable at the periagogic and maieutic stages, where a node has no facts.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+Each probe folded into the fact it bears on, as an option with its `source` and its `ref`, which is the record's one named route for something the AI needs the author on and is what the review finding of 2026-09-03 asked for and got on the `review` node. What it would answer: a node carries no probes, because a probe is an option. Passed over because an option is a candidate answer and a probe has none: the coverage node's own census says of its four questions that they are open questions with no candidate answer and therefore not alternatives, and manufacturing a candidate so that the question has somewhere to sit records an option the AI does not hold viable, which the viable-options node forbids. The record holds the instance and not only the argument: the two options that finding produced, `cap-from-contract-class` and `graph-landing-instrument`, each end by saying the node's account puts the matter to the author at ratification, and the author classified them on 2026-09-04 as maieutic questions and not facts for the alignment artifact. The option is also unavailable at the periagogic and maieutic stages, where a node has no facts.
+```
 
 #### questions-as-the-term
 
 Everything the recommendation says, with the field named `questions` and the word left undefined, on the ground that the author's own word is the plainest and that the record should not mint vocabulary to describe what the author asked for in ordinary English. What it would answer: the same answer, in the author's word. Passed over because "question" is defined once, on the node node, as one line someone could ask the author, and this node's parent gives it a second sense under `aspects-are-nodes`, a decision the author would rule on separately; a third sense would be used by a node with no path to the one defining the term, which the eleventh frontier validation forbids, and would sit on the same node as `depends`, which the parent describes as the open questions whose rulings this one waits on, so that one node would carry two fields of open questions in two senses. The cost of keeping the word is that collision, on the record's own validation, at the node that would carry both.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+Everything the recommendation says, with the field named `questions` and the word left undefined, on the ground that the author's own word is the plainest and that the record should not mint vocabulary to describe what the author asked for in ordinary English. What it would answer: the same answer, in the author's word. Passed over because "question" is defined once, on the node node, as one line someone could ask the author, and this node's parent gives it a second sense under `aspects-are-nodes`, a decision the author would rule on separately; a third sense would be used by a node with no path to the one defining the term, which the eleventh frontier validation forbids, and would sit on the same node as `depends`, which the parent describes as the open questions whose rulings this one waits on, so that one node would carry two fields of open questions in two senses. The cost of keeping the word is that collision, on the record's own validation, at the node that would carry both.
+```
+
 #### probes-shown-in-full
 
 Everything the recommendation says, with the probes rendered on the alignment page under the fact each bears on, with a control for the author to answer each in place, which is what the two readings under that node hold and what the record did once already when it killed the boldness fold there. What it would answer: the probes are asked wherever the author is, the page included. Passed over because the ruling stage opens three responses, confirm, confirm with edits, and deny with feedback, and none of them answers a probe, so a probe on the ruling screen is an ask with no channel: the author's answer would be recorded as a ruling or not at all, and an answer recorded as a ruling is the rubber stamp the record's whole guard is against. It is also excluded by the author's words of 2026-09-04.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+Everything the recommendation says, with the probes rendered on the alignment page under the fact each bears on, with a control for the author to answer each in place, which is what the two readings under that node hold and what the record did once already when it killed the boldness fold there. What it would answer: the probes are asked wherever the author is, the page included. Passed over because the ruling stage opens three responses, confirm, confirm with edits, and deny with feedback, and none of them answers a probe, so a probe on the ruling screen is an ask with no channel: the author's answer would be recorded as a ruling or not at all, and an answer recorded as a ruling is the rubber stamp the record's whole guard is against. It is also excluded by the author's words of 2026-09-04.
+```
+
 #### nothing-on-the-page
 
-Everything the recommendation says, with nothing at all reaching the alignment page, neither the probes nor the count nor any mark that any are open, which is the author's clause read literally. What it would answer: the probes are the maieutic session's and the page shows no trace of them. It is on the table because it is the author's own words unqualified and because the counter-tradition to the informed-consent reading is real: each thing added to a decision screen degrades everything else on it, and a count the author cannot act on from the page is exactly the kind of addition that tradition warns about. Against it: the page asks the author for their intention at the maieutic stage, and an author writing into that control with three probes open and no sign of them is answering questions they cannot see; and a recommendation formed while the AI could not ground it is something the decider would attach significance to, on the informed-consent reading's own test.
+Everything the recommendation says, with nothing at all reaching the alignment page, neither the probes nor the count nor any mark that any are open, which is the author's clause read literally. What it would answer: the probes are the maieutic session's and the page shows no trace of them. It is on the table because it is the author's own words unqualified and because the counter-tradition to the informed-consent reading is real: each thing added to a decision screen degrades everything else on it, and a count the author cannot act on from the page is exactly the kind of addition that tradition warns about.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: the page asks the author for their intention at the maieutic stage, and an author writing into that control with three probes open and no sign of them is answering questions they cannot see; and a recommendation formed while the AI could not ground it is something the decider would attach significance to, on the informed-consent reading's own test.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+Everything the recommendation says, with nothing at all reaching the alignment page, neither the probes nor the count nor any mark that any are open, which is the author's clause read literally. What it would answer: the probes are the maieutic session's and the page shows no trace of them. It is on the table because it is the author's own words unqualified and because the counter-tradition to the informed-consent reading is real: each thing added to a decision screen degrades everything else on it, and a count the author cannot act on from the page is exactly the kind of addition that tradition warns about.
+```
 
 #### no-stated-cap
 
-Everything the recommendation says, with the admission test and nothing else bounding the list: a probe is admitted on the three limbs, and if seven survive the test then seven is what the node honestly holds. What it would answer: the list is bounded by what earns a place and never by a number. It is on the table because a number is arbitrary where a test is principled, and because a cap that bites forces the AI to drop a probe that passed the test, which is a real loss the answer should not pretend away. Against it: the party applying the test is the party whose recommendation the probes would unsettle, so a test with no ceiling is a test the asker grades itself on; and the hazard the cap is against is not that the author refuses to answer eleven probes but that the answers degrade as the list runs on, worst at the end, and a satisficed answer is indistinguishable in this record from a considered one and authoritative afterwards.
+Everything the recommendation says, with the admission test and nothing else bounding the list: a probe is admitted on the three limbs, and if seven survive the test then seven is what the node honestly holds. What it would answer: the list is bounded by what earns a place and never by a number. It is on the table because a number is arbitrary where a test is principled, and because a cap that bites forces the AI to drop a probe that passed the test, which is a real loss the answer should not pretend away.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: the party applying the test is the party whose recommendation the probes would unsettle, so a test with no ceiling is a test the asker grades itself on; and the hazard the cap is against is not that the author refuses to answer eleven probes but that the answers degrade as the list runs on, worst at the end, and a satisficed answer is indistinguishable in this record from a considered one and authoritative afterwards.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+Everything the recommendation says, with the admission test and nothing else bounding the list: a probe is admitted on the three limbs, and if seven survive the test then seven is what the node honestly holds. What it would answer: the list is bounded by what earns a place and never by a number. It is on the table because a number is arbitrary where a test is principled, and because a cap that bites forces the AI to drop a probe that passed the test, which is a real loss the answer should not pretend away.
+```
 
 #### reconciliation-passes-an-option-over
 
@@ -243,6 +389,33 @@ passing an option over and lifting a status the AI wrote. The viable-options
 node's recommended answer of 2026-09-05 gives all three, and this clause cites
 that node while enumerating fewer acts than it grants; the citation is the
 right shape and only the list is short.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+The clause 'Reconciliation and the loop on itself reach a node today only as
+the viable-options node allows, to record an option and to move a
+recommendation within scope' naming three acts rather than two, the third being
+passing an option over and lifting a status the AI wrote. The viable-options
+node's recommended answer of 2026-09-05 gives all three, and this clause cites
+that node while enumerating fewer acts than it grants; the citation is the
+right shape and only the list is short.
+```
 
 #### the-sitting-stops-only-on-intent
 
@@ -275,6 +448,54 @@ The evidence is the sitting it was said in. The session reported a clean-context
 reading's verdict, its findings and its cost to the author, and asked whether to
 run the next one, none of which is a question about what the author intends.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+Everything the recommended option says, with one rule added about when a sitting
+returns to the author at all. The author's words of 2026-09-06: a sitting stops
+for the author only where there is a question about the author's intent, which is
+what the maieutic movement is for; everything else — the mechanical and the
+encoding defects of the record, the instruments the sitting runs, the readings
+and what they return — the sitting corrects and proceeds through without asking.
+The author's fuller words of the same day fix the three surfaces the dialogue
+has and no fourth: the periagogic movement establishes common grounding, the
+maieutic clarifies ambiguities in the author's intent, and the alignment artifact
+takes the confirmation of a disposition's facts. `growth` carries that statement
+as `the-dialogue-is-grounding-intent-and-confirmation`, since the conduct of the
+two movements is its answer; what this node adds is the consequence for a probe.
+
+Under this option the probe is not merely the form a question to the author takes
+but the only occasion for one, so a session that has no probe to raise has nothing
+to stop for, and reporting an instrument's state to the author, or offering them a
+choice about running one, is a deviation of the same kind as putting the AI's
+account before theirs.
+
+It bears on this node because the record already says where the author is asked,
+the maieutic session, and says what may be asked, a probe on three limbs. What it
+does not say is that nothing else may interrupt them, and the author's words say
+so. It also reaches `growth`, whose conduct describes the two movements, and
+`decomposition`, whose seams say which work is a unit; neither is amended here.
+
+The evidence is the sitting it was said in. The session reported a clean-context
+reading's verdict, its findings and its cost to the author, and asked whether to
+run the next one, none of which is a question about what the author intends.
+```
+
 #### cap-warned-by-the-instrument
 
 The recommended answer with the cap counted rather than merely bound: the cap
@@ -292,6 +513,41 @@ author's, and that a session may write past the warning and record nothing about
 having done so. It is here and not recommended because the choice between a bound
 the movement keeps and a bound the instrument counts is the author's. Raised by
 the second clean-context reading of 2026-09-05, as its counter-argument.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+The recommended answer with the cap counted rather than merely bound: the cap
+stays three and stays a bound on the movement, and `apply.mjs`, the one actor
+that sees every probe a reading returns and writes it into the node, emits a
+non-fatal message when a write would leave a node above it. It answers this
+node's own case against exactly, which is that the one quantitative bound this
+answer puts on the author's attention is the one part of it nothing enforces:
+the reader is asked to count, each reading sees only the node it was handed, and
+a survey's probe lands on nodes no reading is judging. The precedent is in the
+same file, which already warns non-fatally at the record's other cap. What the
+answer refuses is making the cap a parse error, and a warning is not that; what
+it costs is that the instrument acquires a judgment about attention, which is the
+author's, and that a session may write past the warning and record nothing about
+having done so. It is here and not recommended because the choice between a bound
+the movement keeps and a bound the instrument counts is the author's. Raised by
+the second clean-context reading of 2026-09-05, as its counter-argument.
+```
 
 #### cites-turn-form-for-the-three-surfaces
 
@@ -311,6 +567,42 @@ found that node's claim to state the rule once contradicted by this one; it is
 recorded here so the amendment is ruled and not discovered, and it is not adopted
 because this node is at the ruling stage and its recommendation does not move
 before the author has ruled on it.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+Everything the recommended option says, with `the-sitting-stops-only-on-intent`
+citing `commons.systems/disposition-graph/turn-form` for the three surfaces and
+the four forms instead of restating them. That option today carries the author's
+fuller words of 2026-09-06 in full — the three surfaces the dialogue has and no
+fourth, the periagogic movement, the maieutic movement and the alignment artifact
+— and `turn-form` was minted on 2026-09-07 to hold that rule and the four forms a
+turn addressed to the author takes, so the rule is now written in two places and
+would be ruled in two. Under this option the option keeps what is this node's, the
+consequence for a probe, that a sitting stops for the author only where there is a
+question about their intent and a session with no probe to raise has nothing to
+stop for, and cites `turn-form` for the surfaces and the forms themselves. Raised
+by the clean-context reading of `turn-form` of 2026-09-07, whose first finding
+found that node's claim to state the rule once contradicted by this one; it is
+recorded here so the amendment is ruled and not discovered, and it is not adopted
+because this node is at the ruling stage and its recommendation does not move
+before the author has ruled on it.
+```
 
 #### promoted-question-placed-by-its-own-question
 
@@ -341,6 +633,52 @@ same correction is made in the text `commons.systems/disposition-graph/probe-or-
 recommends, whose own clause repeated it. Raised by the clean-context reading of
 2026-09-07 on that node.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+The recommended answer with the third limb's placement clause corrected. That
+limb says today that a question whose answer would stand as an answer to a
+question of the record "is a node, minted under the node it blocks and entered in
+that node's `depends`, where the fifteenth frontier validation already puts it".
+Under this option a promoted question is minted where its own question belongs,
+which is what it refines, and is entered in the blocked node's `depends`: the
+blocking relation is what `depends` records, and `under` records what a node
+refines, so the two edges answer different questions and the clause conflates
+them. Placing a promoted question beneath whatever node happened to be blocked is
+placement by accident of discovery.
+
+The case is the record's own act. `commons.systems/disposition-graph/graph-topology`
+was minted on 2026-09-07 as the promotion of a question blocking
+`commons.systems/disposition-graph/probe-or-node`, and it stands under
+`commons.systems/disposition-graph/authority`, not under the node it blocks,
+because "What may the recorder do to the graph's topology without asking?"
+refines the authority question and not "When is an open question a probe, an
+option, or a node?"; it is entered in that node's `depends`. The sitting that
+wrote the clause did the opposite of it in the same movement, which is the
+sharpest evidence a rule can have against itself.
+
+Viable and not adopted. This node is at the ruling stage and its recommendation
+does not move, so the option is recorded for the author to meet at the row; the
+same correction is made in the text `commons.systems/disposition-graph/probe-or-node`
+recommends, whose own clause repeated it. Raised by the clean-context reading of
+2026-09-07 on that node.
+```
+
 ### authority
 
 Ratified, at low boldness. The record escalates toward ratified where being wrong is expensive, irreversible or capture-shaped, and this node is capture-shaped on its face: it settles what the AI may put to the author, how much of the author's attention the record may spend, and what is kept off the author's ruling screen. A delegation covering the class of decision below this node would cover raising the cap, widening the admission test and moving the line on what the page shows, which is the AI writing its own licence to ask, and the authority node's rule that a class the AI writes for itself is not a grant is the same failure one step removed. Deferred is on the fact because the record's classes are three; it is not recommended because the author has already granted this reconciliation, so the recommendation acts under the grant whichever way the fact is ruled, and what the ruling settles is whether the instrument is doctrine.
@@ -353,9 +691,17 @@ The recommendation declares no shim, and is carried past the dialogue node's rul
 
 This node declares one shim over the probes carried as prose on the nodes that held them, liquidated when the reader parses `probes` and a maieutic movement on each of those nodes has ranked what it carries against the admission test and the cap, written the survivors into the field, discharged the rest with a reason, and removed the prose. It was the recommendation as drafted, and it was struck on 2026-09-04 when the migration the author ordered performed exactly that liquidation inside this sitting. What it would answer: the node declares a stand-in while the prose is still the probes' home. The transience node's argument was its case while the prose stood: the prose on eight nodes carried the probes the field is for, would have been read by every session until the reader parsed the field, and without a declaration would have become the permanent home of the thing this answer says lives elsewhere. Passed over because the prose is no longer their home.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### without it
 
 This node declares no shim, because nothing stands in for the field any longer. The author ordered the migration as part of this node's reconciliation and it ran on 2026-09-04: three units read all 125 nodes then in the record in full, twenty probes were written into the field on twelve nodes at the migration, and what remains as prose on those nodes is not a probe but the account of the movement that raised it, which is what an account is for. The prose that did carry probes is gone from `viable-options` and from `review`. What this costs is the liquidation condition a shim would have carried: the record now says when each piece of prose went only in the account of the node it went from, and a reader who wants the whole migration in one place reads it here.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 ## Account
 
@@ -1210,3 +1556,7 @@ Findings:
 Strongest counter-argument (strong): The record already carries every function of this field in the accounts, and the failure the field cannot see is the one that matters: the probe a drafting session did not raise because it liked its recommendation is exactly as invisible in a structured list as in prose, because the same session writes both. This survey measured the field's first day of use: fourteen of one hundred and forty-two nodes carry a `probes` block, the maximum open count anywhere is three (on `coverage` and on `dialogue`), and the cap the answer spends most of a paragraph defending has therefore never bound. What was bought is a frontmatter key, a term, a change to what the pin strips, a branch in the applying script and an amendment to the fifteenth validation; what was demonstrated in a day of use is a list on a tenth of the record whose limiting rule is inert.
 
 The session's reply: Taken, and the measurement is the reply's own evidence against it: fourteen nodes of a hundred and forty-two carry a `probes` block, the maximum open count is three, and the cap the answer defends at length has never bound. The session does not withdraw the field, because the failure the counter-argument names — the probe a drafting session did not raise — is not made worse by the field, and this survey raised two probes on nodes whose drafting sessions did not. What is owed is that the cap's defence come out of the answer until something makes it bind, since a rule that has never applied is being ratified on its rationale alone.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/author-questions stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `probes-on-the-node`; the `## Rationale` its `**AI support.**`; 9 `## Disposition` entries became the ledger entries words/2026-09-04/15, words/2026-09-04/16, words/2026-09-04/17, words/2026-09-04/18, words/2026-09-04/19, words/2026-09-04/20, words/2026-09-04/21, words/2026-09-06/4, words/2026-09-06/5, referenced by 16 options the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `probes-per-fact`, `a-node-per-probe`, `an-account-section`, `an-option-on-the-fact`, `questions-as-the-term`, `probes-shown-in-full`, `nothing-on-the-page`, `no-stated-cap`, `reconciliation-passes-an-option-over`, `the-sitting-stops-only-on-intent`, `cap-warned-by-the-instrument`, `cites-turn-form-for-the-three-surfaces`, `promoted-question-placed-by-its-own-question`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `a94fb70c5d5bf96f23c30127610d81148537a7f1` was already past the recommendation and is left as it stood. The survey's pin `3e9ece922ab3f53c55b88a5d838c4e0b0685993e` is re-computed for the encoding as `9749b8797588c491c907ecc73acf59d6c486e0b3`; nothing it read changed.

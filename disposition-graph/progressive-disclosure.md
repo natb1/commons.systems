@@ -18,7 +18,6 @@ facts:
     recommends: adopted-on-the-levels-diverged-on-the-fold
     boldness: moderate
     against: "The tradition's criterion is frequency and importance of use across readers, which a page with one reader cannot measure, so the divergence recorded on the fold may be a divergence in name only: the tradition applied to one reader has nothing it can say to defer, and a reading that records a divergence where the tradition is silent overstates what the author decided against."
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -35,7 +34,7 @@ review:
   against: "The half the reading calls adopted may be the empty half. What the page keeps of progressive disclosure is that a row has two levels and the second is reachable, which the author specified in their own words on 2026-09-04 before any tradition was consulted, and the criterion the page uses for that split, what is needed to choose against what is needed to check, is not the tradition's frequency and importance of use; strip the criterion and what remains is generic enough to be true of almost any interface, so calling it an adoption lends the tradition's name to a shape it did not supply. On that view the honest relation is `diverged` outright, with the convergence on shape recorded as convergence, and the record loses nothing but a chip. The reply available is that the never-lost rule is a real holding the page does follow and that a discoverable second level is exactly what the tradition names; but that holding is carried on this record by Krug and by hansard-verbatim-record as well, so it is over-determined, and this reading is now on its third drawing of the same two sources in two days, each fitted to whatever the page's text said at the time. That is the pattern a delegated class makes cheap and a deferred class exists to stop, which is why the `deferred` option beside it is more live than the fact's prose allows."
   survey:
     date: 2026-09-07
-    of: fcf3e2d522b3ebdeedd6150afe25e55daca94d81
+    of: c1fb82bc0a2c71a1b24f6fc1af0efb1e5e0a6404
 form: reading
 under:
   - commons.systems/disposition-graph/alignment-page
@@ -52,6 +51,43 @@ bears:
     option: term-at-the-first-level
     relation: diverged
 ---
+
+## Facts
+
+### answer
+
+`adopted-on-the-levels-diverged-on-the-fold` is recommended because it records what the tradition holds and what the page does without lending the tradition's name to either side: the two levels of each option row and the never-lost rule are adopted, and the fold the tradition would make by frequency and importance of use is refused on the author's words of 2026-09-04, "List each fact without exceptions. For each fact, list all options.", a divergence the evaluation node's rule records as the author's decision, which the tradition cannot overrule. The clean-context reading of 2026-09-05 found the option beside it saying the record diverges from the tradition nowhere, when deferring the rarely used options is the tradition's own holding and not a gloss on it. Moderate boldness: the tradition's content is the AI's reading of the sources, which the author has not read, and the divergence rests on their words. The case against is on the fact.
+
+#### standing
+
+Supports the shape and does not supply the rule.
+
+**AI support.** Recorded in the maieutic movement on the alignment page, 2026-09-04, as the tradition pass that node's evaluation requires. The author used the term in the disposition that opened the sitting, so the tradition entered in their words and not the AI's. Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does progressive disclosure say about which decisions the page asks and which it folds?
+form: reading
+under:
+  - commons.systems/disposition-graph/alignment-page
+source: Nielsen, Usability Engineering (1993), chapter 5, Usability Heuristics, the first of them, simple and natural dialogue ("less is more"), where progressive disclosure is set out; and "Progressive Disclosure" (Nielsen Norman Group, 2006); Carroll, The Nurnberg Funnel (1990), the minimalist instruction programme it descends from; Krug, Don't Make Me Think (2000), the second law and the trunk test.
+bears:
+  - fact: answer
+    option: three-column-ruling-screen
+    relation: adopted
+  - fact: answer
+    option: every-fact-every-option
+    relation: adopted
+  - node: commons.systems/disposition-graph/vocabulary-option-summary
+    fact: answer
+    option: term-at-the-first-level
+    relation: diverged
+---
+
 ## Answer
 
 Supports the shape and does not supply the rule. The tradition holds three things: that an interface shows the few things its reader needs most of the time and puts the rest one step away; that the split is made by frequency and importance and not by the designer's sense of tidiness; and that what is deferred must stay discoverable and must never be lost. The alignment page adopts all three. The decisions this ruling asks are the first level, the author's words and the full text sit one step beneath each row, and nothing folded is lost, because every folded decision is present in the node the right-hand column renders.
@@ -59,16 +95,7 @@ Supports the shape and does not supply the rule. The tradition holds three thing
 The divergence is on the criterion for the split, and it is deliberate. The tradition splits by what most readers need most of the time, a frequency this page cannot know and would have to guess. The record splits by boldness, its own recorded measure of how much of a decision rests on the AI's own knowledge against the record. That is a property of the decision rather than of the reader, and it is the stronger criterion here for a reason particular to this page: it has one reader, so frequency across readers means nothing, and what actually varies from decision to decision is not the author's habit but the AI's warrant for having decided it.
 
 The divergence has a consequence the tradition would warn about and the record accepts. Under frequency, what is folded is what the reader rarely wants; under boldness, what is folded is what the AI is surest of, which may be exactly what the author would have questioned. The record answers it the way the tradition asks, by never losing the folded thing: the whole node, folded decisions included, is what the right-hand column renders and what the final rejection rejects.
-
-## Rationale
-
-Recorded in the maieutic movement on the alignment page, 2026-09-04, as the tradition pass that node's evaluation requires. The author used the term in the disposition that opened the sitting, so the tradition entered in their words and not the AI's. Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
-
-## Facts
-
-### answer
-
-`adopted-on-the-levels-diverged-on-the-fold` is recommended because it records what the tradition holds and what the page does without lending the tradition's name to either side: the two levels of each option row and the never-lost rule are adopted, and the fold the tradition would make by frequency and importance of use is refused on the author's words of 2026-09-04, "List each fact without exceptions. For each fact, list all options.", a divergence the evaluation node's rule records as the author's decision, which the tradition cannot overrule. The clean-context reading of 2026-09-05 found the option beside it saying the record diverges from the tradition nowhere, when deferring the rarely used options is the tradition's own holding and not a gloss on it. Moderate boldness: the tradition's content is the AI's reading of the sources, which the author has not read, and the divergence rests on their words. The case against is on the fact.
+```
 
 #### discloses-detail-not-decisions
 
@@ -90,15 +117,50 @@ named. (Raised on commons.systems/disposition-graph/alignment-page, in the
 tradition pass of 2026-09-04, which found this reading's divergence falsified
 by the author's words: "List each fact without exceptions.") Passed over on 2026-09-05: its sentence that the record diverges from the tradition nowhere lends the tradition's name to a design the tradition would not prescribe, since Nielsen defers the advanced or rarely used options to a second display and the page defers none.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does progressive disclosure say about which decisions the page asks and which it folds?
+form: reading
+under:
+  - commons.systems/disposition-graph/alignment-page
+source: Nielsen, Usability Engineering (1993), chapter 5, Usability Heuristics, the first of them, simple and natural dialogue ("less is more"), where progressive disclosure is set out; and "Progressive Disclosure" (Nielsen Norman Group, 2006); Carroll, The Nurnberg Funnel (1990), the minimalist instruction programme it descends from; Krug, Don't Make Me Think (2000), the second law and the trunk test.
+bears:
+  - fact: answer
+    option: three-column-ruling-screen
+    relation: adopted
+  - fact: answer
+    option: every-fact-every-option
+    relation: adopted
+  - node: commons.systems/disposition-graph/vocabulary-option-summary
+    fact: answer
+    option: term-at-the-first-level
+    relation: diverged
+---
+
+## Answer
+
+Supports the shape and does not supply the rule. The tradition holds three things: that an interface shows the few things its reader needs most of the time and puts the rest one step away; that the split is made by frequency and importance and not by the designer's sense of tidiness; and that what is deferred must stay discoverable and must never be lost. The alignment page adopts all three. The decisions this ruling asks are the first level, the author's words and the full text sit one step beneath each row, and nothing folded is lost, because every folded decision is present in the node the right-hand column renders.
+
+The divergence is on the criterion for the split, and it is deliberate. The tradition splits by what most readers need most of the time, a frequency this page cannot know and would have to guess. The record splits by boldness, its own recorded measure of how much of a decision rests on the AI's own knowledge against the record. That is a property of the decision rather than of the reader, and it is the stronger criterion here for a reason particular to this page: it has one reader, so frequency across readers means nothing, and what actually varies from decision to decision is not the author's habit but the AI's warrant for having decided it.
+
+The divergence has a consequence the tradition would warn about and the record accepts. Under frequency, what is folded is what the reader rarely wants; under boldness, what is folded is what the AI is surest of, which may be exactly what the author would have questioned. The record answers it the way the tradition asks, by never losing the folded thing: the whole node, folded decisions included, is what the right-hand column renders and what the final rejection rejects.
+```
+
 #### adopted-on-the-levels-diverged-on-the-fold
 
 The tradition's shape and its never-lost guarantee are adopted, and its criterion, frequency and importance of use, is where the record departs: the tradition would defer the rarely used options, and the author's words put every fact and every option at the first level, while within a row the page splits by what is needed to choose against what is needed to check, which is not the tradition's criterion either. The divergence is recorded as the author's, in one `bears` entry on the alignment page's option carrying `diverged`, the record's convention being a net relation per option with the nuance in the answer; and the reading no longer says what each level carries, which is `what-an-option-row-carries`' question. Raised by the clean-context reading of 2026-09-05 as the option the reading found missing and not dominated.
 
-### authority
+**AI support.** Recorded in the maieutic movement on the alignment page, 2026-09-04, as the tradition pass that node's evaluation requires; redrawn the same day when the author's words, "List each fact without exceptions", withdrew the split of decisions the first reading defended, whose three paragraphs argued a boldness-based fold the tradition had not prescribed; and redrawn on 2026-09-05 when its clean-context reading found the second drawing had lent the tradition's name to a page that folds nothing, so the divergence on the fold is recorded as the author's. Nielsen's chapter and article carry the shape and the criterion, the chapter under the first of the 1993 heuristics and not under the aesthetic and minimalist design of the 1994 revision, which is where an earlier drawing of this node sent a checker; Carroll's minimalist instruction is the lineage of the shape, the training-wheels interface that shows less so that the reader does more; Krug supplies the guarantee, his second law that a click costs nothing so long as it is a mindless and unambiguous choice, with the trunk test for whether the second level can be found. The author used the term in the disposition that opened the sitting, so the tradition entered in their words and not the AI's, and the two-level row is in those words as well, which is why the adopted half is agreement and not adoption. Validated by the AI from its own knowledge of the sources: delegated, the class the record's practice confers on a reading whose relation is the AI's and whose sources the author has not read, with deferred beside it as the option the author takes if they want the reading held until they have.
 
-Delegated, the class the record's practice confers where the relation is the AI's from its own knowledge of the sources and the author has not read them. The census that stood in this sentence, that every reading on the record recommends it, is false: of the 59 nodes carrying `form: reading`, 57 recommend delegated, `srs-introduction` recommends deferred, and `npm-committed-lockfile` carries the fact with no recommendation at the periagogic stage. The `deferred` option beside it is what the account asks for, the reading held until the author reads the sources, and it is the author's to take. Moderate boldness: the class follows the record's practice for readings, and the divergence this reading now records is on the author's own words.
+**AI divergence.** The tradition's criterion is frequency and importance of use across readers, which a page with one reader cannot measure, so the divergence recorded on the fold may be a divergence in name only: the tradition applied to one reader has nothing it can say to defer, and a reading that records a divergence where the tradition is silent overstates what the author decided against.
 
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -126,11 +188,11 @@ Supports the page's two levels and is overruled on the criterion, by the author.
 The page adopts the shape and the guarantee on the object the tradition is about, the two levels of each option row: the first level is what the page puts on the row and the second is what it opens beneath it, one step down and never lost. What each level carries is not this reading's to fix and not the alignment page's either; it is the question of `commons.systems/disposition-graph/what-an-option-row-carries`, which the page's own text devolves it to and which stands at the periagogic stage on the author's words.
 
 On the criterion the page diverges, and the divergence is the author's, at both grains the criterion would govern. It governs which decisions are asked, and the author's words of 2026-09-04 put every fact and every option at the first level: "List each fact without exceptions. For each fact, list all options." It governs what sits at each level of a row, and there the page's criterion is its own, "what is needed to choose against what is needed to check", which is not frequency of use either. So the page keeps the tradition's shape and takes its criterion from nowhere in the tradition. The two-level row is in the author's words too — "For each option ... provide short text summary of option and/or rationale" with the AI's reasoning moved "to the details area for each option" — so what is adopted is the tradition agreeing with a shape the author had already given, and not a rule the page took from it. The reason the criterion cannot travel here is that a decision put to the author is not a detail whose frequency of use could be measured, the page having one reader. The fold rule this reading was first cited for, which withheld the decisions the AI was surest of, was a default and not disclosure, and the tradition did not prescribe it either: it defers by use and never by the designer's confidence.
-
-## Rationale
-
-Recorded in the maieutic movement on the alignment page, 2026-09-04, as the tradition pass that node's evaluation requires; redrawn the same day when the author's words, "List each fact without exceptions", withdrew the split of decisions the first reading defended, whose three paragraphs argued a boldness-based fold the tradition had not prescribed; and redrawn on 2026-09-05 when its clean-context reading found the second drawing had lent the tradition's name to a page that folds nothing, so the divergence on the fold is recorded as the author's. Nielsen's chapter and article carry the shape and the criterion, the chapter under the first of the 1993 heuristics and not under the aesthetic and minimalist design of the 1994 revision, which is where an earlier drawing of this node sent a checker; Carroll's minimalist instruction is the lineage of the shape, the training-wheels interface that shows less so that the reader does more; Krug supplies the guarantee, his second law that a click costs nothing so long as it is a mindless and unambiguous choice, with the trunk test for whether the second level can be found. The author used the term in the disposition that opened the sitting, so the tradition entered in their words and not the AI's, and the two-level row is in those words as well, which is why the adopted half is agreement and not adoption. Validated by the AI from its own knowledge of the sources: delegated, the class the record's practice confers on a reading whose relation is the AI's and whose sources the author has not read, with deferred beside it as the option the author takes if they want the reading held until they have.
 ```
+
+### authority
+
+Delegated, the class the record's practice confers where the relation is the AI's from its own knowledge of the sources and the author has not read them. The census that stood in this sentence, that every reading on the record recommends it, is false: of the 59 nodes carrying `form: reading`, 57 recommend delegated, `srs-introduction` recommends deferred, and `npm-committed-lockfile` carries the fact with no recommendation at the periagogic stage. The `deferred` option beside it is what the account asks for, the reading held until the author reads the sources, and it is the author's to take. Moderate boldness: the class follows the record's practice for readings, and the divergence this reading now records is on the author's own words.
 
 ## Account
 
@@ -286,3 +348,7 @@ Findings:
 
 
 Strongest counter-argument (weak): The reading now carries `diverged` on a third option, vocabulary-option-summary's `term-at-the-first-level`, and its answer argues the row-level departure only in general — "the page's criterion is its own, 'what is needed to choose against what is needed to check', which is not frequency of use either" — without naming that node or that option. The fact's own case against bears harder on the third entry than on the first two, since what is deferred there is a definition rather than a decision, and a tradition whose criterion is frequency of use across readers has still less to say about a gloss the one reader has already learned.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/progressive-disclosure stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `adopted-on-the-levels-diverged-on-the-fold`; and `stands` left the answer fact. The content of `discloses-detail-not-decisions (at 7f9a807a)` was recovered from the commit at which the answer fact recommended it. The draft review's pin `60717dcd1da2f69112ef4394d97b6dd558e74d9d` was already past the recommendation and is left as it stood. The survey's pin `fcf3e2d522b3ebdeedd6150afe25e55daca94d81` is re-computed for the encoding as `c1fb82bc0a2c71a1b24f6fc1af0efb1e5e0a6404`; nothing it read changed.

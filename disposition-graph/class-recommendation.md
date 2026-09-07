@@ -21,7 +21,6 @@ facts:
         ref: "2026-09-05"
     recommends: escalate-toward-ratified
     boldness: high
-    stands: escalate-toward-ratified
     against: "The test decides which questions reach the author at all, and the party applying it is the party whose work a ratification would slow. Expensive, irreversible and capture-shaped are the AI's own reading of each node, applied on twenty of the record's 129 authority facts, counted by the three terms in a node's `### authority` prose, with no instrument behind it and no record of the reading anywhere but the node's authority-fact prose, so a systematic tilt toward delegated would be invisible in exactly the way the test exists to prevent."
   - name: authority
     options:
@@ -34,12 +33,12 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-05
-  of: 5d924981999cd48668b2d71e8a6287b31a766fbd
+  of: ef23296a96bb799b9cdd1d500652d172746aea3d
   commit: a85f29250ccfcc8a10192dc507a0f1a17de6c2c3
   against: "Three of the previous reading's five findings were findings about `.claude/rules/class-recommendation.md`, the text every session loads, and the amendment answers all three in the node while leaving the projection exactly as that reading found it: the file still says \"escalates toward ratified\", still carries the citation loop, and still states as the ground of a sentence in doctrine the general census rule that `authority` deliberately holds unruled as `no-census-in-a-standing-answer`. So on the day the author is asked to rule, the defect the amendment's own account calls \"the one that changes what a session does\" is still in front of every session, and the amendment's claim that those clauses now sit outside \"a text projected verbatim into `.claude/rules/`\" is true of the node and false of the file. Against that: the fix is a regeneration and not a redrawing. The answer as amended is the right text on all five findings, the two things the amendment adds of its own -- the rationale paragraph and the fifth option -- check out against the record, and what is owed is publication, which is why this is a finding and not a kickback."
   survey:
     date: 2026-09-05
-    of: 5d924981999cd48668b2d71e8a6287b31a766fbd
+    of: ef23296a96bb799b9cdd1d500652d172746aea3d
 form: rule
 tier: global
 under:
@@ -62,33 +61,33 @@ defines:
   - term: capture-shaped
     gloss: "Of a decision: that the party which would set the answer is the party the answer is meant to check."
 ---
-## Answer
+
+## Facts
+
+### answer
+
+`escalate-toward-ratified` is recommended at high boldness, which in this record
+means low confidence. The three limbs are the AI's, promoted from a shim and
+supported by no words of the author's; what is the author's is that they rule the
+class, which this answer does not touch. High rather than moderate because the
+only evidence that the rule works is prose the AI wrote, and because the guard
+this answer offers against its own case against, that the reading be written on
+the node, is met by twenty of the record's 129 authority facts on the criterion
+the account states, fifty-six of which carry no `### authority` prose at all.
+The case against is on the fact and the answer does not meet it. Four options are
+live beside the recommendation: `no-recommendation-on-the-authority-fact`,
+`class-follows-the-authors-words`, `form-decides-the-default`, which is what the
+record measurably already does, and `test-without-the-written-reading`, which
+keeps the three limbs and drops the guard the paragraph above concedes the record
+does not yet meet.
+
+#### escalate-toward-ratified
 
 The class the AI recommends on a node's authority fact is ratified where being
 wrong is expensive, irreversible, or capture-shaped, and is delegated or
 deferred otherwise; what it recommends is a recommendation and confers nothing.
 
-Expensive means the cost of a wrong answer is paid in work the record cannot
-take back cheaply. Irreversible means it is not paid back at all: a deletion, a
-swap, a landing that other work is built on. Capture-shaped means the party that
-would set the answer is the party the answer is meant to check.
-Where none of the three holds, the recommendation is delegated where the author
-has said they do not want to be asked again about that class of decision, and
-deferred otherwise.
-
-The reading that applies the test is written on the node, in the `### authority`
-subsection, which says which of the three limbs it found and why; a class
-recommended with no such reading behind it is a recommendation the reviewer may
-find unsupported. The requirement binds from this node's ruling and not before:
-the authority facts already recorded without such a reading are a reconciliation
-item on this node, and not a defect the reviewer reports on each of them. The
-back-fill is most of the record and is owed rather than assumed; the measure, the
-criterion it was taken on and the commit it was taken at are in this node's
-account.
-
-## Rationale
-
-The test was carried by `.claude/skills/align/SKILL.md` alone until 2026-09-04,
+**AI support.** The test was carried by `.claude/skills/align/SKILL.md` alone until 2026-09-04,
 a declared shim, while the authority fact of every node whose escalation rests on
 it cited it as the record's own; the `recording` node's reading found the
 citation empty, and it was recorded as an option on `authority` and absorbed into
@@ -119,24 +118,50 @@ definition, the clause above is complete without them, and `review-cost`'s own
 the answer would put the two texts in a loop inside the rule every session
 loads.
 
-## Facts
+**AI divergence.** The test decides which questions reach the author at all, and the party applying it is the party whose work a ratification would slow. Expensive, irreversible and capture-shaped are the AI's own reading of each node, applied on twenty of the record's 129 authority facts, counted by the three terms in a node's `### authority` prose, with no instrument behind it and no record of the reading anywhere but the node's authority-fact prose, so a systematic tilt toward delegated would be invisible in exactly the way the test exists to prevent.
 
-### answer
+**Content.**
 
-`escalate-toward-ratified` is recommended at high boldness, which in this record
-means low confidence. The three limbs are the AI's, promoted from a shim and
-supported by no words of the author's; what is the author's is that they rule the
-class, which this answer does not touch. High rather than moderate because the
-only evidence that the rule works is prose the AI wrote, and because the guard
-this answer offers against its own case against, that the reading be written on
-the node, is met by twenty of the record's 129 authority facts on the criterion
-the account states, fifty-six of which carry no `### authority` prose at all.
-The case against is on the fact and the answer does not meet it. Four options are
-live beside the recommendation: `no-recommendation-on-the-authority-fact`,
-`class-follows-the-authors-words`, `form-decides-the-default`, which is what the
-record measurably already does, and `test-without-the-written-reading`, which
-keeps the three limbs and drops the guard the paragraph above concedes the record
-does not yet meet.
+```markdown
+---
+question: What class does the AI recommend on a node's authority fact?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/authority
+defines:
+  - term: expensive
+    gloss: "Of a wrong answer: that its cost is paid in work the record cannot take back cheaply."
+  - term: irreversible
+    gloss: "Of a wrong answer: that its cost is not paid back at all, as with a deletion, a swap, or a landing that other work is built on."
+  - term: capture-shaped
+    gloss: "Of a decision: that the party which would set the answer is the party the answer is meant to check."
+---
+
+## Answer
+
+The class the AI recommends on a node's authority fact is ratified where being
+wrong is expensive, irreversible, or capture-shaped, and is delegated or
+deferred otherwise; what it recommends is a recommendation and confers nothing.
+
+Expensive means the cost of a wrong answer is paid in work the record cannot
+take back cheaply. Irreversible means it is not paid back at all: a deletion, a
+swap, a landing that other work is built on. Capture-shaped means the party that
+would set the answer is the party the answer is meant to check.
+Where none of the three holds, the recommendation is delegated where the author
+has said they do not want to be asked again about that class of decision, and
+deferred otherwise.
+
+The reading that applies the test is written on the node, in the `### authority`
+subsection, which says which of the three limbs it found and why; a class
+recommended with no such reading behind it is a recommendation the reviewer may
+find unsupported. The requirement binds from this node's ruling and not before:
+the authority facts already recorded without such a reading are a reconciliation
+item on this node, and not a defect the reviewer reports on each of them. The
+back-fill is most of the record and is owed rather than assumed; the measure, the
+criterion it was taken on and the commit it was taken at are in this node's
+account.
+```
 
 #### no-recommendation-on-the-authority-fact
 
@@ -149,6 +174,41 @@ to spend carefully, and it leaves the alignment page with a decision it cannot
 present in the form it presents every other, a recommendation and its boldness.
 Raised by the clean-context reading of `authority` on 2026-09-05, as the remedy
 its counter-argument points at.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What class does the AI recommend on a node's authority fact?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/authority
+defines:
+  - term: expensive
+    gloss: "Of a wrong answer: that its cost is paid in work the record cannot take back cheaply."
+  - term: irreversible
+    gloss: "Of a wrong answer: that its cost is not paid back at all, as with a deletion, a swap, or a landing that other work is built on."
+  - term: capture-shaped
+    gloss: "Of a decision: that the party which would set the answer is the party the answer is meant to check."
+---
+
+## Answer
+
+The AI recommends nothing on a node's authority fact and every class is the
+author's from a blank, the fact carrying its three options with no mark. It
+answers the case against exactly, since a test the checked party applies cannot
+tilt if there is no test. It costs the author a judgment on every node of the
+record, which is the attention the `attention` and `alignment-order` nodes exist
+to spend carefully, and it leaves the alignment page with a decision it cannot
+present in the form it presents every other, a recommendation and its boldness.
+Raised by the clean-context reading of `authority` on 2026-09-05, as the remedy
+its counter-argument points at.
+```
 
 #### class-follows-the-authors-words
 
@@ -163,6 +223,42 @@ the author has not spoken to reaches them, which is the attention the `attention
 and `alignment-order` nodes exist to spend carefully. Raised by the clean-context
 reading of 2026-09-05.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What class does the AI recommend on a node's authority fact?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/authority
+defines:
+  - term: expensive
+    gloss: "Of a wrong answer: that its cost is paid in work the record cannot take back cheaply."
+  - term: irreversible
+    gloss: "Of a wrong answer: that its cost is not paid back at all, as with a deletion, a swap, or a landing that other work is built on."
+  - term: capture-shaped
+    gloss: "Of a decision: that the party which would set the answer is the party the answer is meant to check."
+---
+
+## Answer
+
+The AI recommends ratified wherever no words of the author's grant a class, and
+delegated or deferred only where the author's own recorded words, on the node or
+on an ancestor, say so; the three limbs go. It answers the case against as
+squarely as the bare refusal does, since no test of the AI's remains that could
+tilt, and it keeps the recommendation and the boldness the alignment page
+presents on every other fact, which is the one cost the refusal carries. What it
+costs is that the default is the most expensive class in the record: every node
+the author has not spoken to reaches them, which is the attention the `attention`
+and `alignment-order` nodes exist to spend carefully. Raised by the clean-context
+reading of 2026-09-05.
+```
+
 #### form-decides-the-default
 
 The recommendation follows the node's form, a reading delegated and a rule or a
@@ -176,6 +272,43 @@ the tilt the case against names moves from the reading to the form rather than
 going away, and a node whose form is wrong gets the wrong default silently.
 Raised by the clean-context reading of 2026-09-05, as the rule the record runs
 in place of the one this node states.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What class does the AI recommend on a node's authority fact?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/authority
+defines:
+  - term: expensive
+    gloss: "Of a wrong answer: that its cost is paid in work the record cannot take back cheaply."
+  - term: irreversible
+    gloss: "Of a wrong answer: that its cost is not paid back at all, as with a deletion, a swap, or a landing that other work is built on."
+  - term: capture-shaped
+    gloss: "Of a decision: that the party which would set the answer is the party the answer is meant to check."
+---
+
+## Answer
+
+The recommendation follows the node's form, a reading delegated and a rule or a
+disposition ratified, and the three limbs act only to escalate a delegated
+default. It is what the record measurably already does: of the 59 non-ratified
+recommendations on authority facts, 58 sit on `form: reading` nodes and the 59th
+on `ruling-transport`. It is the only candidate on this list an instrument could
+check without reading prose, which is what the answer's own evidentiary clause
+asks for and cannot get. What it costs is that form is a field the AI writes, so
+the tilt the case against names moves from the reading to the form rather than
+going away, and a node whose form is wrong gets the wrong default silently.
+Raised by the clean-context reading of 2026-09-05, as the rule the record runs
+in place of the one this node states.
+```
 
 #### test-without-the-written-reading
 
@@ -192,6 +325,45 @@ check, which is the invisible tilt the fact's case against names, and the
 reviewer loses the locus at which it would catch one. Raised by the clean-context
 reading of 2026-09-05, which held that the option cannot be ruled for as the fact
 is drawn.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What class does the AI recommend on a node's authority fact?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/authority
+defines:
+  - term: expensive
+    gloss: "Of a wrong answer: that its cost is paid in work the record cannot take back cheaply."
+  - term: irreversible
+    gloss: "Of a wrong answer: that its cost is not paid back at all, as with a deletion, a swap, or a landing that other work is built on."
+  - term: capture-shaped
+    gloss: "Of a decision: that the party which would set the answer is the party the answer is meant to check."
+---
+
+## Answer
+
+The three limbs stand and the evidentiary clause goes: the AI recommends ratified
+where being wrong is expensive, irreversible or capture-shaped and delegated or
+deferred otherwise, with nothing required of the `### authority` prose beyond the
+reason every fact already carries. What it buys is that the author can rule for
+the test without also ruling for a back-fill of 109 of the record's 129 authority
+facts, which this node's own answer calls owed rather than assumed; as the fact
+stands those are one choice with two costs, and the author cannot take the first
+and decline the second. What it costs is the guard: a class recommended on no
+stated limb then reads the same as one recommended on a limb a reader could
+check, which is the invisible tilt the fact's case against names, and the
+reviewer loses the locus at which it would catch one. Raised by the clean-context
+reading of 2026-09-05, which held that the option cannot be ruled for as the fact
+is drawn.
+```
 
 ### authority
 
@@ -645,3 +817,7 @@ Findings:
 Strongest counter-argument (strong): The test decides which questions reach the author at all, and the party applying it is the party a ratification would slow — the capture shape the test itself names, applied to itself, and the answer does not say so. Boldness `high` is recorded, which on this record is low confidence, on a rule that governs every authority fact in the graph. And the escape hatch is unbounded: where none of the three limbs holds, the recommendation is delegated where the author has said they do not want to be asked again, and the record holds no list of what the author has said that about, so the AI supplies both the test and the fact the test turns on.
 
 The session's reply: Taken in full. The test decides which questions reach the author, the party applying it is the party a ratification slows, and the answer does not name that shape when applying itself to itself; that is a gap in the `### authority` reading this node's own third paragraph requires. The escape hatch is the worse half: the delegated limb turns on what the author has said they do not want to be asked about again, the record holds no such list and names no locus for one, so the AI supplies the test and the fact the test turns on. The survey raises the probe that would close it, and the session does not answer the probe.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/class-recommendation stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `escalate-toward-ratified`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `no-recommendation-on-the-authority-fact`, `class-follows-the-authors-words`, `form-decides-the-default`, `test-without-the-written-reading`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `5d924981999cd48668b2d71e8a6287b31a766fbd` is re-computed for the encoding as `ef23296a96bb799b9cdd1d500652d172746aea3d`; nothing it read changed. The survey's pin `5d924981999cd48668b2d71e8a6287b31a766fbd` is re-computed for the encoding as `ef23296a96bb799b9cdd1d500652d172746aea3d`; nothing it read changed.

@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -32,6 +31,43 @@ bears:
     option: the-smaller-model-on-a-re-reading
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of the experiment the survey produced,
+and no second account of what the record takes from it is on the table.
+
+#### standing
+
+Against reading a text twice with the same kind of mind, and the experiment is what makes it more than a slogan.
+
+**AI support.** Read in the tradition survey of the review sitting of 2026-09-04, which raised `chosen-for-difference` as a third option from it, and named in `review-model`'s account among the six that its pass with reference to tradition owes: "N-version programming with the independence experiment, from Avizienis and Chen and from Knight and Leveson, adopted on `chosen-for-difference` and diverged from on `fable-for-both-readings`, since the difference four models of one lineage can buy is of capability and is not the independence the experiment demanded be demonstrated". Reason's layered-defence statement is carried in the source as the general form of the same rule and grounds no separate relation.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does N-version programming and the independence experiment say about two readers of one text, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/review-model
+source: Algirdas Avizienis and Liming Chen, N-version programming, presented at COMPSAC in 1977, where several independently developed versions of one program are run and their results compared so that a fault in one is caught by the others; and John C. Knight and Nancy G. Leveson, "An experimental evaluation of the assumption of independence in multiversion programming", IEEE Transactions on Software Engineering SE-12(1) (1986), whose independently written versions failed together on correlated inputs far more often than independence predicts, so that independence must be demonstrated and is never inferred from separate construction. The layered form of the same rule, that defences in depth work only where their failure modes are uncorrelated, is James Reason's, in Human Error (1990) and Managing the Risks of Organizational Accidents (1997).
+bears:
+  - fact: answer
+    option: chosen-for-difference
+    relation: adopted
+  - fact: answer
+    option: fable-for-both-readings
+    relation: diverged
+  - fact: answer
+    option: the-smaller-model-on-a-re-reading
+    relation: adopted
+---
+
 ## Answer
 
 Against reading a text twice with the same kind of mind, and the experiment is what makes it more than a slogan. Redundancy buys nothing where the redundant parts fail together, and the hard result is that separately built versions of one specification do fail together: their authors share a training, and the specification's own ambiguities are read the same wrong way by each. The rule the experiment leaves is that independence is a property to be demonstrated and never inferred from the fact that two things were made apart.
@@ -43,17 +79,7 @@ Diverged on `fable-for-both-readings`. Two readings on one model share a prior; 
 The tradition's own standard is failed on both sides, and the reading says so rather than resting on the concession. Knight and Leveson measured correlation and did not assume it; here nothing is measured, so the claim that four models of one lineage fail together is the AI's from its knowledge of how they are built, which is the kind of claim the experiment exists to distrust. What the record could do about it is bought in the brief and not in the reader, since the brief is where a reading's framing is set. Shelved once by a constraint that has gone: N-version programming died because paying several teams to build one artifact was uneconomic, and a second reader that is a different model costs a token bill, so the caution is actionable here in a way it was not where it was raised.
 
 Adopted in part on `the-smaller-model-on-a-re-reading`. Two readings on one model share a prior, and a re-reading on a lesser model is the first difference the record puts between two readers of one text. It is a difference of capability inside one lineage, which this reading has already said is not the independence the experiment demanded, so the support reaches the direction of the move and not its sufficiency.
-
-## Rationale
-
-Read in the tradition survey of the review sitting of 2026-09-04, which raised `chosen-for-difference` as a third option from it, and named in `review-model`'s account among the six that its pass with reference to tradition owes: "N-version programming with the independence experiment, from Avizienis and Chen and from Knight and Leveson, adopted on `chosen-for-difference` and diverged from on `fable-for-both-readings`, since the difference four models of one lineage can buy is of capability and is not the independence the experiment demanded be demonstrated". Reason's layered-defence statement is carried in the source as the general form of the same rule and grounds no separate relation.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of the experiment the survey produced,
-and no second account of what the record takes from it is on the table.
+```
 
 ### authority
 
@@ -90,3 +116,7 @@ Also named: commons.systems/disposition-graph/review-model, commons.systems/disp
 Proposed: The option's rank and the readings' rank are the survivor, since three texts name it against the fence's one: the fence is corrected to the larger model, the rank delegation gives a reconciliation session's main thread and one down from the model the other two readings run on, and the fence's citation of delegation's smaller-model clause is redrawn to the ground the option actually gives, that the re-reading's contract fixes what it looks for. The option is recorded so the author may instead rule for the smaller model, in which case the option's prose and both readings' entries move with it.
 
 Recorded as an option on commons.systems/disposition-graph/review-model's answer fact: `the-larger-model-on-a-re-reading` (source review, 2026-09-07).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/n-version-programming stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

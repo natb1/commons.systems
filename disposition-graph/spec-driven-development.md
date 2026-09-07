@@ -5,11 +5,11 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: fc50b724ed00bf5f9eb4828284f5f7e561bba20b
+  of: ee031b91079ad2fb45fe5d96b6ffd03a9ab1b560
   against: "The recorded divergence is the whole of the practice. What makes spec-driven development work in the 2025 tools is exactly the per-feature requirements, design and task documents this reading rejects: they are what the agent reads, and the specification is useful because it is close enough to the work to be executable. Replacing them with a graph of standing answers keeps the name and drops the mechanism, so 'adopted, with a recorded divergence' understates the relation — on the thing the tradition is for, this is nearer to 'chosen over', and purpose leans on the audience's expectation of the name in its first paragraph."
   survey:
     date: 2026-09-05
-    of: fc50b724ed00bf5f9eb4828284f5f7e561bba20b
+    of: ee031b91079ad2fb45fe5d96b6ffd03a9ab1b560
 facts:
   - name: answer
     options:
@@ -24,7 +24,6 @@ facts:
         ref: "2026-09-03"
     recommends: standing
     boldness: high
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -41,25 +40,80 @@ bears:
     option: standing
     relation: adopted
 ---
-## Answer
-
-Supports, with a recorded divergence. Adopted: the specification, not the prompt, is the source of truth for what agents build, and a standing constitution of principles governs every specification. Diverged: spec-driven development keeps per-feature specifications, plans, and task lists as durable artifacts. Here the durable record is the graph of standing answers; plans and tasks are regenerated from it when work is claimed, so nothing that could go stale is kept.
-
-## Rationale
-
-The term is current and dominant in AI coding practice of 2025 and 2026, which makes it the audience's own vocabulary and a discovery term. Its older lineage is the tradition that the description of the program is the source of truth. Validated by the AI on 2026-09-02 from its own knowledge, not from primary reading; deferred until the author reads the sources.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+Supports, with a recorded divergence.
+
+**AI support.** The term is current and dominant in AI coding practice of 2025 and 2026, which makes it the audience's own vocabulary and a discovery term. Its older lineage is the tradition that the description of the program is the source of truth. Validated by the AI on 2026-09-02 from its own knowledge, not from primary reading; deferred until the author reads the sources.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does spec-driven development support this repository's purpose?
+form: reading
+under:
+  - commons.systems/disposition-graph/purpose
+source: Spec-driven development as practised in AI coding tools from 2025, AWS Kiro (July 2025, with requirements, design, and task documents) and GitHub Spec Kit (September 2025, with a constitution, specification, plan, and tasks). Lineage, Knuth, "Literate Programming" (1984); Meyer, Design by Contract (1986); Adzic, Specification by Example (2011).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+Supports, with a recorded divergence. Adopted: the specification, not the prompt, is the source of truth for what agents build, and a standing constitution of principles governs every specification. Diverged: spec-driven development keeps per-feature specifications, plans, and task lists as durable artifacts. Here the durable record is the graph of standing answers; plans and tasks are regenerated from it when work is claimed, so nothing that could go stale is kept.
+```
+
 #### chosen-over
 
 Both reviews' strongest counter-argument is that the recorded divergence is the whole of the practice: what makes spec-driven development work in the 2025 tools is exactly the per-feature requirements, design and task documents this reading rejects, and replacing them with a graph of standing answers keeps the name and drops the mechanism. On the thing the tradition is for, the relation is nearer to 'chosen over' than to 'adopted', and calling it adopted lets the audience's expectation of the term do work the record has not earned, which purpose leans on in its first paragraph. The session's reply hands the choice to the author: whether the specification reconciliation derives from the answers counts as adopting the tradition or choosing over it. As worded that choice cannot be recorded, which the second clean-context reading of `readings` found on 2026-09-05: under that node's recommended answer chosen over is derived from an adopted entry on an option that was not chosen, and never a relation a `bears` entry may carry. When `readings` is ruled the choice is re-worded here, as an entry on the rival option or as `diverged`, and the author is not offered a relation the encoding cannot hold.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -12,4 +12,4 @@
+ 
+ ## Answer
+ 
+-Supports, with a recorded divergence. Adopted: the specification, not the prompt, is the source of truth for what agents build, and a standing constitution of principles governs every specification. Diverged: spec-driven development keeps per-feature specifications, plans, and task lists as durable artifacts. Here the durable record is the graph of standing answers; plans and tasks are regenerated from it when work is claimed, so nothing that could go stale is kept.
++Both reviews' strongest counter-argument is that the recorded divergence is the whole of the practice: what makes spec-driven development work in the 2025 tools is exactly the per-feature requirements, design and task documents this reading rejects, and replacing them with a graph of standing answers keeps the name and drops the mechanism. On the thing the tradition is for, the relation is nearer to 'chosen over' than to 'adopted', and calling it adopted lets the audience's expectation of the term do work the record has not earned, which purpose leans on in its first paragraph. The session's reply hands the choice to the author: whether the specification reconciliation derives from the answers counts as adopting the tradition or choosing over it. As worded that choice cannot be recorded, which the second clean-context reading of `readings` found on 2026-09-05: under that node's recommended answer chosen over is derived from an adopted entry on an option that was not chosen, and never a relation a `bears` entry may carry. When `readings` is ruled the choice is re-worded here, as an entry on the rival option or as `diverged`, and the author is not offered a relation the encoding cannot hold.
+```
+
 #### split-sources
 
 Both reviews find that the `source` field bundles two 2025 products, AWS Kiro and GitHub Spec Kit, with a three-item lineage, Knuth 1984, Meyer 1986 and Adzic 2011, under one `relation: adopted`, while the lineage is a different tradition from the tooling and would divide differently on the divergence recorded. Readings' rule is one tradition per reading. The session's reply records the split as owed at the sitting rather than made, so the alternative is a node whose source is the tooling alone, with the lineage read separately.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -12,4 +12,4 @@
+ 
+ ## Answer
+ 
+-Supports, with a recorded divergence. Adopted: the specification, not the prompt, is the source of truth for what agents build, and a standing constitution of principles governs every specification. Diverged: spec-driven development keeps per-feature specifications, plans, and task lists as durable artifacts. Here the durable record is the graph of standing answers; plans and tasks are regenerated from it when work is claimed, so nothing that could go stale is kept.
++Both reviews find that the `source` field bundles two 2025 products, AWS Kiro and GitHub Spec Kit, with a three-item lineage, Knuth 1984, Meyer 1986 and Adzic 2011, under one `relation: adopted`, while the lineage is a different tradition from the tooling and would divide differently on the divergence recorded. Readings' rule is one tradition per reading. The session's reply records the split as owed at the sitting rather than made, so the alternative is a node whose source is the tooling alone, with the lineage read separately.
+```
 
 ## Account
 
@@ -168,3 +222,7 @@ Findings:
 Strongest counter-argument (strong): The divergence claims that here "plans and tasks are regenerated from it when work is claimed, so nothing that could go stale is kept", and this survey measured what the record keeps that has gone stale: `quotes`' option `one-ruling-for-the-unquoted-stamp` names a set of nodes it no longer describes; `stub-traditions`' enumeration is stale by its own `regenerate-enumeration` option; forty-seven nodes carry a review pin the projector marks changed since. The claim the reading makes over the tradition is therefore the claim the record is currently failing, and the failure is in the graph itself, not in the plans the graph was supposed to make disposable. Boldness `high` is recorded and the authority fact recommends `delegated`.
 
 The session's reply: Taken. The divergence claims that nothing which could go stale is kept, and the survey measured three populations of kept-and-stale in the graph itself: `quotes`' enumeration, `stub-traditions`' enumeration, and forty-seven review pins the projector marks changed since. The claim is not withdrawn, because it is a claim about plans and tasks and the tradition's own subject, but it is now false of the record that makes it, and the reading should say so rather than let the divergence read as a boast. That is recorded as owed on the reading's text.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/spec-driven-development stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `chosen-over`, `split-sources`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `fc50b724ed00bf5f9eb4828284f5f7e561bba20b` is re-computed for the encoding as `ee031b91079ad2fb45fe5d96b6ffd03a9ab1b560`; nothing it read changed. The survey's pin `fc50b724ed00bf5f9eb4828284f5f7e561bba20b` is re-computed for the encoding as `ee031b91079ad2fb45fe5d96b6ffd03a9ab1b560`; nothing it read changed.

@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -26,6 +25,37 @@ bears:
     option: two-skills-one-package
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of the essay the survey produced, and
+no second account of what the record takes from it is on the table.
+
+#### standing
+
+Supports the split, and is cited for the bound it puts on what the split may factor.
+
+**AI support.** Read in the tradition survey of the review sitting of 2026-09-04 as the caution against the drift answer's remedy, and named in `review-skills`' account among the readings its pass with reference to tradition owes: "The wrong abstraction, Metz, 2016, adopted as the bound on what is factored: only the essential common text, the reader's bounds and the primer, and nothing that merely looks the same today." It bears on `two-skills-one-package` because that option draws the bound, not because it argues for the split.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the wrong abstraction say about factoring what two instruments share, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/review-skills
+source: Sandi Metz, "The Wrong Abstraction" (sandimetz.com, January 2016), whose rule is that duplication is far cheaper than the wrong abstraction. Text extracted because it currently looks the same couples callers whose requirements will diverge, the coupling then resists the divergence, and each caller accretes a parameter to say how it differs, until the shared thing is a switch with a body attached. The templating experience of Helm and Kubernetes charts is the same failure at scale.
+bears:
+  - fact: answer
+    option: two-skills-one-package
+    relation: adopted
+---
+
 ## Answer
 
 Supports the split, and is cited for the bound it puts on what the split may factor. The rule is that duplication is cheaper than the wrong abstraction. Text extracted because it currently looks the same couples callers whose requirements will diverge; the coupling then resists the divergence rather than absorbing it, and the shared thing accretes a parameter for each caller that has grown out of it. What makes an abstraction right is not that the text matches today but that the callers share a reason to change.
@@ -35,17 +65,7 @@ The record takes it as the limit on the fragments. The instructions the two read
 The tradition also prices a cost the record must pay attention to and the essay does not. Indirection here is read by an agent whose attention is the scarce thing: a transcluded fragment is one more hop at load time and one more place a reader must hold, so the case for factoring has to clear a bar the human case does not set. That argues the same way as the rule and for a different reason, which is why the bound is drawn tightly rather than at the first repetition.
 
 Where the tradition does not reach: it says nothing about two hand-written files that are meant to become one projection, which is the record's actual interim. Its subject is a shared abstraction chosen too early, and the record's risk is a derived artifact landed before its generator. Those are different failures and this reading is evidence only for the first.
-
-## Rationale
-
-Read in the tradition survey of the review sitting of 2026-09-04 as the caution against the drift answer's remedy, and named in `review-skills`' account among the readings its pass with reference to tradition owes: "The wrong abstraction, Metz, 2016, adopted as the bound on what is factored: only the essential common text, the reader's bounds and the primer, and nothing that merely looks the same today." It bears on `two-skills-one-package` because that option draws the bound, not because it argues for the split.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of the essay the survey produced, and
-no second account of what the record takes from it is on the table.
+```
 
 ### authority
 
@@ -70,3 +90,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/the-wrong-abstraction stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

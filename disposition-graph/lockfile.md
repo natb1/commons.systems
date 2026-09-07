@@ -4,10 +4,6 @@ stage: periagogic
 under:
   - commons.systems/disposition-graph/materialization
 ---
-## Disposition
-
-The author, 2026-09-03:
-> record unanswered disposition with reference to npm standard tradition to justify commit of package-lock.json - do not proceed to periagoge. Then you have bootstrap authority to commit the lock prior to confirmation for a clean git status
 
 ## Account
 
@@ -59,3 +55,7 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Merge analysis of the author's words: 2026-09-03, own-question: Record an unanswered disposition, with a reference to the npm standard tradition, that would justify committing package-lock.json, and do not proceed to periagoge; bootstrap authority is granted to commit the lock before confirmation for a clean git status.
 Moved to other nodes as alternatives: `strike-met-yaml-shim` on commons.systems/disposition-graph/materialization; `reparent-under-lockfile` on commons.systems/disposition-graph/npm-committed-lockfile.
 The census unit's note: The node carries no recommendation field, so adopts is null, and I recorded no alternatives. That is deliberate: the author directed on 2026-09-03 that the periagogic movement not be run, and the node says in its own words that nothing in it is an answer, so there is no candidate before the author yet. Manufacturing one from the npm reading would put a draft where the author asked for none. Both elsewhere entries come from the node's account rather than from a review: the finding that materialization's yaml shim now has its condition met, which the node deliberately did not apply, and the reading's placement, which the node itself says can move once the children rule is settled and which un-aligned-children has now settled. The bootstrap-authority grant in the author's words is already carried as evidence on authority's shim, so nothing is owed there.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/lockfile stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 1 `## Disposition` entry became the ledger entry words/2026-09-03/63, referenced by 0 options the entry's own date names.

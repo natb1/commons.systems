@@ -45,7 +45,7 @@ review:
   against: "The node's whole content is a decision about another node's prose, and the record now has three nodes deciding one page: second-stop on whether model is rewritten, model on the rewrite itself, and rejected on what a rationale carries of its alternatives. Keeping the option as a node buys the author a separate ruling; it costs a screen, an ordering the page does not show, and a text that must be reopened if the two rulings disagree. The redundancy finding's own second branch — fold each option into its parent's alternatives, which the new encoding makes structural — is the cheaper answer and is pending as `fold-into-model`."
   survey:
     date: 2026-09-05
-    of: 7dc2a99d03a687e47b5fa8617a855a5895f64da3
+    of: 0c5c0c4cc417ac0db7355195d22000bd76325e2c
 facts:
   - name: answer
     options:
@@ -80,6 +80,7 @@ under:
 depends:
   - commons.systems/disposition-graph/attention
 ---
+
 ## Facts
 
 ### answer
@@ -88,21 +89,11 @@ depends:
 
 The model node's answer is rewritten for the reader arriving from purpose, without changing rank: projection stays first among model's children, since the high-level order the author recorded on scope on 2026-09-03 puts self-documentation through the browser before alignment, and the model node may say that alignment is where the newcomer acts first. This is the recommended option as amended after the review, the boost half having been withdrawn; model's draft is the rewrite it names.
 
-#### primer-node
+**AI support.** The author found the model node's answer too reference-shaped for the second thing a newcomer reads, which is a defect in the writing and not a missing node; a primer would restate the model node's answer in a second place, the drift this record resists everywhere else. Rewriting also costs no rank, so the onboarding walk and the reconciliation order stay one list and rank keeps serving both.
 
-A new primer node sits between purpose and model, introducing the graph primitives, and model's answer is left as it stands. Model's draft rationale rejects this on the ground that such a node would answer no question model does not.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-#### boost-growth-first-among-models-children
-
-A boost puts growth first among the model node's children. It was withdrawn
-because the author's own recorded order puts the browser before alignment, and
-two other nodes' rationales rest on that order.
-
-### existence
-
-Prune: This node is pruned and its two options are carried on model as alternatives in model's own dialogue state, so the author rules once rather than on two screens with no ordering shown. The redundancy finding of 2026-09-03 offers this against keeping the option-node as the survivor of its question, and observes that confirming model's draft as shown decides this question by that act.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -114,11 +105,59 @@ under:
 ## Answer
 
 The model node. Its answer is written for the newcomer rather than for a reader looking something up: it introduces the primitives, the disposition, the graph and the node, well enough to use the alignment skill, and it may say that alignment is where the newcomer acts first. No rank changes with it: projection stays first among the model node's children, following the order the author recorded on the scope node on 2026-09-03, which places self-documentation through the browser before alignment. No node is inserted between purpose and model, so the second stop is the node that already answers the question, written for the reader who arrives at it.
-
-## Rationale
-
-The author found the model node's answer too reference-shaped for the second thing a newcomer reads, which is a defect in the writing and not a missing node; a primer would restate the model node's answer in a second place, the drift this record resists everywhere else. Rewriting also costs no rank, so the onboarding walk and the reconciliation order stay one list and rank keeps serving both.
 ```
+
+#### primer-node
+
+A new primer node sits between purpose and model, introducing the graph primitives, and model's answer is left as it stands. Model's draft rationale rejects this on the ground that such a node would answer no question model does not.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a newcomer read after purpose?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+---
+## Answer
+
+A new primer node sits between purpose and model, introducing the graph primitives, and model's answer is left as it stands. Model's draft rationale rejects this on the ground that such a node would answer no question model does not.
+```
+
+#### boost-growth-first-among-models-children
+
+A boost puts growth first among the model node's children. It was withdrawn
+because the author's own recorded order puts the browser before alignment, and
+two other nodes' rationales rest on that order.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a newcomer read after purpose?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+---
+## Answer
+
+A boost puts growth first among the model node's children. It was withdrawn
+because the author's own recorded order puts the browser before alignment, and
+two other nodes' rationales rest on that order.
+```
+
+### existence
+
+Prune: This node is pruned and its two options are carried on model as alternatives in model's own dialogue state, so the author rules once rather than on two screens with no ordering shown. The redundancy finding of 2026-09-03 offers this against keeping the option-node as the survivor of its question, and observes that confirming model's draft as shown decides this question by that act.
 
 ## Account
 
@@ -250,3 +289,7 @@ The independence test of `commons.systems/disposition-graph/probe-or-node`, run 
 Also named: commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/rejected.
 
 Proposed: Record the independence test as the reason on each existence fact's `prune` option, on `hexis` and on `audience`, and let the author rule the prune at each node's own row, which is what `probe-or-node`'s answer prescribes for a node already standing. Before `audience` is pruned, its surviving content is named: the sentence itself is already in `purpose`, and the enumeration of onboarding surfaces — README, browser opening pages, repository description, discovery tags — belongs to `projection` or `self-documentation` and moves there rather than being deleted with the node. `hexis` needs no survivor: `purpose` already carries its content as the option `knowledge-store-first`.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/second-stop stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `rewrite-model`. The record wrote no text of its own for `primer-node`, `boost-growth-first-among-models-children`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `fd543d8b56a6a8724a9eaf03ac0f6ba8d7b3391f` was already past the recommendation and is left as it stood. The survey's pin `7dc2a99d03a687e47b5fa8617a855a5895f64da3` is re-computed for the encoding as `0c5c0c4cc417ac0db7355195d22000bd76325e2c`; nothing it read changed.

@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -26,6 +25,37 @@ bears:
     option: two-skills-one-package
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of these sources the survey produced,
+and no second account of what the record takes from them is on the table.
+
+#### standing
+
+Supports the split, and supplies the criterion by which it is a split and not a preference.
+
+**AI support.** Read in the tradition survey of the review sitting of 2026-09-04 as its first reading on whether each reading of the clean-context review is its own skill, and named in `review-skills`' account among the readings its pass with reference to tradition owes: "Information hiding, Parnas, 1972, with the single responsibility principle, adopted for `two-skills-one-package`: the readings hide different decisions and change for different reasons." The survey's own caution, that Parnas's criterion is about a compilation unit and a skill directory is an invocation surface, is carried in the answer rather than left in the survey.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does information hiding say about where the boundary between two instruments falls, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/review-skills
+source: David L. Parnas, "On the Criteria To Be Used in Decomposing Systems into Modules", Communications of the ACM 15(12) (1972), where a system is divided by the design decisions each module hides rather than by the steps of its flowchart, and the test of a boundary is whether a likely change lands inside one module; Dijkstra's separation of concerns, "On the role of scientific thought" (EWD 447, 1974, printed in Selected Writings on Computing, 1982); and Robert C. Martin's single responsibility principle, one reason to change, in Agile Software Development (2002), restated in Clean Architecture (2017) as responsibility to one and only one actor. Locus to be checked, the Clean Architecture restatement, which is paraphrased here.
+bears:
+  - fact: answer
+    option: two-skills-one-package
+    relation: adopted
+---
+
 ## Answer
 
 Supports the split, and supplies the criterion by which it is a split and not a preference. Parnas's argument is that a system is divided by the decisions each part hides, never by the order of the steps it performs, and that a boundary is in the right place when a likely change falls inside one part and is invisible outside it. Dijkstra's separation of concerns is the same discipline stated as a way of thinking, and Martin's later form gives the test a second face: a part changes for one reason, and answers to one actor.
@@ -35,17 +65,7 @@ The two readings pass the test on both faces. They hide different decisions — 
 The transfer is not clean and the reading names where it strains. Parnas is writing about a compilation unit, whose boundary is enforced by what a caller can see; a skill directory hides nothing from anyone and enforces nothing, since any reader may open either file. The argument carries only because an agent loads `SKILL.md` whole, so the file is the whole of what a reading is told and the directory is where that telling is kept. That is the criterion applied to an invocation surface rather than to a module, and it is guarded by review rather than by the shape of the thing.
 
 What the criterion does not decide is where the mechanics live. The same argument that separates the two surfaces keeps one body of code in one place, since the decisions the brief generator and the apply script hide are shared by both readings and a change to either lands inside that one body. Information hiding therefore supports the two names and the one package together, and would be violated as much by copying the code as by merging the surfaces.
-
-## Rationale
-
-Read in the tradition survey of the review sitting of 2026-09-04 as its first reading on whether each reading of the clean-context review is its own skill, and named in `review-skills`' account among the readings its pass with reference to tradition owes: "Information hiding, Parnas, 1972, with the single responsibility principle, adopted for `two-skills-one-package`: the readings hide different decisions and change for different reasons." The survey's own caution, that Parnas's criterion is about a compilation unit and a skill directory is an invocation surface, is carried in the answer rather than left in the survey.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of these sources the survey produced,
-and no second account of what the record takes from them is on the table.
+```
 
 ### authority
 
@@ -70,3 +90,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/information-hiding stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

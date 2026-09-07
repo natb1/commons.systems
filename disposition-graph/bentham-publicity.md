@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -37,17 +36,6 @@ bears:
     option: section-folded-and-quotation-narrowed
     relation: adopted
 ---
-## Answer
-
-Supports the disposition from the side opposite to informed consent. Bentham's argument is about the check on a decision-maker rather than the rights of the decided-for: proceedings conducted in the open constrain those conducting them to do their duty, let those affected form a judgment about what was done, and make the record of what was decided, and on what grounds, the standing security for everything else. He puts the objections at their strongest, the inconvenience and the danger of a hostile audience, and answers that the securities publicity buys are worth more than what secrecy protects.
-
-Applied here, publicity has a target it did not have in the assembly. The proceeding under scrutiny is the AI's, not the author's, and what the fold rule concealed was not an outcome but a class of decision: the low-boldness facts were decided by the AI, applied to the record, and never shown. A recommender that publishes some of its decisions and withholds others by its own measure has defeated publicity at the source, and no downstream review can recover what was never in the record. The disposition removes the withholding, which is what the principle asks for.
-
-The divergence is that publicity as Bentham argued it works through an audience. Its mechanism is the tribunal of public opinion, and the assembly is checked because many people can see what it did. This record has one reader. What survives the transposition is the disclosure itself and the discipline of writing down what was decided and why; what does not survive is the sanction, so the record cannot claim the tradition's mechanism, only its rule. The reading records that plainly rather than borrowing the force of a check the record does not have.
-
-## Rationale
-
-Recorded in the tradition pass on the alignment page, 2026-09-04, which put this and the non-domination reading first among the arguments for the disposition. It bears on `every-fact-every-option` because that option publishes every decision the node carries, and on `three-column-ruling-screen` as a divergence because that option's fold rule is the withholding the principle is against.
 
 ## Facts
 
@@ -55,6 +43,49 @@ Recorded in the tradition pass on the alignment page, 2026-09-04, which put this
 
 The standing text is the only reading of this essay the pass produced, and no
 second account of what the record takes from it is on the table.
+
+#### standing
+
+Supports the disposition from the side opposite to informed consent.
+
+**AI support.** Recorded in the tradition pass on the alignment page, 2026-09-04, which put this and the non-domination reading first among the arguments for the disposition. It bears on `every-fact-every-option` because that option publishes every decision the node carries, and on `three-column-ruling-screen` as a divergence because that option's fold rule is the withholding the principle is against.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does Bentham's principle of publicity say about a recommender who decides what the decider sees, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/alignment-page
+source: Bentham, "Of Publicity", the first essay of the Essay on Political Tactics (written about 1791, printed in the Bowring edition of the Works, 1843), which makes publicity the first rule of an assembly's procedure, gives the reasons for it, states the objections and answers them, and sets out what publicity requires of the record of proceedings. Locus to be checked, the volume and page of the Bowring edition and the wording of the reasons.
+bears:
+  - fact: answer
+    option: three-column-ruling-screen
+    relation: diverged
+  - fact: answer
+    option: every-fact-every-option
+    relation: adopted
+  - node: commons.systems/disposition-graph/authors-words-on-the-page
+    fact: answer
+    option: per-option-only
+    relation: adopted
+  - node: commons.systems/disposition-graph/authors-words-on-the-page
+    fact: answer
+    option: section-folded-and-quotation-narrowed
+    relation: adopted
+---
+
+## Answer
+
+Supports the disposition from the side opposite to informed consent. Bentham's argument is about the check on a decision-maker rather than the rights of the decided-for: proceedings conducted in the open constrain those conducting them to do their duty, let those affected form a judgment about what was done, and make the record of what was decided, and on what grounds, the standing security for everything else. He puts the objections at their strongest, the inconvenience and the danger of a hostile audience, and answers that the securities publicity buys are worth more than what secrecy protects.
+
+Applied here, publicity has a target it did not have in the assembly. The proceeding under scrutiny is the AI's, not the author's, and what the fold rule concealed was not an outcome but a class of decision: the low-boldness facts were decided by the AI, applied to the record, and never shown. A recommender that publishes some of its decisions and withholds others by its own measure has defeated publicity at the source, and no downstream review can recover what was never in the record. The disposition removes the withholding, which is what the principle asks for.
+
+The divergence is that publicity as Bentham argued it works through an audience. Its mechanism is the tribunal of public opinion, and the assembly is checked because many people can see what it did. This record has one reader. What survives the transposition is the disclosure itself and the discipline of writing down what was decided and why; what does not survive is the sanction, so the record cannot claim the tradition's mechanism, only its rule. The reading records that plainly rather than borrowing the force of a check the record does not have.
+```
 
 ### authority
 
@@ -79,3 +110,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/bentham-publicity stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

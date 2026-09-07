@@ -9,13 +9,15 @@ review:
   against: "The rule was struck under a bootstrap grant, without the periagogic movement the node's own account says is owed, on the strength of the author's words about what an unanswered disposition is — words that were about the unanswered status generally and not about this shape. The account itself concedes the AI 'treated a deferred answer as fixed, framed the author's challenge inside that frame, and parked a reading on the wrong parent'; the answer written from that concession removes a guard whose ground was a measured legacy failure, durable content stranded on a vanishing node. The author's model may well be right, but the record now has an answer and an instrument removed on an inference the periagogic movement was supposed to test."
   survey:
     date: 2026-09-05
-    of: ef3fa07a4050e0e5db919ebda7eadcc86414c48c
+    of: 18277fa1bce183840cd0bc6ff7301eeaa2f1a323
 facts:
   - name: answer
     options:
       - name: standing
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-03/79
       - name: keep-the-rule-and-park-the-reading
         source: ai
         ref: "9ff1b0b0"
@@ -28,7 +30,6 @@ facts:
         reason: "it leaves a struck inference standing in the record as a rule nobody enforces"
     recommends: standing
     boldness: low
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -40,18 +41,16 @@ form: rule
 under:
   - commons.systems/disposition-graph/transience
 ---
-## Disposition
 
-The author, 2026-09-03:
-> Why do unaligned dispositions have no children? My expectation is that an unaligned/unanswered disposition is just a disposition + alignment dialogue state. Unanswered is expected to just be a class of disposition that is registered for alignment dialogue and has no authority for reconciliation (unless bootstrap authority is explicitly granted)
+## Facts
 
-## Answer
+### answer
 
-Yes. An unanswered disposition is a disposition plus the dialogue state on it: a node like any other, registered for the alignment dialogue, which may be refined by children exactly as an answered node may. What an unanswered disposition lacks is authority, not standing. It carries none for reconciliation, and work may not be grounded in it, unless the author grants bootstrap authority explicitly, as the author did on 2026-09-03 for this ruling and for the lockfile. A reading, a refinement, or any other node may therefore sit under an open question, and does not have to wait for the question to be answered or be parked on the question's parent.
+#### standing
 
-## Rationale
+Yes.
 
-The author's ruling of 2026-09-03: "you have bootstrap authority to reconcile the model of unanswered disposition as disposition + dialogue state", and, stating the model on the same day, "My expectation is that an unaligned/unanswered disposition is just a disposition + alignment dialogue state. Unanswered is expected to just be a class of disposition that is registered for alignment dialogue and has no authority for reconciliation (unless bootstrap authority is explicitly granted)."
+**AI support.** The author's ruling of 2026-09-03: "you have bootstrap authority to reconcile the model of unanswered disposition as disposition + dialogue state", and, stating the model on the same day, "My expectation is that an unaligned/unanswered disposition is just a disposition + alignment dialogue state. Unanswered is expected to just be a class of disposition that is registered for alignment dialogue and has no authority for reconciliation (unless bootstrap authority is explicitly granted)."
 
 The rule struck here was an inference from a premise the author denies. `transience` held that an un-aligned disposition becomes "an answer, an amendment quoted into the node it refines, or nothing", and a thing that may become nothing cannot be a parent without orphaning its children; the rationale priced that from the legacy tactic node, whose measured costs were durable content stranded on a vanishing node and edges left dangling. On the author's model nothing vanishes: the node is durable and the dialogue resolves into it. The legacy failure stands as a failure of the legacy tactic, a completable unit removed on completion, which this shape is not.
 
@@ -59,9 +58,22 @@ Two further facts made the rule weaker than it looked. It keyed on the absence o
 
 Not decided here, and left open on `instruments`, an alternative for its dialogue: whether a machine check should ever hard-fail an answer that is not ratified.
 
-## Facts
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-### answer
+**Content.**
+
+```markdown
+---
+question: May an un-aligned disposition have children?
+form: rule
+under:
+  - commons.systems/disposition-graph/transience
+---
+
+## Answer
+
+Yes. An unanswered disposition is a disposition plus the dialogue state on it: a node like any other, registered for the alignment dialogue, which may be refined by children exactly as an answered node may. What an unanswered disposition lacks is authority, not standing. It carries none for reconciliation, and work may not be grounded in it, unless the author grants bootstrap authority explicitly, as the author did on 2026-09-03 for this ruling and for the lockfile. A reading, a refinement, or any other node may therefore sit under an open question, and does not have to wait for the question to be answered or be parked on the question's parent.
+```
 
 #### keep-the-rule-and-park-the-reading
 
@@ -70,11 +82,54 @@ on the question's parent. It was passed over because it misplaces a reading
 for the life of the question, which is what happened to
 `npm-committed-lockfile` on 2026-09-03.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: May an un-aligned disposition have children?
+form: rule
+under:
+  - commons.systems/disposition-graph/transience
+---
+
+## Answer
+
+The no-children rule stands, and a reading owed to an open question is parked
+on the question's parent. It was passed over because it misplaces a reading
+for the life of the question, which is what happened to
+`npm-committed-lockfile` on 2026-09-03.
+```
+
 #### keep-the-rule-soften-the-instrument
 
 The no-children rule stands and its machine check is softened from a hard
 failure to a warning. It was passed over because it leaves a struck inference
 standing in the record as a rule nobody enforces.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: May an un-aligned disposition have children?
+form: rule
+under:
+  - commons.systems/disposition-graph/transience
+---
+
+## Answer
+
+The no-children rule stands and its machine check is softened from a hard
+failure to a warning. It was passed over because it leaves a struck inference
+standing in the record as a rule nobody enforces.
+```
 
 ## Account
 
@@ -166,3 +221,7 @@ Findings:
 
 
 Strongest counter-argument (moderate): The answer's rule — work may not be grounded in an unanswered disposition — has an exception, an explicit grant from the author, and the exception is the record's entire operating mode: nothing in the record is ratified, every rule a session loads is projected from an unanswered node, and `what-acts-during-bootstrap` exists because of it. A rule whose exception has swallowed it is not yet load-bearing, and ratifying it now records as settled a distinction the record has never had occasion to apply in the direction that constrains anyone.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/un-aligned-children stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-03/79, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `keep-the-rule-and-park-the-reading`, `keep-the-rule-soften-the-instrument`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `3c163ef7f2a5f1e78301e90f70c8ffbc30a1e1cd` was already past the recommendation and is left as it stood. The survey's pin `ef3fa07a4050e0e5db919ebda7eadcc86414c48c` is re-computed for the encoding as `18277fa1bce183840cd0bc6ff7301eeaa2f1a323`; nothing it read changed.

@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -26,6 +25,37 @@ bears:
     option: two-skills-one-package
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of these practices the survey produced,
+and no second account of what the record takes from them is on the table.
+
+#### standing
+
+Supports the recommended option's shape, and answers the author's second question in the same move.
+
+**AI support.** Read in the tradition survey of the review sitting of 2026-09-04, which marked it shelved by a pre-agent constraint, and named in `review-skills`' account among the readings its pass with reference to tradition owes: "The multi-call binary and the façade, adopted for the shape of the recommended option, two names dispatching into one body, and shelved until now by a pre-agent constraint, that two names needed a dispatcher or a build step nobody had; this record has a projector." The `evaluation` node's rule that the second pass looks for traditions shelved under constraints that no longer hold is what puts this reading on the record rather than in a footnote.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What do the multi-call binary and the façade say about two names over one implementation, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/review-skills
+source: Dispatch on the invoked name and the single entry point behind several of them. The `argv[0]` convention of busybox's applets and of the `gzip` and `gunzip` pair, and GNU grep's `egrep` and `fgrep`, deprecated with a warning in version 3.8 (2022); git's dispatch to `git-<verb>`; and the Façade of Gamma, Helm, Johnson and Vlissides, Design Patterns (1994), one interface presented over a body of mechanism. Locus to be checked, the grep 3.8 deprecation and its wording.
+bears:
+  - fact: answer
+    option: two-skills-one-package
+    relation: adopted
+---
+
 ## Answer
 
 Supports the recommended option's shape, and answers the author's second question in the same move. Where two operations warrant separate names — for discoverability, for habit, or for observability — the settled answer across the practice is two names dispatching into one body, and never two copies of the body. The name is a surface a caller reaches for; the mechanism behind it is one thing, maintained once.
@@ -35,17 +65,7 @@ Supports the recommended option's shape, and answers the author's second questio
 The tradition supplies its own datum on the cost, and the reading keeps it. `egrep` and `fgrep` outlived the reason they were separate names and had to be retired with a warning decades later, so a second name is a commitment and not a free alias; if the reason for telling the two readings apart goes, the record should expect to retire one name rather than to find the second harmless.
 
 Shelved once by a constraint that has gone. Two names over one body needed a dispatcher, an installer, or a build step, and hand-written skill directories had nobody to run one, which is why the incumbent is one directory with a flag. This record has a projector, and the shape becomes available the moment it writes the skills. Until then the two names are two hand-written files and the shape is declared rather than built, which is what the three shims on the node say and what keeps this adoption honest.
-
-## Rationale
-
-Read in the tradition survey of the review sitting of 2026-09-04, which marked it shelved by a pre-agent constraint, and named in `review-skills`' account among the readings its pass with reference to tradition owes: "The multi-call binary and the façade, adopted for the shape of the recommended option, two names dispatching into one body, and shelved until now by a pre-agent constraint, that two names needed a dispatcher or a build step nobody had; this record has a projector." The `evaluation` node's rule that the second pass looks for traditions shelved under constraints that no longer hold is what puts this reading on the record rather than in a footnote.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of these practices the survey produced,
-and no second account of what the record takes from them is on the table.
+```
 
 ### authority
 
@@ -70,3 +90,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/multi-call-binary-and-facade stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

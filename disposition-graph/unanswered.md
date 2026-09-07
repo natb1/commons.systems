@@ -16,6 +16,14 @@ facts:
       - name: page-in-ruling-order
         source: author
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-03/29
+          - words/2026-09-03/42
+          - words/2026-09-03/80
+          - words/2026-09-03/81
+          - words/2026-09-03/82
+          - words/2026-09-03/83
+          - words/2026-09-03/84
       - name: responses-on-decisions-and-children
         source: ai
         ref: "2026-09-04"
@@ -75,7 +83,6 @@ facts:
         ref: "2026-09-07"
     recommends: unanswered-is-no-ruling
     boldness: moderate
-    stands: unanswered-is-no-ruling
   - name: authority
     options:
       - name: ratified
@@ -96,52 +103,6 @@ defines:
   - confirmation with edits
   - denial with feedback
 ---
-## Disposition
-
-The author, 2026-09-03, on the alignment page and what it says about confirmation:
-
-> Not all aspects of the disposition need to be confirmed individually. ... I want a list A of the things I need to confirm about the recommended disposition. Eg. authority and permanence are on list A if confirmation is required. ... The final option on list B is always reject all choices with feedback text input. ... After the final render is an option to reject final render with text input for feedback.
-
-> nodes (eg. commons.systems/disposition-graph/purpose) still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed. This appears to be bootstrap encoding artifact. purpose node is a confirmation ruling for a node that does not yet exist on the reconciliation frontier (only on the alignment frontier).
-
-The words in full are on `commons.systems/disposition-graph/alignment-page`, the node whose question they open.
-
-The author, 2026-09-03:
-> bootstrap operations: Due to the bootstrap nature of the current graph which needed to record (deferred) dispositions that weren't yet answered by alignment dialogue because the alignment dialogue (shim) was not yet bootstrapped. Now that the alignment dialogue does exist, all existing dispositions need to be answered by it. Classify all dispositions as unanswered (the actual status). There should be no loss of disposition encoding - it is only a reclassification to unanswered. For any unanswered dispositions that have not already received adversarial review - do so. The alignment artifact must sort unanswered nodes by rank (purpose node first) and provide inputs to confirm/confirm with edits/or deny with feedback any subset of unanswered nodes.
-
-The author, 2026-09-03, on the sitting of dialogue, the part that answers this question:
-> A conflicting answer that arises in alignment AND survives periagoge/meiutic/adversarial review is marked unanswered until confirmed.
-
-The author, 2026-09-03, a note on the same:
-> A conflicting answer that arises in alignment AND survives periagoge/meiutic/adversarial review is marked unanswered until confirmed. A conflicting answer that arises outside of alignment is a proposal.
-
-The author, 2026-09-03, retracting the marking and stating the function it served:
-> The flipping of node I suggested from answered to unanswered pending confirmation feels like a hack. At a functional level, when reading the documentation for a node that has been previously confirmed/answered I want to see if there are alternate proposals surfaced outside of alignment, or alternate answers surfaced during alignment which are pending confirmation.
-
-The author, 2026-09-03, on the sitting of dialogue, on what grounds work while an alternative is pending:
-> When an alternative is pending on ANY node with authority (ratified, deferred or delegated - remember that ratified has specific technical meaning) the previously confirmed answer keeps its full authority until an alternative is confirmed.
-
-The author, 2026-09-03, answering the probe on the unit of a ruling:
-
-> the revised record is to carry a decision per aspect. each aspect of a disposition may have choices that require confirmation.
-
-The words in full are on `commons.systems/disposition-graph/alignment-page`.
-
-## Answer
-
-When a ruling grants it. A disposition is answered when the rulings on its facts give it a class, ratified, delegated, or deferred, the classes only the author's ruling confers, on the node or on an ancestor whose grant covers it; until then it is unanswered, whatever the node carries: a recommended answer, a draft with no recommendation, or no answer at all. Unanswered is a status the projections derive, never a field: the facts stay as they are, with their options and their recommendation, and the answer stays as it is, the draft the author rules on, so that nothing of the encoding is lost when a node changes class. Nothing on an unanswered node acts, and it is reconciled only on an explicit grant, as the authority node says.
-
-Every node on the alignment frontier carries the dialogue, as the dialogue node defines it, and first its `stage`, the next movement owed on it: periagogic while the author's account is not yet in the record, maieutic while the answer is not yet drafted, review while the draft has not had the clean-context review, and ruling while the author's confirmation is owed. The alignment frontier is every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling; the validator refuses any of them without a stage, and a delegated node carries one only when an option that would leave its delegation's scope has returned it to the author. A node with a class keeps its confirmed choice and its full authority while an option is pending beside it, whatever the option's source, until the author rules for another; the author's first suggestion, that such a node be marked unanswered until confirmed, was retracted by the author on 2026-09-03 as a hack, and the projections show the pending options beside the answer instead. The deferred stamps the bootstrap wrote before the dialogue existed conferred nothing and are gone; each of those nodes stands unanswered at the stage it has reached.
-
-The author rules on the alignment page or in prose; what that page shows, and in what order, is the alignment-page node's question. Three responses are open, and they are open on any subset at once: confirm, confirm with edits, and deny with feedback. A response is given on a node, or on one of the decisions that node's ruling asks, which are its facts: the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape; any other decision the author would rule on separately is a question and therefore a node, and is responded to as a node. A response stands whether or not the node's parent has been ruled: a ruling the author gives is a ruling, and a later ruling on the parent that contradicts it is recorded as an option on the child and put to the author, never applied over their ruling. A confirmation is recorded as a ruling on the option each fact recommends, and the class follows from the rulings: ratified when the answer fact is ruled, delegated or deferred when the ruling on the authority fact says so. A confirmation with edits rules for the option with the edits: the session applies them, and where they change substance the draft goes through the review again before the ruling is recorded. A denial with feedback is a kickback, classified by the recording node to the movement it calls for, and the feedback is recorded as the author's words, never as a ruling; a denial on one decision is a kickback on that decision, and the node returns to the movement the feedback calls for carrying the rulings given on its other decisions. No fourth response is needed: deferring is a choice on the authority fact, not a way of leaving the node unconfirmed. A confirmation given on a node whose review has not run is held until the review runs and recorded when the review forwards it. Nothing the author has not confirmed is doctrine, and nothing in the record is exempt from the dialogue.
-
-## Rationale
-
-The author's ruling of 2026-09-03, quoted above. The bootstrap wrote its answers stamped deferred because the dialogue that alone confers a stamp in the author's name did not yet exist, and the author's ruling on the authority node of 2026-09-02, that the first valid ratifications will be the outputs of this first alignment dialogue, already said that none of them was answered. What changed on 2026-09-03 is the classification. The record had two words for two things: "un-aligned disposition" for a node with no answer, hidden from the browser and listed by the alignment page, and the stamp's class for everything else, so that a deferred answer read as an answer in every projection although the author had not ruled on it. Re-evaluated at the author's direction the same day, the encoding needed one status derived from the stamp and the answer, answered or unanswered, and one rule, that an unanswered node carries its stage, so that the review queue is a listed dialogue the validator holds rather than a reading of the stamps. The un-aligned disposition keeps its name and its shape: it is the unanswered node with no answer yet, which the browser hides because it has nothing to show; every other unanswered node shows in the browser as the draft it is, marked with its stage, because the browser is the record's own documentation and the draft the author reads there is the draft the author rules on.
-
-Why a confirmation ratifies: the recording node makes the confirmation the last movement before the stamp, and the three responses the author asked for are the ruling's three outcomes as that node classifies them, recorded, refined, or kicked back; a fourth response, defer, is not needed, because leaving a node unconfirmed is the deferral. Why the purpose node first: rank alone puts the public graph's root above this project's, since the purpose node stands under it, while the author's order recorded on the scope node begins at purpose; listing each graph in the manifest's order, by rank within it, gives the author's order without touching a rank.
-
-Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Is 'unanswered' just an authority - as in no authority granted for reconciliation"; "In this model 'delegated' and 'deferred' authority mean reconciliation authority is granted for AI recommendation without requiring confirmation. Delegated means the node is removed from the alignment frontier and deferred means it remains." Unanswered is the absence of a ruling and deferred a class the author confers, so the ground given above for needing no fourth response, that leaving a node unconfirmed is the deferral, no longer holds and is replaced: the deferral is a choice on the authority fact. The status stays derived, the three responses stand, and the responses per decision of `responses-on-decisions-and-children` are kept, the decisions being the facts. The answer as it stood is kept as the option `answered-by-stamp`, and the review of this text is owed.
 
 ## Facts
 
@@ -151,25 +112,181 @@ Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on t
 
 The answer as it stood on 2026-09-03: a disposition is answered when its stamp is ratified or delegated; unanswered is derived from the stamp and the answer; a deferred stamp is unanswered; the three responses are given on the node. Viable if the author prefers the stamp; `responses-on-decisions-and-children` is the same answer with the responses given per decision.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+The answer as it stood on 2026-09-03: a disposition is answered when its stamp is ratified or delegated; unanswered is derived from the stamp and the answer; a deferred stamp is unanswered; the three responses are given on the node. Viable if the author prefers the stamp; `responses-on-decisions-and-children` is the same answer with the responses given per decision.
+```
+
 #### page-in-ruling-order
 
 This answer lists every unanswered node on the alignment page in rank order, the purpose node first. The alignment-order draft orders the alignment frontier by the ruling order, the node whose ruling settles the most first, with rank as tie-break; the alternative amends the page order accordingly, and amends "the purpose node first" with it: on the amended count, which counts what a ruling makes decidable elsewhere and not the alternatives it closes on itself, the first node is commons.systems/public/agency, the sole root, whose unanswered subtree is every other node in the record, and the purpose node is second, its only child. The page pages in one order across the manifest's graphs, the graph shown as a label on each node, since a graph precedence would put a descendant's ruling before its ancestor's. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+This answer lists every unanswered node on the alignment page in rank order, the purpose node first. The alignment-order draft orders the alignment frontier by the ruling order, the node whose ruling settles the most first, with rank as tie-break; the alternative amends the page order accordingly, and amends "the purpose node first" with it: on the amended count, which counts what a ruling makes decidable elsewhere and not the alternatives it closes on itself, the first node is commons.systems/public/agency, the sole root, whose unanswered subtree is every other node in the record, and the purpose node is second, its only child. The page pages in one order across the manifest's graphs, the graph shown as a label on each node, since a graph precedence would put a descendant's ruling before its ancestor's. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+```
 
 #### responses-on-decisions-and-children
 
 The description of the alignment page leaves this answer for the node that asks the page's question, which subsumes `page-in-ruling-order`, and the three responses gain two rules the record did not have. A response may be given on one of the decisions a node's ruling asks, the reserved facts the dialogue node names, and a denial on one decision is a kickback on that decision while the responses on the others are kept. And a response on a node stands whether or not its parent has been ruled, with a later parent's ruling that contradicts it recorded as an alternative on the child and put to the author rather than applied over their stamp. Adopted by the recommendation, and set out in the fence.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+When the author has ruled on it through the alignment dialogue. A disposition is answered when its stamp is ratified or delegated, the two classes that only the author's ruling confers; until then it is unanswered, whatever the node carries: an answer stamped deferred, an answer with no stamp, or no answer at all. Unanswered is a status the projections derive, never a field: the stamp stays as it is, saying who holds the answer and since when, and the answer stays as it is, the draft the author rules on, so that reclassifying a node loses nothing of its encoding.
+
+Every unanswered node carries the dialogue, as the dialogue node defines it, and first its `stage`, the next movement owed on it: periagogic while the author's account is not yet in the record, maieutic while the answer is not yet drafted, review while the draft has not had the clean-context review, and ruling while the author's confirmation is owed. The validator refuses an unanswered node without a stage, and an answered node carries one while an alternative is pending on it, from the alignment dialogue or from a proposal outside it, keeping its stamp and its full authority, whatever its class, until an alternative is confirmed; the author's first suggestion, that such a node be marked unanswered until confirmed, was retracted by the author on 2026-09-03 as a hack, and the projections show the pending alternatives beside the answer instead. Every deferred answer in the record was written during bootstrap, before the dialogue existed, and each stands unanswered at the stage it has reached: with the review behind it, at ruling; without, at review, and the review runs on it before anything else.
+
+The author rules on the alignment page or in prose. The page lists every unanswered node of this project's graph in rank order, the purpose node first, and then the public graph's, each with its stage, the author's words, the node as it stands, the alternatives pending with their sources, the recommendation with its facts and its pin, the review's counter-argument, and the AI's account, as the dialogue node lists them; on any subset of them, at once, the author may confirm, confirm with edits, or deny with feedback. A confirmation ratifies what the recommendation adopts, the node as it stands or the alternative it names, or delegates it where the author's words delegate it. A confirmation with edits ratifies the node with the edits: the session applies them, and where they change substance the draft goes through the review again before the stamp is written. A denial with feedback is a kickback, classified by the recording node to the movement it calls for, and the feedback is recorded as the author's words. A confirmation given on a node whose review has not run is held until the review runs and recorded when the review forwards it. Nothing the author has not confirmed is doctrine, and nothing in the record is exempt from the dialogue.
+```
+
 #### child-ruling-held-until-the-parent
 
-A confirmation on a child given while the parent is open is held and recorded when the parent is ruled, by analogy with the confirmation held until the review runs. Against it: the review is a step in producing the draft the author is confirming, so a confirmation before it confirms something unfinished, while a parent's ruling is no part of producing the child's draft. Holding a ruling the author gave would make their ratification wait on a question they did not ask about, and the alignment-order node is explicit that the author's choice of what comes next is their own order.
+A confirmation on a child given while the parent is open is held and recorded when the parent is ruled, by analogy with the confirmation held until the review runs.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: the review is a step in producing the draft the author is confirming, so a confirmation before it confirms something unfinished, while a parent's ruling is no part of producing the child's draft. Holding a ruling the author gave would make their ratification wait on a question they did not ask about, and the alignment-order node is explicit that the author's choice of what comes next is their own order.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+A confirmation on a child given while the parent is open is held and recorded when the parent is ruled, by analogy with the confirmation held until the review runs.
+```
 
 #### unanswered-is-no-ruling
 
 Unanswered is the state of a node no ruling grants: nothing on it acts, and it is reconciled only on an explicit grant. Deferred is not that state but a class the author confers on the authority fact, beside ratified and delegated, under which the recommendation acts and the node stays on the alignment frontier; the answer's ground for rejecting a fourth response, that leaving a node unconfirmed is the deferral, no longer holds, and no fourth response is needed, since the deferral is a choice on a fact. The alignment frontier becomes every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The three responses and the status derived rather than stored are unchanged. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
+**AI support.** The author's ruling of 2026-09-03, quoted above. The bootstrap wrote its answers stamped deferred because the dialogue that alone confers a stamp in the author's name did not yet exist, and the author's ruling on the authority node of 2026-09-02, that the first valid ratifications will be the outputs of this first alignment dialogue, already said that none of them was answered. What changed on 2026-09-03 is the classification. The record had two words for two things: "un-aligned disposition" for a node with no answer, hidden from the browser and listed by the alignment page, and the stamp's class for everything else, so that a deferred answer read as an answer in every projection although the author had not ruled on it. Re-evaluated at the author's direction the same day, the encoding needed one status derived from the stamp and the answer, answered or unanswered, and one rule, that an unanswered node carries its stage, so that the review queue is a listed dialogue the validator holds rather than a reading of the stamps. The un-aligned disposition keeps its name and its shape: it is the unanswered node with no answer yet, which the browser hides because it has nothing to show; every other unanswered node shows in the browser as the draft it is, marked with its stage, because the browser is the record's own documentation and the draft the author reads there is the draft the author rules on.
+
+Why a confirmation ratifies: the recording node makes the confirmation the last movement before the stamp, and the three responses the author asked for are the ruling's three outcomes as that node classifies them, recorded, refined, or kicked back; a fourth response, defer, is not needed, because leaving a node unconfirmed is the deferral. Why the purpose node first: rank alone puts the public graph's root above this project's, since the purpose node stands under it, while the author's order recorded on the scope node begins at purpose; listing each graph in the manifest's order, by rank within it, gives the author's order without touching a rank.
+
+Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Is 'unanswered' just an authority - as in no authority granted for reconciliation"; "In this model 'delegated' and 'deferred' authority mean reconciliation authority is granted for AI recommendation without requiring confirmation. Delegated means the node is removed from the alignment frontier and deferred means it remains." Unanswered is the absence of a ruling and deferred a class the author confers, so the ground given above for needing no fourth response, that leaving a node unconfirmed is the deferral, no longer holds and is replaced: the deferral is a choice on the authority fact. The status stays derived, the three responses stand, and the responses per decision of `responses-on-decisions-and-children` are kept, the decisions being the facts. The answer as it stood is kept as the option `answered-by-stamp`, and the review of this text is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+When a ruling grants it. A disposition is answered when the rulings on its facts give it a class, ratified, delegated, or deferred, the classes only the author's ruling confers, on the node or on an ancestor whose grant covers it; until then it is unanswered, whatever the node carries: a recommended answer, a draft with no recommendation, or no answer at all. Unanswered is a status the projections derive, never a field: the facts stay as they are, with their options and their recommendation, and the answer stays as it is, the draft the author rules on, so that nothing of the encoding is lost when a node changes class. Nothing on an unanswered node acts, and it is reconciled only on an explicit grant, as the authority node says.
+
+Every node on the alignment frontier carries the dialogue, as the dialogue node defines it, and first its `stage`, the next movement owed on it: periagogic while the author's account is not yet in the record, maieutic while the answer is not yet drafted, review while the draft has not had the clean-context review, and ruling while the author's confirmation is owed. The alignment frontier is every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling; the validator refuses any of them without a stage, and a delegated node carries one only when an option that would leave its delegation's scope has returned it to the author. A node with a class keeps its confirmed choice and its full authority while an option is pending beside it, whatever the option's source, until the author rules for another; the author's first suggestion, that such a node be marked unanswered until confirmed, was retracted by the author on 2026-09-03 as a hack, and the projections show the pending options beside the answer instead. The deferred stamps the bootstrap wrote before the dialogue existed conferred nothing and are gone; each of those nodes stands unanswered at the stage it has reached.
+
+The author rules on the alignment page or in prose; what that page shows, and in what order, is the alignment-page node's question. Three responses are open, and they are open on any subset at once: confirm, confirm with edits, and deny with feedback. A response is given on a node, or on one of the decisions that node's ruling asks, which are its facts: the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape; any other decision the author would rule on separately is a question and therefore a node, and is responded to as a node. A response stands whether or not the node's parent has been ruled: a ruling the author gives is a ruling, and a later ruling on the parent that contradicts it is recorded as an option on the child and put to the author, never applied over their ruling. A confirmation is recorded as a ruling on the option each fact recommends, and the class follows from the rulings: ratified when the answer fact is ruled, delegated or deferred when the ruling on the authority fact says so. A confirmation with edits rules for the option with the edits: the session applies them, and where they change substance the draft goes through the review again before the ruling is recorded. A denial with feedback is a kickback, classified by the recording node to the movement it calls for, and the feedback is recorded as the author's words, never as a ruling; a denial on one decision is a kickback on that decision, and the node returns to the movement the feedback calls for carrying the rulings given on its other decisions. No fourth response is needed: deferring is a choice on the authority fact, not a way of leaving the node unconfirmed. A confirmation given on a node whose review has not run is held until the review runs and recorded when the review forwards it. Nothing the author has not confirmed is doctrine, and nothing in the record is exempt from the dialogue.
+```
+
 #### confirmation-before-the-ruling-stage-is-invalid
 
 A confirmation given on a node that has not reached the ruling stage, on the page or in prose, is not held and confers nothing: it is recorded as the author's words and the dialogue proceeds from its stage, and the page renders its inputs disabled there. This supersedes the standing sentence that a confirmation given before the review has run is held until the review forwards it, on the author's words of 2026-09-04 recorded on commons.systems/disposition-graph/alignment-page: "Confirmed responses for nodes that are not at the confirmation stage of dialogue are invalid. Show the facts with pending confirmation, and recommendations, but disable to input." Raised by that node's clean-context review of 2026-09-04, which found the supersession recorded nowhere here.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+A confirmation given on a node that has not reached the ruling stage, on the page or in prose, is not held and confers nothing: it is recorded as the author's words and the dialogue proceeds from its stage, and the page renders its inputs disabled there. This supersedes the standing sentence that a confirmation given before the review has run is held until the review forwards it, on the author's words of 2026-09-04 recorded on commons.systems/disposition-graph/alignment-page: "Confirmed responses for nodes that are not at the confirmation stage of dialogue are invalid. Show the facts with pending confirmation, and recommendations, but disable to input." Raised by that node's clean-context review of 2026-09-04, which found the supersession recorded nowhere here.
+```
 
 #### browser-hides-every-unanswered-node
 
@@ -178,11 +295,64 @@ as covering every unanswered node. It was passed over because it would empty
 the browser of the record it documents; the ruling was made of nodes with no
 answer and is kept for them.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+The author's ruling that unanswered nodes are hidden from the browser is read
+as covering every unanswered node. It was passed over because it would empty
+the browser of the record it documents; the ruling was made of nodes with no
+answer and is kept for them.
+```
+
 #### fourth-class-or-field-for-unanswered
 
 Unanswered is a fourth authority class, or a field of its own. It was passed
 over because the status is derived from the stamp and the answer, and a stored
 copy would drift.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+Unanswered is a fourth authority class, or a field of its own. It was passed
+over because the status is derived from the stamp and the answer, and a stored
+copy would drift.
+```
 
 #### mark-answered-node-unanswered
 
@@ -192,10 +362,63 @@ because the author retracted it the same day: a pending alternative is
 dialogue state beside the answer, and the answer's authority does not lapse
 until one is confirmed.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+An answered node is marked unanswered while an alternative is pending, which
+was the author's own first suggestion of 2026-09-03. It was passed over
+because the author retracted it the same day: a pending alternative is
+dialogue state beside the answer, and the answer's authority does not lapse
+until one is confirmed.
+```
+
 #### deferred-answers-without-a-stage
 
 The deferred answers carry no stage. It was passed over because it would keep
 the review queue a reading of the stamps instead of a dialogue the page lists.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+The deferred answers carry no stage. It was passed over because it would keep
+the review queue a reading of the stamps instead of a dialogue the page lists.
+```
 
 #### review-item-nodes
 
@@ -203,24 +426,147 @@ The queue is carried by review-item nodes of its own, as the incumbent record
 had it. It was passed over because the queue is the unanswered nodes
 themselves.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+The queue is carried by review-item nodes of its own, as the incumbent record
+had it. It was passed over because the queue is the unanswered nodes
+themselves.
+```
+
 #### a-curriculum
 
 The order of the author's attention is carried by a curriculum, as the
 incumbent record had it. It was passed over because the queue is the
 unanswered nodes themselves.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+The order of the author's attention is carried by a curriculum, as the
+incumbent record had it. It was passed over because the queue is the
+unanswered nodes themselves.
+```
+
 #### response-on-a-fact
 
 Every response is given on a fact, on the alignment page and in prose, and none on the node as a whole, since a fact is what a ruling is recorded on; a prose response reaches the facts it names, or every fact where it names none. This replaces the standing sentence that a response is given "on a node, or on one of the decisions that node's ruling asks". Recorded on 2026-09-04 with the recording node as its source, after that node's reading found the divergence owed here and unrecorded.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+Every response is given on a fact, on the alignment page and in prose, and none on the node as a whole, since a fact is what a ruling is recorded on; a prose response reaches the facts it names, or every fact where it names none. This replaces the standing sentence that a response is given "on a node, or on one of the decisions that node's ruling asks". Recorded on 2026-09-04 with the recording node as its source, after that node's reading found the divergence owed here and unrecorded.
+```
 
 #### edit-ruled-then-reviewed
 
 A confirmation with edits is recorded as a ruling on the edited option when it is given, and the node returns to the review stage where the edits change substance, the confirmed choice keeping its authority meanwhile. This replaces the standing sentence that the edited draft "goes through the review again before the ruling is recorded"; what a response does once given is the recording node's question, and this node would cite that node for it rather than carry a rival sentence. Recorded on 2026-09-04 with the recording node as its source; the other side, the edit held until the re-reading forwards it, is recorded on that node as `edit-held-until-re-read`.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+A confirmation with edits is recorded as a ruling on the edited option when it is given, and the node returns to the review stage where the edits change substance, the confirmed choice keeping its authority meanwhile. This replaces the standing sentence that the edited draft "goes through the review again before the ruling is recorded"; what a response does once given is the recording node's question, and this node would cite that node for it rather than carry a rival sentence. Recorded on 2026-09-04 with the recording node as its source; the other side, the edit held until the re-reading forwards it, is recorded on that node as `edit-held-until-re-read`.
+```
+
 #### stage-keeps-a-node-on-the-frontier
 
 A node carrying a stage is on the alignment frontier whatever class the rulings on its other facts confer, until the recording removes the stage. The frontier as this node, dialogue, and viable-options define it is every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling; a node whose answer fact the author confirmed and whose persistence or existence fact they kicked back stands at the maieutic stage in none of those three sets, and the frontier and the alignment page would drop it while a movement is owed on it. Recorded on 2026-09-04 with the recording node as its source.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+A node carrying a stage is on the alignment frontier whatever class the rulings on its other facts confer, until the recording removes the stage. The frontier as this node, dialogue, and viable-options define it is every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling; a node whose answer fact the author confirmed and whose persistence or existence fact they kicked back stands at the maieutic stage in none of those three sets, and the frontier and the alignment page would drop it while a movement is owed on it. Recorded on 2026-09-04 with the recording node as its source.
+```
 
 #### two-responses-where-the-page-offers-them
 
@@ -243,9 +589,74 @@ two. Against the first: a response the record opens and the author's one ruling
 surface does not offer is a response most authors will never use, and calling it
 open is then a fiction the record maintains about itself.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+Everything the recommended option says, with the roster read as three responses
+of which the alignment page offers two. `where-a-change-request-goes` recommends
+that every change request go to the kick-back and that the option's own control
+hold only the ruling's reason, which leaves the page with no route for a
+confirmation with edits: an author who wants an option changed denies it with
+feedback and the node returns to the maieutic movement. That answer does not
+strike the third response, because the roster is this node's, and it records the
+consequence here for the author to rule.
+
+Two ways to take it, and this option is the first. The response survives and is
+given in the interview, where the author can say "confirm, with this change" in
+prose and the session classifies it as `recording` says; the page is one surface
+among several and need not offer everything the record opens. Or the response
+collapses into the denial with feedback, on the author's own words of 2026-09-04
+that "any changes will necessarily require a kickback", and the roster becomes
+two. Against the first: a response the record opens and the author's one ruling
+surface does not offer is a response most authors will never use, and calling it
+open is then a fiction the record maintains about itself.
+```
+
 #### existence-conditioned-as-persistence-is
 
 Everything the recommendation says, with the sentence naming the decisions a ruling asks conditioning `existence` as it already conditions `persistence`: the node's existence is among them where a prune is proposed, and not otherwise. It is on the table because which-facts-are-listed reads this node's unconditioned sentence as making the existence decision one a ruling asks wherever a ruling can be given, while `dialogue` makes the pair conditional together and gives the reason that "a choice nobody has raised is not a candidate the record lists", and that node says in terms that the option conditioning existence "belongs on that node, where its answer is".
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+
+## Answer
+
+Everything the recommendation says, with the sentence naming the decisions a ruling asks conditioning `existence` as it already conditions `persistence`: the node's existence is among them where a prune is proposed, and not otherwise. It is on the table because which-facts-are-listed reads this node's unconditioned sentence as making the existence decision one a ruling asks wherever a ruling can be given, while `dialogue` makes the pair conditional together and gives the reason that "a choice nobody has raised is not a candidate the record lists", and that node says in terms that the option conditioning existence "belongs on that node, where its answer is".
+```
 
 ## Account
 
@@ -492,3 +903,7 @@ Also named: commons.systems/disposition-graph/which-facts-are-listed.
 Proposed: unanswered is the survivor and the home: the option conditioning `existence` as `persistence` is conditioned is recorded on its answer fact, sourced to which-facts-are-listed, so the author rules the asymmetry once at the node whose sentence carries it. which-facts-are-listed's answer stands as written, since it declines the question deliberately and says so.
 
 Recorded as an option on this node's answer fact: `existence-conditioned-as-persistence-is` (source review, 2026-09-07).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/unanswered stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `unanswered-is-no-ruling`; the `## Rationale` its `**AI support.**`; 7 `## Disposition` entries became the ledger entries words/2026-09-03/80, words/2026-09-03/81, words/2026-09-03/82, words/2026-09-03/42, words/2026-09-03/83, words/2026-09-03/29, words/2026-09-03/84, referenced by 7 options the entry's own date names; and `stands` left the answer fact. The content of `responses-on-decisions-and-children (at db23d5b1)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `answered-by-stamp`, `page-in-ruling-order`, `child-ruling-held-until-the-parent`, `confirmation-before-the-ruling-stage-is-invalid`, `browser-hides-every-unanswered-node`, `fourth-class-or-field-for-unanswered`, `mark-answered-node-unanswered`, `deferred-answers-without-a-stage`, `review-item-nodes`, `a-curriculum`, `response-on-a-fact`, `edit-ruled-then-reviewed`, `stage-keeps-a-node-on-the-frontier`, `two-responses-where-the-page-offers-them`, `existence-conditioned-as-persistence-is`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `b5717e656b723368acf1ad6f3609c7ab85c6a1a3` was already past the recommendation and is left as it stood.

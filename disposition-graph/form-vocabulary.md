@@ -21,10 +21,6 @@ facts:
 under:
   - commons.systems/disposition-graph/node
 ---
-## Disposition
-
-The author, 2026-09-02:
-> "assumption" deserves a target disposition, along with "tradition" and "disposition" (if target is renamed to disposition). This is how vocabulary is recorded, not with something bolted on that will drift. Recommend how hyperlinks will avoid drift.
 
 ## Facts
 
@@ -33,6 +29,10 @@ The author, 2026-09-02:
 #### vocabulary-stays-with-the-owning-nodes
 
 The sitting's proposed answer, never stamped and still open for the ruling: no new nodes, each term defined by the node that owns it through the defines field, disposition by model, arche by agency, reading and tradition by readings, criterion and assumption by instruments. The term index links every use in prose to that node, and a term no node defines is not linked, which is how drift shows.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 ### existence
 
@@ -84,3 +84,7 @@ Alternatives pending, with their sources: `vocabulary-stays-with-the-owning-node
 Merge analysis of the author's words: 2026-09-02, own-question: Assumption deserves a target disposition, as do tradition and disposition if target is renamed to disposition, because that is how vocabulary is recorded rather than bolted on where it will drift; recommend how hyperlinks will avoid drift.
 Moved to other nodes as alternatives: `absorb-form-vocabulary` on commons.systems/disposition-graph/node.
 The census unit's note: The node has no answer, no draft and no recommendation field, so adopts is null. Its two pending candidates are its own unstamped proposed answer and the finding that would prune it, which is the sharper ruling for the author since the node's own facts say persistence not recorded. Following the census rule on redundancy I put the fold on the survivor, node, as an elsewhere entry, though its source is the recorded review finding rather than my own judgment; the finding also names projection and readings as survivors of the linking rules but proposes no change to either, so I recorded nothing there. I excluded the rejected one-node-per-form alternative, which the sitting already ruled against, and the coverage finding's audience-and-coverage half, which its own text says the audience prune has resolved.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/form-vocabulary stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 1 `## Disposition` entry became the ledger entry words/2026-09-02/7, referenced by 0 options the entry's own date names. No content is recorded for `vocabulary-stays-with-the-owning-nodes`: the record never wrote one and the migration invents none.

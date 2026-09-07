@@ -5,11 +5,11 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: 472901e1a470cbb9d515cdff48d575e4d05da26a
+  of: 037fb16d831a28ae54393ec4671f94f0e1b5a0e5
   against: "The traditions graph inherits the manifest's shape for graphs that move — a target and a liquidation — and has neither, so the manifest would carry a graph of a third kind with no declared future, in a record that has just adopted 'addresses do not change' from Berners-Lee and made namespaces' own shim owe redirects. The author's stated model, a tradition as a mount that could be its own graph, anticipates exactly the move this entry does not, and one line in the manifest entry would settle it."
   survey:
     date: 2026-09-05
-    of: 472901e1a470cbb9d515cdff48d575e4d05da26a
+    of: 037fb16d831a28ae54393ec4671f94f0e1b5a0e5
 facts:
   - name: answer
     options:
@@ -19,12 +19,13 @@ facts:
       - name: draft
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-02/14
       - name: traditions-graph-declares-move
         source: review
         ref: "2026-09-03"
     recommends: draft
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -45,32 +46,52 @@ shims:
     liquidation: a repository answers at natb1.com with a `disposition` ref; `public/` moves there and ids rewrite by prefix, with redirects from the old addresses, as the web-routing reading adopts
     declared: 2026-09-02
 ---
-## Disposition
-
-The author, 2026-09-02:
-> It is a mount because it could theoretically be represented by its own graph with its own arche and its own reference to traditions.
-
-## Answer
-
-By import path, as Go names packages. A repository is a module named by its path, `commons.systems`; it may carry several graphs on its `disposition` ref, as a module carries several packages; a node's id is module, graph, and slug: `commons.systems/disposition-graph/purpose`. References across graphs and across repositories are the same path. A graph that will move declares its target in the manifest, and that declaration is a shim whose liquidation is a directory move and a prefix rewrite of ids.
-
-## Rationale
-
-The author's ruling of 2026-09-02. Traditions to record as readings: Go modules, whose `replace` directive is the shim's model; Unix mount namespaces, which map a path prefix to another tree.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+By import path, as Go names packages.
+
+**AI support.** The author's ruling of 2026-09-02. Traditions to record as readings: Go modules, whose `replace` directive is the shim's model; Unix mount namespaces, which map a path prefix to another tree.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How are nodes named across graphs?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - id
+  - module
+  - mount
+shims:
+  - artifact: the `public` graph in this repository's manifest, the public part of the author's personal disposition hosted here
+    for: the mount of `commons.systems/public` at `natb1.com/public`
+    liquidation: a repository answers at natb1.com with a `disposition` ref; `public/` moves there and ids rewrite by prefix, with redirects from the old addresses, as the web-routing reading adopts
+    declared: 2026-09-02
+---
+
+## Answer
+
+By import path, as Go names packages. A repository is a module named by its path, `commons.systems`; it may carry several graphs on its `disposition` ref, as a module carries several packages; a node's id is module, graph, and slug: `commons.systems/disposition-graph/purpose`. References across graphs and across repositories are the same path. A graph that will move declares its target in the manifest, and that declaration is a shim whose liquidation is a directory move and a prefix rewrite of ids.
+```
+
 #### draft
 
 The draft adds to the standing answer one sentence creating the traditions graph: a graph may be a mount of what is not this project's own disposition, the traditions graph holding one root node per tradition the record reads, with a tradition that comes to have a graph of its own reached by the same path. It carries the same public-graph mount shim, now with the redirect obligation web-routing adopts, and a rationale naming the model of a tradition as a mount. It presumes traditions-home's recommended option, which is unruled, and the manifest entry that would create the graph is shown on traditions-home rather than here.
 
-#### traditions-graph-declares-move
+**AI support.** The author's ruling of 2026-09-02, and the model of a tradition as a mount that could be a graph of its own.
 
-The counter-argument, twice recorded: the traditions graph inherits the manifest's shape for graphs that move, a target and a liquidation, and has neither, so the manifest would carry a graph of a third kind with no declared future, while the author's own model is that a tradition could be represented by its own graph, a move this entry does not anticipate and which web-routing's adopted principle would make owe redirects. This alternative gives the traditions graph a declared target and liquidation like the public graph's, one line in the manifest entry, so that every graph in the manifest declares its future.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -91,10 +112,27 @@ shims:
 ## Answer
 
 By import path, as Go names packages. A repository is a module named by its path, `commons.systems`; it may carry several graphs on its `disposition` ref, as a module carries several packages; a node's id is module, graph, and slug: `commons.systems/disposition-graph/purpose`. References across graphs and across repositories are the same path. A graph may be a mount of what is not this project's own disposition: the traditions graph holds one root node per tradition this record reads, and a tradition that comes to have a graph of its own is reached by the same path. A graph that will move declares its target in the manifest, and that declaration is a shim whose liquidation is a directory move and a prefix rewrite of ids.
+```
 
-## Rationale
+#### traditions-graph-declares-move
 
-The author's ruling of 2026-09-02, and the model of a tradition as a mount that could be a graph of its own.
+The counter-argument, twice recorded: the traditions graph inherits the manifest's shape for graphs that move, a target and a liquidation, and has neither, so the manifest would carry a graph of a third kind with no declared future, while the author's own model is that a tradition could be represented by its own graph, a move this entry does not anticipate and which web-routing's adopted principle would make owe redirects. This alternative gives the traditions graph a declared target and liquidation like the public graph's, one line in the manifest entry, so that every graph in the manifest declares its future.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -16,4 +16,4 @@
+ 
+ ## Answer
+ 
+-By import path, as Go names packages. A repository is a module named by its path, `commons.systems`; it may carry several graphs on its `disposition` ref, as a module carries several packages; a node's id is module, graph, and slug: `commons.systems/disposition-graph/purpose`. References across graphs and across repositories are the same path. A graph that will move declares its target in the manifest, and that declaration is a shim whose liquidation is a directory move and a prefix rewrite of ids.
++The counter-argument, twice recorded: the traditions graph inherits the manifest's shape for graphs that move, a target and a liquidation, and has neither, so the manifest would carry a graph of a third kind with no declared future, while the author's own model is that a tradition could be represented by its own graph, a move this entry does not anticipate and which web-routing's adopted principle would make owe redirects. This alternative gives the traditions graph a declared target and liquidation like the public graph's, one line in the manifest entry, so that every graph in the manifest declares its future.
 ```
 
 ## Account
@@ -214,3 +252,7 @@ Findings:
 
 
 Strongest counter-argument (moderate): The Go analogy fixes an id to an import path and then concedes the public graph's ids will be rewritten by prefix when it moves to natb1.com. `web-routing`'s reading adopts as its fourth principle that addresses do not change, and this is the record's own violation of it; the answer's remedy is a shim carrying a redirect obligation, which is a promise rather than a mechanism. So the stability the naming scheme is chosen for holds only for the graph that is not moving, and the graph that is moving is the public one, which is the graph strangers will address.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/namespaces stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `draft`; 1 `## Disposition` entry became the ledger entry words/2026-09-02/14, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `traditions-graph-declares-move`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `472901e1a470cbb9d515cdff48d575e4d05da26a` is re-computed for the encoding as `037fb16d831a28ae54393ec4671f94f0e1b5a0e5`; nothing it read changed. The survey's pin `472901e1a470cbb9d515cdff48d575e4d05da26a` is re-computed for the encoding as `037fb16d831a28ae54393ec4671f94f0e1b5a0e5`; nothing it read changed.

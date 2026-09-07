@@ -46,7 +46,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 22037e32720f81b7338a43529fb37e442c0c867c
+  of: fb011605f42cec102191641cb226c4edc4816378
   against: "The whole answer is a defence against one measured pathology — review loops that never converge — and every mechanism in it trades correctness for termination. Stated as doctrine that means a landing with a real blocking defect at the cap 'parks the landing for the author, over which nothing lands', converting a review failure into a full stop of the work queue, and 'Review never settles on zero findings' makes a clean diff evidence of a bad review rather than of good code. The cheaper answer the node never adopts is to shrink the contract so a review can finish: its own evidence blames a diff that grew between rounds, which is a scope defect, and delegation already requires one deliverable per unit."
 facts:
   - name: answer
@@ -62,7 +62,6 @@ facts:
         ref: "2026-09-03"
     recommends: standing
     boldness: high
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -86,25 +85,115 @@ shims:
     liquidation: an instrument on the `greenfield` ref produces the assessment from this node; until then the incumbent instrument's detachment, locks, await loop, and resume cache are facts, not doctrine
     declared: 2026-09-02
 ---
-## Answer
-
-By an adversarial review of each landing's diff before it lands, producing an assessment: the subject diff, a verdict, and a pin of what the review read. The review judges one thing, whether the evidence in the diff matches the contract of the unit that produced it. A finding blocks only when it would change behaviour, break a cited anchor, or lead an executor to a wrong action; every other finding is recorded as a proposal on the node the unit instruments and then dropped from the landing, and dropping is an action, not an omission. Review never settles on zero findings. The landing's scope is frozen when review begins: nothing is added to a file under review, and whatever the review turns up outside the contract goes to a follow-up. Findings are fixed as a batch and the assessment regenerated once per batch, at most twice per landing; a blocking finding raised by the second assessment is fixed before landing, and a blocking finding still open at the cap parks the landing for the author, over which nothing lands. A defect class repaired twice is cut rather than repaired a third time, with a regression test that fails before and passes after. Functional findings reconcile before non-functional ones, both before landing. Effort follows the diff: high for code on a write path, one medium assessment for a diff of documents, plans, or tests only. After a ref's first assessment each review covers only the delta since the last reviewed commit. The fix loop is delegated as a unit; the main thread reads the verdict and lands. During bootstrap, review is required once the disposition a landing materializes is ratified, and for everything before exit; until then functional validation, tests and use, suffices. A graph landing is reviewed by the interview that produced it and by the clean-context review, never by this instrument.
-
-## Rationale
-
-The author's ruling of 2026-09-02 that every bootstrap landing requires shimmed code review, adopted from the rules the legacy bootstrap recorded after measurement: one change thrashed sixteen rounds and fifty-six findings when review settled on zero findings, another went fourteen rounds and twenty-three commits because its diff grew between rounds, and a full assessment costs thirteen to fifteen minutes of wall clock at high effort and about seven at medium. Hence a severity gate that prose findings cannot move, a hard cap with no design-surface exemption, batching, a frozen scope, and a frontier channel for everything the gate excludes. Review is part of reconciliation in both directions: it checks the landing against the disposition it serves, and every excluded finding is a candidate disposition. The bootstrap ordering is the author's ruling of 2026-09-02: "The code review is expensive ... during bootstrap code review is only required after ratification. This is analogous to the recorded greenfield doctrine in the legacy graph that the reconciliation frontier should first validate functionality, and only spend cycles on cross-cutting non-functional validation after that." The graph landing is excluded because its review is the interview itself; the legacy attempt reviewed graph landings by self-review and an audit skill instead of the code instrument, and that asymmetry is settled here rather than carried. Traditions to record as readings: Deming, Out of the Crisis (1986), point 3, cease dependence on inspection, diverged from in keeping adversarial review; content-addressed incremental builds (Bazel, Nix), adopted for pinning what an assessment read so that an unrelated change does not expire it.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+By an adversarial review of each landing's diff before it lands, producing an assessment: the subject diff, a verdict, and a pin of what the review read.
+
+**AI support.** The author's ruling of 2026-09-02 that every bootstrap landing requires shimmed code review, adopted from the rules the legacy bootstrap recorded after measurement: one change thrashed sixteen rounds and fifty-six findings when review settled on zero findings, another went fourteen rounds and twenty-three commits because its diff grew between rounds, and a full assessment costs thirteen to fifteen minutes of wall clock at high effort and about seven at medium. Hence a severity gate that prose findings cannot move, a hard cap with no design-surface exemption, batching, a frozen scope, and a frontier channel for everything the gate excludes. Review is part of reconciliation in both directions: it checks the landing against the disposition it serves, and every excluded finding is a candidate disposition. The bootstrap ordering is the author's ruling of 2026-09-02: "The code review is expensive ... during bootstrap code review is only required after ratification. This is analogous to the recorded greenfield doctrine in the legacy graph that the reconciliation frontier should first validate functionality, and only spend cycles on cross-cutting non-functional validation after that." The graph landing is excluded because its review is the interview itself; the legacy attempt reviewed graph landings by self-review and an audit skill instead of the code instrument, and that asymmetry is settled here rather than carried. Traditions to record as readings: Deming, Out of the Crisis (1986), point 3, cease dependence on inspection, diverged from in keeping adversarial review; content-addressed incremental builds (Bazel, Nix), adopted for pinning what an assessment read so that an unrelated change does not expire it.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is materialized implementation reviewed before it lands?
+form: rule
+under:
+  - commons.systems/disposition-graph/work-loop
+defines:
+  - review
+  - blocking finding
+instrument:
+  kind: check
+  ref: the code-review instrument on the implementation ref, producing the assessment this node describes
+  note: not yet materialized; the shim below stands in for it
+shims:
+  - artifact: the detached code-review instrument on `main`, `.claude/skills/dispatch-propagate/scripts/dispatch-code-review`, run from the implementation checkout with the script taken from a worktree of `main`, at bootstrap exit for every landing made under the reconciliation shim
+    for: the instrument of this node
+    liquidation: an instrument on the `greenfield` ref produces the assessment from this node; until then the incumbent instrument's detachment, locks, await loop, and resume cache are facts, not doctrine
+    declared: 2026-09-02
+---
+
+## Answer
+
+By an adversarial review of each landing's diff before it lands, producing an assessment: the subject diff, a verdict, and a pin of what the review read. The review judges one thing, whether the evidence in the diff matches the contract of the unit that produced it. A finding blocks only when it would change behaviour, break a cited anchor, or lead an executor to a wrong action; every other finding is recorded as a proposal on the node the unit instruments and then dropped from the landing, and dropping is an action, not an omission. Review never settles on zero findings. The landing's scope is frozen when review begins: nothing is added to a file under review, and whatever the review turns up outside the contract goes to a follow-up. Findings are fixed as a batch and the assessment regenerated once per batch, at most twice per landing; a blocking finding raised by the second assessment is fixed before landing, and a blocking finding still open at the cap parks the landing for the author, over which nothing lands. A defect class repaired twice is cut rather than repaired a third time, with a regression test that fails before and passes after. Functional findings reconcile before non-functional ones, both before landing. Effort follows the diff: high for code on a write path, one medium assessment for a diff of documents, plans, or tests only. After a ref's first assessment each review covers only the delta since the last reviewed commit. The fix loop is delegated as a unit; the main thread reads the verdict and lands. During bootstrap, review is required once the disposition a landing materializes is ratified, and for everything before exit; until then functional validation, tests and use, suffices. A graph landing is reviewed by the interview that produced it and by the clean-context review, never by this instrument.
+```
+
 #### shrink-the-contract
 
 The two-round cap and its consequence, that a blocking finding still open at the cap parks the landing and nothing lands over it, are dropped in favour of shrinking the unit's contract so a review can finish. The counter-argument notes that the node's own evidence blames a diff that grew between rounds, which is a scope defect rather than a review defect, and that delegation already requires one deliverable per unit. The session replied that delegation's rule is the floor and the cap remains for a contract that still thrashes, and left it to the author whether both stand.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is materialized implementation reviewed before it lands?
+form: rule
+under:
+  - commons.systems/disposition-graph/work-loop
+defines:
+  - review
+  - blocking finding
+instrument:
+  kind: check
+  ref: the code-review instrument on the implementation ref, producing the assessment this node describes
+  note: not yet materialized; the shim below stands in for it
+shims:
+  - artifact: the detached code-review instrument on `main`, `.claude/skills/dispatch-propagate/scripts/dispatch-code-review`, run from the implementation checkout with the script taken from a worktree of `main`, at bootstrap exit for every landing made under the reconciliation shim
+    for: the instrument of this node
+    liquidation: an instrument on the `greenfield` ref produces the assessment from this node; until then the incumbent instrument's detachment, locks, await loop, and resume cache are facts, not doctrine
+    declared: 2026-09-02
+---
+
+## Answer
+
+The two-round cap and its consequence, that a blocking finding still open at the cap parks the landing and nothing lands over it, are dropped in favour of shrinking the unit's contract so a review can finish. The counter-argument notes that the node's own evidence blames a diff that grew between rounds, which is a scope defect rather than a review defect, and that delegation already requires one deliverable per unit. The session replied that delegation's rule is the floor and the cap remains for a contract that still thrashes, and left it to the author whether both stand.
+```
+
 #### deferred-not-ratified
 
 The recommendation changes from ratified to deferred, since this node carries no Disposition section and therefore no quoted ruling, which authority makes a ratified stamp invalid without. The placement finding of 2026-09-03 names review among twenty-two such nodes and offers the alternative of adding a Disposition section carrying the ruling it rests on with its date.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is materialized implementation reviewed before it lands?
+form: rule
+under:
+  - commons.systems/disposition-graph/work-loop
+defines:
+  - review
+  - blocking finding
+instrument:
+  kind: check
+  ref: the code-review instrument on the implementation ref, producing the assessment this node describes
+  note: not yet materialized; the shim below stands in for it
+shims:
+  - artifact: the detached code-review instrument on `main`, `.claude/skills/dispatch-propagate/scripts/dispatch-code-review`, run from the implementation checkout with the script taken from a worktree of `main`, at bootstrap exit for every landing made under the reconciliation shim
+    for: the instrument of this node
+    liquidation: an instrument on the `greenfield` ref produces the assessment from this node; until then the incumbent instrument's detachment, locks, await loop, and resume cache are facts, not doctrine
+    declared: 2026-09-02
+---
+
+## Answer
+
+The recommendation changes from ratified to deferred, since this node carries no Disposition section and therefore no quoted ruling, which authority makes a ratified stamp invalid without. The placement finding of 2026-09-03 names review among twenty-two such nodes and offers the alternative of adding a Disposition section carrying the ruling it rests on with its date.
+```
 
 ## Account
 
@@ -228,3 +317,7 @@ One question — whether a node whose ruling was never quoted may be classed rat
 Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/recording.
 
 Proposed: Settle the question once on `commons.systems/disposition-graph/quotes`, which owns how the author's words are retained, and strike the six local options in favour of a citation to that ruling. In the same movement, remove both measurements from `quotes`' option prose: a count of the record inside the record is what `authority`'s `no-census-in-a-standing-answer` option is about, and both of these counts have already gone false. The set of unquoted-ratified nodes is derivable — nodes with no `## Disposition` whose authority fact recommends `ratified` — so the frontier or the alignment page should compute it and the node should name the rule. `evaluation`'s option is amended to drop the clause about carrying no Disposition section, which is no longer true of it.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/review stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `shrink-the-contract`, `deferred-not-ratified`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `22037e32720f81b7338a43529fb37e442c0c867c` is re-computed for the encoding as `fb011605f42cec102191641cb226c4edc4816378`; nothing it read changed.

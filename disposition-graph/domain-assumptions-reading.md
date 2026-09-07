@@ -15,10 +15,6 @@ facts:
 under:
   - commons.systems/disposition-graph/instruments
 ---
-## Disposition
-
-The author, 2026-09-02:
-> I think the concept of an assumption started as instrumentation. Something like "this answer is valid so long as this assumption holds".
 
 ## Facts
 
@@ -27,6 +23,10 @@ The author, 2026-09-02:
 #### assumption-as-criterion
 
 A reading under instruments on domain assumptions, taking Zave and Jackson 1997 and goal-oriented requirements from van Lamsweerde 2001, adopted: the specification holds under recorded assumptions about the world, and achieve and maintain are properties of the goal's criterion rather than kinds of goal. The sitting proposes the node and its facts, authority deferred until the author reads the sources and boldness moderate, and marks the text pending. Forms' first option, which would make assumption a criterion kind rather than a form, rests on this reading and was itself withdrawn after review.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 ## Account
 
@@ -54,3 +54,7 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `assumption-as-criterion` (ai, 2026-09-03).
 Merge analysis of the author's words: 2026-09-02, new-answer on commons.systems/disposition-graph/instruments: The concept of an assumption started as instrumentation, something like this answer being valid so long as this assumption holds.
 The census unit's note: As with its sibling reading, there is no recommendation and no written answer, so adopts is null and the sitting's sketch is the one alternative pending. The author's block is classified new-answer against instruments, which carries the fuller quotation, Is assumption a form at all, together with this sentence, and whose answer already treats an assumption as an instrument whose failure sends the question above it back to the author; because instruments carries and answers it, I added no elsewhere entry. The forms node is the other consumer of these words and carries the same decision as an option, which is worth the session's attention when it decides where this reading's ruling lands, but forms neither quotes the words nor is proposed for change by anything on this node, so I made no entry there either.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/domain-assumptions-reading stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 1 `## Disposition` entry became the ledger entry words/2026-09-02/6, referenced by 0 options the entry's own date names. No content is recorded for `assumption-as-criterion`: the record never wrote one and the migration invents none.

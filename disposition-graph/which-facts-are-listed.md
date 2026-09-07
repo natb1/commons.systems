@@ -8,6 +8,8 @@ facts:
       - name: all-four-listed-two-derived
         source: author
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-04/28
       - name: facts-the-node-carries
         source: commons.systems/disposition-graph/alignment-page
         ref: "2026-09-05"
@@ -34,6 +36,8 @@ facts:
         ref: "2026-09-04"
         status: passed
         reason: "whether the reserved names are four or five is the dialogue node's question, where the author's same words are already the option instrumentation-is-a-fact"
+        supports:
+          - words/2026-09-04/28
       - name: existence-asked-persistence-derived
         source: review
         ref: "2026-09-07"
@@ -43,7 +47,6 @@ facts:
     recommends: all-four-listed-two-derived
     boldness: moderate
     against: "On 123 of the 134 nodes that carry facts the author will read two decisions and two rows that say nothing is proposed, and a row that asks nothing is apparatus in the one column the parent reserves for what the ruling asks. The author's directive was to list all facts; what this answer lists on almost every node is two facts and two sentences reporting that the record has nothing to ask, which is the fold struck and its silence reinstated under a heading."
-    stands: all-four-listed-two-derived
   - name: authority
     options:
       - name: ratified
@@ -62,18 +65,86 @@ review:
   verdict: forward
   strength: none
   date: 2026-09-07
-  of: 49cbcabd7a9eed31b29063d6b2c11d46a17fda10
+  of: a1dee4d80854ece8402ff2b1ee82740a88ecd574
   commit: f146f8f44b295c64e47a13bff338748035183d87
   survey:
     date: 2026-09-07
-    of: 49cbcabd7a9eed31b29063d6b2c11d46a17fda10
+    of: a1dee4d80854ece8402ff2b1ee82740a88ecd574
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
-## Disposition
 
-The author, 2026-09-04, on the alignment page, queued from the sitting on author-questions:
-> - there are only 2 facts listed for commons.systems/public/agency - the answer prose and the authority. Is that because dispositions only have two facts (and all other structured data has been moved under fact options) or does agency node not yet have options for other facts because dialogue is not at confirmation phase yet? I expect instrumentation (eg.) would be a fact. Either way, list all facts - even if options have not yet been established.
+## Facts
+
+### answer
+
+Recommended because it is the author's directive executed where they left it to
+the AI to execute, and because the distinction it turns on is the record's own.
+The listing is theirs, in the words "list all facts - even if options have not yet
+been established". The derived row is `dialogue`'s sentence that the conditional
+pair is otherwise derived and asks nothing, printed rather than left implicit.
+
+What rests on the AI is two things and they are named as the AI's. The choice of
+the page over the encoding, which the author's "Either way" left open and which
+this answer takes on the ground that a derived fact has no second home. And the
+form of the two rows: that the persistence row states what the record derives,
+that the existence row states that no prune is proposed and where one would be
+raised, that both say where a proposal would be made, and that neither takes a
+ruling. Boldness moderate, and the second is why: a
+row that lists a decision and refuses to take it is a shape the record has not
+used before, and whether it reads as completeness or as a fold with a caption is
+what the author is best placed to say.
+
+#### all-four-listed-two-derived
+
+Every fact the record reserves, on every node that carries facts at all, in the
+reserved order, and none folded.
+
+**AI support.** The author, 2026-09-04, on the alignment page: "there are only 2 facts listed for
+commons.systems/public/agency - the answer prose and the authority. Is that
+because dispositions only have two facts (and all other structured data has been
+moved under fact options) or does agency node not yet have options for other
+facts because dialogue is not at confirmation phase yet? I expect instrumentation
+(eg.) would be a fact. Either way, list all facts - even if options have not yet
+been established."
+
+Their question is answered by the record: the page shows two because two are
+recorded, and the other two are recorded only where a prune or a change of shape
+is proposed. Their directive is what this answer implements, and it is the clause
+"even if options have not yet been established" that fixes the form: a fact
+listed where no option exists is a fact listed and not asked, which is a row that
+reports rather than a row that decides.
+
+"Either way" is the clause that chooses the end. The author put the amendment on
+the page or on the encoding indifferently, and this answer takes the page. The
+reason is not what either end would cost, which bears on nothing: it is that the
+encoding end would write `keep` on 123 nodes where nobody has proposed a prune,
+and a derived value stored in 123 places is the second home
+`commons.systems/disposition-graph/codd-update-anomaly` names, whose reading of
+this record is that "What has a shape is recorded in the field that has it and
+projected from there"
+(`disposition/disposition-graph/codd-update-anomaly.md:54`). The record's reason
+for making the pair conditional says the same thing from the other side, that a
+choice nobody has raised is not a candidate the record lists. The page is where a
+derived fact is shown, and the field is where a decided one is kept.
+
+What the answer beat is on the fact: `facts-the-node-carries`, the incumbent,
+which the author's words strike by name; `every-node-carries-four-facts`, the
+encoding end; and `derived-rows-ask-and-take-a-ruling`, which is this answer with
+the derived rows made rulable, and which is the strongest thing the author might
+take instead.
+
+**AI divergence.** On 123 of the 134 nodes that carry facts the author will read two decisions and two rows that say nothing is proposed, and a row that asks nothing is apparatus in the one column the parent reserves for what the ruling asks. The author's directive was to list all facts; what this answer lists on almost every node is two facts and two sentences reporting that the record has nothing to ask, which is the fold struck and its silence reinstated under a heading.
+
+**Content.**
+
+```markdown
+---
+question: Which facts does the alignment page list on a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
 
 ## Answer
 
@@ -178,63 +249,7 @@ fact and the same 134 carry an `authority` fact; 6 carry `existence`; 5 carry
 134 nodes that carry facts the page today shows two rows where the record
 reserves four decisions, which is what `commons.systems/public/agency` showed the
 author and is not particular to it.
-
-## Rationale
-
-The author, 2026-09-04, on the alignment page: "there are only 2 facts listed for
-commons.systems/public/agency - the answer prose and the authority. Is that
-because dispositions only have two facts (and all other structured data has been
-moved under fact options) or does agency node not yet have options for other
-facts because dialogue is not at confirmation phase yet? I expect instrumentation
-(eg.) would be a fact. Either way, list all facts - even if options have not yet
-been established."
-
-Their question is answered by the record: the page shows two because two are
-recorded, and the other two are recorded only where a prune or a change of shape
-is proposed. Their directive is what this answer implements, and it is the clause
-"even if options have not yet been established" that fixes the form: a fact
-listed where no option exists is a fact listed and not asked, which is a row that
-reports rather than a row that decides.
-
-"Either way" is the clause that chooses the end. The author put the amendment on
-the page or on the encoding indifferently, and this answer takes the page. The
-reason is not what either end would cost, which bears on nothing: it is that the
-encoding end would write `keep` on 123 nodes where nobody has proposed a prune,
-and a derived value stored in 123 places is the second home
-`commons.systems/disposition-graph/codd-update-anomaly` names, whose reading of
-this record is that "What has a shape is recorded in the field that has it and
-projected from there"
-(`disposition/disposition-graph/codd-update-anomaly.md:54`). The record's reason
-for making the pair conditional says the same thing from the other side, that a
-choice nobody has raised is not a candidate the record lists. The page is where a
-derived fact is shown, and the field is where a decided one is kept.
-
-What the answer beat is on the fact: `facts-the-node-carries`, the incumbent,
-which the author's words strike by name; `every-node-carries-four-facts`, the
-encoding end; and `derived-rows-ask-and-take-a-ruling`, which is this answer with
-the derived rows made rulable, and which is the strongest thing the author might
-take instead.
-
-## Facts
-
-### answer
-
-Recommended because it is the author's directive executed where they left it to
-the AI to execute, and because the distinction it turns on is the record's own.
-The listing is theirs, in the words "list all facts - even if options have not yet
-been established". The derived row is `dialogue`'s sentence that the conditional
-pair is otherwise derived and asks nothing, printed rather than left implicit.
-
-What rests on the AI is two things and they are named as the AI's. The choice of
-the page over the encoding, which the author's "Either way" left open and which
-this answer takes on the ground that a derived fact has no second home. And the
-form of the two rows: that the persistence row states what the record derives,
-that the existence row states that no prune is proposed and where one would be
-raised, that both say where a proposal would be made, and that neither takes a
-ruling. Boldness moderate, and the second is why: a
-row that lists a decision and refuses to take it is a shape the record has not
-used before, and whether it reads as completeness or as a fold with a caption is
-what the author is best placed to say.
+```
 
 #### facts-the-node-carries
 
@@ -248,11 +263,40 @@ shows two of the four decisions a ruling covers and says nothing about the other
 two, which is the state the author read on `commons.systems/public/agency` and
 asked about.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which facts does the alignment page list on a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the page listing only the facts the
+node carries and inventing nothing, which is what `renderFacts` does today
+(`packages/disposition/project.mjs`) and what the parent's clause
+"every one the node carries and none folded" says. Passed over: the author's
+words of 2026-09-04 strike it by name, and the fold they struck is not the only
+way a decision goes unseen. On 123 of the 134 nodes that carry facts this option
+shows two of the four decisions a ruling covers and says nothing about the other
+two, which is the state the author read on `commons.systems/public/agency` and
+asked about.
+```
+
 #### every-node-carries-four-facts
 
 The encoding end: `dialogue`'s sentence making `existence` and `persistence`
 conditional is amended, every node that carries facts carries four, and the page
-then lists what the node carries with no derivation at all. For it: this question
+then lists what the node carries with no derivation at all.
+
+**AI support.** For it: this question
 closes with nothing derived, the reader and the validator hold the whole shape,
 and a fact the author can see is a fact the author can rule on wherever they meet
 it. Viable and not adopted. It writes `keep` on 123 nodes where no prune is
@@ -263,11 +307,32 @@ settle a question about this page, where the page can answer it alone; and
 is not a candidate the record lists, is a reason this option has to overturn and
 does not address.
 
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which facts does the alignment page list on a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+The encoding end: `dialogue`'s sentence making `existence` and `persistence`
+conditional is amended, every node that carries facts carries four, and the page
+then lists what the node carries with no derivation at all.
+```
+
 #### derived-rows-ask-and-take-a-ruling
 
 Everything the recommended option says, with the two derived rows carrying their
 options and a live radio at the ruling stage, so the author may propose a prune or
-a change of shape from the page. For it: the author's directive says list all
+a change of shape from the page.
+
+**AI support.** For it: the author's directive says list all
 facts, and a listed fact the author cannot rule on is half a listing; the author
 is already reading the node, which is the moment a prune occurs to a reader; and
 `existence` exists precisely so a prune is recorded as a fact and not as an option
@@ -278,6 +343,25 @@ a proposal rather than a confirmation, which is the one thing that rule sends to
 the interview. It is the option to take if the author reads their own directive as
 reaching what the page asks and not only what it shows.
 
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which facts does the alignment page list on a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the two derived rows carrying their
+options and a live radio at the ruling stage, so the author may propose a prune or
+a change of shape from the page.
+```
+
 #### derived-rows-on-every-node
 
 Everything the recommended option says, with the derived rows printed on nodes
@@ -286,6 +370,30 @@ over: a node with no facts is at the periagogic or the maieutic stage and owes n
 ruling at all, so four rows reporting that nothing is asked replace one sentence
 that already says the whole of it, and the parent's clause that such a node
 "offers nothing invented" is the sentence they would replace.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which facts does the alignment page list on a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the derived rows printed on nodes
+carrying no facts as well, so that every item on the page shows four rows. Passed
+over: a node with no facts is at the periagogic or the maieutic stage and owes no
+ruling at all, so four rows reporting that nothing is asked replace one sentence
+that already says the whole of it, and the parent's clause that such a node
+"offers nothing invented" is the sentence they would replace.
+```
 
 #### a-line-naming-the-facts-not-asked
 
@@ -296,6 +404,31 @@ as a hidden row, and it says less than the rows do, since a name without what is
 derived for it tells the author that a decision exists and not what the record
 holds on it. It also puts the two reserved names into text the page carries for
 itself, which the parent's answer refuses as a rule no node projects.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which facts does the alignment page list on a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with one line beneath the facts the node
+carries naming the decisions the ruling does not ask, instead of two rows. Passed
+over: it is the fold the author's words strike, written as a sentence rather than
+as a hidden row, and it says less than the rows do, since a name without what is
+derived for it tells the author that a decision exists and not what the record
+holds on it. It also puts the two reserved names into text the page carries for
+itself, which the parent's answer refuses as a rule no node projects.
+```
 
 #### instrumentation-listed-as-a-fifth
 
@@ -308,12 +441,40 @@ node's answer fact. This answer lists whatever that ruling leaves reserved, so a
 ruling there reaches this page with no ruling here, and listing a fifth name the
 record does not reserve would be the page deciding the encoding.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which facts does the alignment page list on a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with `instrumentation` listed as a fifth
+row, on the author's expectation of 2026-09-04 that it would be a fact. Passed
+over here and live elsewhere: whether the reserved names are four or five is
+`commons.systems/disposition-graph/dialogue`'s question, where the author's same
+words are already recorded as the option `instrumentation-is-a-fact` on that
+node's answer fact. This answer lists whatever that ruling leaves reserved, so a
+ruling there reaches this page with no ruling here, and listing a fifth name the
+record does not reserve would be the page deciding the encoding.
+```
+
 #### existence-asked-persistence-derived
 
 Everything the recommended option says, with the two conditional facts split
 rather than treated as a pair: the persistence row reports what the record
 actually derives from the node's shape, and the existence row carries `keep` and
-`prune` as a live decision on every node that carries facts. For it: it takes the
+`prune` as a live decision on every node that carries facts.
+
+**AI support.** For it: it takes the
 author's directive whole where the record backs it, since `unanswered` names the
 node's existence among the decisions a ruling asks with no condition on it and
 `dialogue`'s derived enumeration names persistence alone; a prune is the one
@@ -328,6 +489,26 @@ AI under the general delegation of graph topology, so on those nodes the radio
 would ask the author to confirm what they have said they do not want to be asked
 about.
 
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which facts does the alignment page list on a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the two conditional facts split
+rather than treated as a pair: the persistence row reports what the record
+actually derives from the node's shape, and the existence row carries `keep` and
+`prune` as a live decision on every node that carries facts.
+```
+
 #### existence-radio-waits-on-the-delegations-ruling
 
 Everything the recommended option says, with one of its grounds dated: the page's
@@ -341,6 +522,35 @@ conferred. Viable and not adopted: the author's rule of 2026-09-06 keeps a
 proposal nobody has made off the page whichever way `graph-topology` is ruled,
 and that ground does not wait on the ruling; what the ruling settles is whether
 the prune is the AI's, not whether the page asks it.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Which facts does the alignment page list on a node?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with one of its grounds dated: the page's
+reason for deriving the existence row rather than asking it holds only from the
+ruling of `delegated` on `commons.systems/disposition-graph/graph-topology`'s
+authority fact; until then the author has not been asked to delegate the prune,
+and the row is what asks it. Raised on `graph-topology`, whose recommended answer
+holds that the delegation acts from that ruling and not before, and which names
+this node's answer among the places that already read the delegation as
+conferred. Viable and not adopted: the author's rule of 2026-09-06 keeps a
+proposal nobody has made off the page whichever way `graph-topology` is ruled,
+and that ground does not wait on the ruling; what the ruling settles is whether
+the prune is the AI's, not whether the page asks it.
+```
 
 ### authority
 
@@ -588,3 +798,7 @@ Also named: commons.systems/disposition-graph/unanswered.
 Proposed: unanswered is the survivor and the home: the option conditioning `existence` as `persistence` is conditioned is recorded on its answer fact, sourced to which-facts-are-listed, so the author rules the asymmetry once at the node whose sentence carries it. which-facts-are-listed's answer stands as written, since it declines the question deliberately and says so.
 
 Recorded as an option on commons.systems/disposition-graph/unanswered's answer fact: `existence-conditioned-as-persistence-is` (source review, 2026-09-07).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/which-facts-are-listed stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `all-four-listed-two-derived`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/28, referenced by 2 options the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `facts-the-node-carries`, `every-node-carries-four-facts`, `derived-rows-ask-and-take-a-ruling`, `derived-rows-on-every-node`, `a-line-naming-the-facts-not-asked`, `instrumentation-listed-as-a-fifth`, `existence-asked-persistence-derived`, `existence-radio-waits-on-the-delegations-ruling`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `49cbcabd7a9eed31b29063d6b2c11d46a17fda10` is re-computed for the encoding as `a1dee4d80854ece8402ff2b1ee82740a88ecd574`; nothing it read changed. The survey's pin `49cbcabd7a9eed31b29063d6b2c11d46a17fda10` is re-computed for the encoding as `a1dee4d80854ece8402ff2b1ee82740a88ecd574`; nothing it read changed.

@@ -26,11 +26,6 @@ probes:
 under:
   - commons.systems/disposition-graph/projection
 ---
-## Disposition
-
-The author, 2026-09-03:
-
-> the graph sections in the left aligned navigation bar of the browser should display some high level metric summarizing the breadth of the frontier for that graph - how many nodes in the graph, how many deferred to give some sense of the depth of the office-hours queue. Perhaps some measure of capture, but number of delegated nodes would be too fine of a metric and not very useful. Recommend metrics, but whatever you recommend maintain a clear functional justication for each - don't just dump raw data. In theory, these metrics are signals/instruments/criteria of some disposition. Each metric should hyperlink to that disposition.
 
 ## Account
 
@@ -56,3 +51,7 @@ The census unit's note: No answer, no recommendation and no candidate metrics: t
 ### The probe's ground, revisited 2026-09-04
 
 The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, found `which-queue-the-heading-summarizes` to pass all three tests, and noticed that one sentence of its `why` is stale: `commons.systems/disposition-graph/viable-options`' answer now says which is which, "the alignment frontier is every node with no ruling, every deferred node, and every proposal; the reconciliation frontier is every node whose acting option's instrument fails". That settles the vocabulary and not the probe, which asks which of the two a heading counts, an answer the author's words of 2026-09-03 name one "frontier" for; the record cannot yet be made to answer it, so the admission test's first limb does not withdraw it. The node passes the ruling test: "delegated" on the browser's heading metrics is a sensible response, and the answer stands as the metrics themselves.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/frontier-metrics stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 1 `## Disposition` entry became the ledger entry words/2026-09-03/57, referenced by 0 options the entry's own date names.

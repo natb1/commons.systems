@@ -42,24 +42,26 @@ probes:
     source: ai
     raised: "2026-09-03"
 ---
-## Disposition
-
-The author, 2026-09-03, naming the last section of the high-level order recorded on the scope node:
-> purpose -> [scope, self documentation (via the graph browser)] (equal) -> alignment -> harness context management -> reconciliation -> rsi
 
 ## Facts
 
 ### answer
 
-
-
 #### bound-by-ratification
 
 Whichever reading stands, a bound is owed: every change to a node the loop uses to change itself requires the author's ratification. The account raises this as the question of what bounds the term here, and records no recommendation on it.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### loop-writes-options
 
 The loop on itself has the same authority over the record as reconciliation, to record viable options and move recommendations, within scope. On a ratified loop node a moved recommendation acts on nothing until the author re-confirms it, which is the bound `bound-by-ratification` asks for; on a delegated one it acts within the delegation. This reads rsi as `rsi-as-loop-on-itself`. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 ## Account
 
@@ -116,3 +118,6 @@ not what the word names.
 The stage does not move; the node was already at the maieutic, which is where
 the probe belongs.
 
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/rsi stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 1 `## Disposition` entry became the ledger entry words/2026-09-03/74, referenced by 0 options the entry's own date names. No content is recorded for `bound-by-ratification`, `loop-writes-options`: the record never wrote one and the migration invents none.

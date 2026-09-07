@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -33,6 +32,45 @@ bears:
     option: three-marks-and-the-case-against
     relation: diverged
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of the two loci this pass produced, and
+the option beside it would be a different account of what the record takes,
+which nothing yet argues for.
+
+#### standing
+
+Supports the form the disposition arrived at, and names the discipline that makes it work.
+
+**AI support.** Recorded in the tradition pass on the alignment page, 2026-09-04, which found the disposition's own form to be a rediscovery of the articulus and said so in as many words. It bears on `every-fact-every-option` because that option is the form, every fact listed, every option under it with the AI's case for recommending or passing it over, answered before the determination; and on `three-column-ruling-screen` as a divergence because the fold rule that option carried is the one move the form forbids. The pass also recorded what makes this a finding of the second evaluation pass rather than an ornament, that the form was abandoned for cost in a writer's hours and not for error, which is exactly the class of tradition `evaluation` sends the second pass to look for.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the scholastic articulus say about stating every objection at full strength, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/alignment-page
+source: Abelard, Sic et Non (composed about 1120), the prologue, which sets some hundred and fifty-eight questions with the authorities ranged on both sides and gives rules for reconciling them rather than suppressing one side; Aquinas, Summa Theologiae (1265 to 1274), the form of the article, the question put, the objections under videtur quod, the sed contra, the respondeo, and a reply to each objection in its turn.
+bears:
+  - fact: answer
+    option: three-column-ruling-screen
+    relation: diverged
+  - fact: answer
+    option: every-fact-every-option
+    relation: adopted
+  - node: commons.systems/disposition-graph/what-an-option-row-carries
+    fact: answer
+    option: three-marks-and-the-case-against
+    relation: diverged
+---
+
 ## Answer
 
 Supports the form the disposition arrived at, and names the discipline that makes it work. The scholastic article puts one question, states every objection to the answer it will give before it gives it, in the objection's own strongest form and in the voice of someone who holds it, sets the contrary authority beside them, determines the question, and then answers each objection one by one. Abelard's prologue supplies the half that comes first: the authorities contradict each other, the contradiction is collected rather than hidden, and the rules for resolving it are rules of reading, a difference of word, of time, of context, or an author's own retraction. Neither half permits the objection to be dropped because the determination is confident.
@@ -42,18 +80,7 @@ The record's disposition is that form. Every fact the node carries is listed and
 The divergence is from the incumbent option and not from the tradition. Under the fold rule a decision was asked only when its boldness was anything but low, so the decisions the AI was surest of were the ones the author never saw. That is the article's forbidden move, an objection dropped because the determination is confident, and it is what the disposition strikes.
 
 Where the record departs from the tradition it departs on the voice. In the article the objection is the objector's, and its strength is guaranteed by the fact that somebody holds it. Here the case against the recommended option is written by the party that recommends, so the guarantee is gone and what stands in its place is the clean-context review, whose counter-argument replaces the AI's own on the row when the review returns one. That substitution is weaker than the tradition's guarantee and the record should not pretend otherwise.
-
-## Rationale
-
-Recorded in the tradition pass on the alignment page, 2026-09-04, which found the disposition's own form to be a rediscovery of the articulus and said so in as many words. It bears on `every-fact-every-option` because that option is the form, every fact listed, every option under it with the AI's case for recommending or passing it over, answered before the determination; and on `three-column-ruling-screen` as a divergence because the fold rule that option carried is the one move the form forbids. The pass also recorded what makes this a finding of the second evaluation pass rather than an ornament, that the form was abandoned for cost in a writer's hours and not for error, which is exactly the class of tradition `evaluation` sends the second pass to look for.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of the two loci this pass produced, and
-the option beside it would be a different account of what the record takes,
-which nothing yet argues for.
+```
 
 ### authority
 
@@ -78,3 +105,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/scholastic-articulus stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

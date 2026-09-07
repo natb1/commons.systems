@@ -5,11 +5,11 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 7dac080d201b955ceaf38e358b50b5cdd7ad1c29
+  of: 45344f72dcd5a16210f8724cd52c80644a5c9c49
   against: "A hexis in Nicomachean Ethics II.5 is acquired by acting and is precisely not a set of propositions one holds; Aristotle contrasts it with both feelings and capacities. A written record of standing answers is nearer to a logos of one's dispositions than to the hexis itself. The node's move — that the record is both a projection of the hexis and part of how it is formed — is the strongest form of the claim and also where it stops being Aristotle's: writing answers down is an activity, but not the activity in which the relevant states are habituated. If the reading fails, knowledge-store loses its ground while keeping its name."
   survey:
     date: 2026-09-05
-    of: 7dac080d201b955ceaf38e358b50b5cdd7ad1c29
+    of: 45344f72dcd5a16210f8724cd52c80644a5c9c49
 facts:
   - name: answer
     options:
@@ -27,7 +27,6 @@ facts:
         ref: "2026-09-03"
     recommends: standing
     boldness: high
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -44,29 +43,122 @@ bears:
     option: standing
     relation: adopted
 ---
-## Answer
-
-Supports, and refines the hypothesis. A hexis is a settled disposition acquired by acting; recording one's standing answers is itself such an activity, so the record is both a projection of the hexis and part of how it is formed. Categories 8 gives a gradation this graph already encodes: a ratified answer is a hexis, stable and changed only by the author; a delegated or deferred answer is a diathesis, easily changed. "Disposition", this repository's term of art, is the standard translation of both words.
-
-## Rationale
-
-The legacy record ratified the hexis reading of its root layer on 2026-07-13, in a reading program on its kind-virtue node; that ratification is evidence for this reading, not authority over it. Validated by the AI on 2026-09-02 from its own knowledge of the loci; deferred until the author reads them.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+Supports, and refines the hypothesis.
+
+**AI support.** The legacy record ratified the hexis reading of its root layer on 2026-07-13, in a reading program on its kind-virtue node; that ratification is evidence for this reading, not authority over it. Validated by the AI on 2026-09-02 from its own knowledge of the loci; deferred until the author reads them.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does Aristotle's hexis support reading this record as a projection of its author's dispositions?
+form: reading
+under:
+  - commons.systems/disposition-graph/knowledge-store
+source: Aristotle, Nicomachean Ethics II.5, 1105b19 to 1106a13 (virtue is a hexis, a settled state, acquired by habituation, neither a feeling nor a capacity); Categories 8, 8b26 to 9a13 (a hexis is stable and hard to change, a diathesis is easily changed).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+Supports, and refines the hypothesis. A hexis is a settled disposition acquired by acting; recording one's standing answers is itself such an activity, so the record is both a projection of the hexis and part of how it is formed. Categories 8 gives a gradation this graph already encodes: a ratified answer is a hexis, stable and changed only by the author; a delegated or deferred answer is a diathesis, easily changed. "Disposition", this repository's term of art, is the standard translation of both words.
+```
+
 #### drop-the-diathesis-mapping
 
 The answer maps Categories 8 onto the record, a ratified answer being a hexis and a delegated or deferred answer a diathesis. Under the unanswered node a deferred answer is not a weaker kind of answer but no answer at all, so the gradation no longer maps onto the record it describes. The alternative drops the mapping, or re-reads it against the derived status and records the divergence; the session accepted this as owed at the sitting and it has not been written.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does Aristotle's hexis support reading this record as a projection of its author's dispositions?
+form: reading
+under:
+  - commons.systems/disposition-graph/knowledge-store
+source: Aristotle, Nicomachean Ethics II.5, 1105b19 to 1106a13 (virtue is a hexis, a settled state, acquired by habituation, neither a feeling nor a capacity); Categories 8, 8b26 to 9a13 (a hexis is stable and hard to change, a diathesis is easily changed).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+The answer maps Categories 8 onto the record, a ratified answer being a hexis and a delegated or deferred answer a diathesis. Under the unanswered node a deferred answer is not a weaker kind of answer but no answer at all, so the gradation no longer maps onto the record it describes. The alternative drops the mapping, or re-reads it against the derived status and records the divergence; the session accepted this as owed at the sitting and it has not been written.
+```
 
 #### logos-not-hexis
 
 The reviewer's counter-argument, twice: a hexis in Nicomachean Ethics II.5 is acquired by acting and is precisely not a set of propositions one holds, so a written record of standing answers is nearer to a logos of one's dispositions than to the hexis itself. The node's move, that the record is both a projection of the hexis and part of how it is formed, is the strongest form of the claim and the point where it stops being Aristotle's. The alternative answers that the reading supports the weaker claim only, which leaves knowledge-store's hypothesis without this ground.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does Aristotle's hexis support reading this record as a projection of its author's dispositions?
+form: reading
+under:
+  - commons.systems/disposition-graph/knowledge-store
+source: Aristotle, Nicomachean Ethics II.5, 1105b19 to 1106a13 (virtue is a hexis, a settled state, acquired by habituation, neither a feeling nor a capacity); Categories 8, 8b26 to 9a13 (a hexis is stable and hard to change, a diathesis is easily changed).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+The reviewer's counter-argument, twice: a hexis in Nicomachean Ethics II.5 is acquired by acting and is precisely not a set of propositions one holds, so a written record of standing answers is nearer to a logos of one's dispositions than to the hexis itself. The node's move, that the record is both a projection of the hexis and part of how it is formed, is the strongest form of the claim and the point where it stops being Aristotle's. The alternative answers that the reading supports the weaker claim only, which leaves knowledge-store's hypothesis without this ground.
+```
+
 #### hold-for-knowledge-store
 
 The parent, knowledge-store, is an unruled hypothesis at the ruling stage, and a third node, hexis, decides the same clause of purpose's text, so this reading grounds a claim the author has not yet made. The alternative says on the node that the reading cannot be confirmed before knowledge-store is, and orders the two rulings accordingly.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does Aristotle's hexis support reading this record as a projection of its author's dispositions?
+form: reading
+under:
+  - commons.systems/disposition-graph/knowledge-store
+source: Aristotle, Nicomachean Ethics II.5, 1105b19 to 1106a13 (virtue is a hexis, a settled state, acquired by habituation, neither a feeling nor a capacity); Categories 8, 8b26 to 9a13 (a hexis is stable and hard to change, a diathesis is easily changed).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+The parent, knowledge-store, is an unruled hypothesis at the ruling stage, and a third node, hexis, decides the same clause of purpose's text, so this reading grounds a claim the author has not yet made. The alternative says on the node that the reading cannot be confirmed before knowledge-store is, and orders the two rulings accordingly.
+```
 
 ## Account
 
@@ -133,3 +225,7 @@ Findings:
 
 
 Strongest counter-argument (moderate): The mapping is the weak part. Categories 8 distinguishes hexis from diathesis by how firmly a state is held in the person — how hard it is to change and how deeply it has settled — and the reading maps that onto ratified against delegated-or-deferred, which is a distinction about which act may change a record. On this record a ratified answer changes by one interview and a delegated one by one recommendation, and neither is hard in the way a hexis is hard; `evaluation` says in as many words that "a ratified answer is not unchangeable". So the gradation is borrowed for its shape and not for its criterion, and the reading records no divergence where its own source and its subject come apart. Boldness `high` is recorded, and the authority fact recommends `delegated`, so nothing puts the mapping in front of the author.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/aristotle-hexis stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `drop-the-diathesis-mapping`, `logos-not-hexis`, `hold-for-knowledge-store`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `7dac080d201b955ceaf38e358b50b5cdd7ad1c29` is re-computed for the encoding as `45344f72dcd5a16210f8724cd52c80644a5c9c49`; nothing it read changed. The survey's pin `7dac080d201b955ceaf38e358b50b5cdd7ad1c29` is re-computed for the encoding as `45344f72dcd5a16210f8724cd52c80644a5c9c49`; nothing it read changed.

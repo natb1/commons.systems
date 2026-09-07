@@ -30,6 +30,8 @@ facts:
       - name: prose-argues-structure-records
         source: ai
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-04/32
       - name: duplicates-only
         source: ai
         ref: "2026-09-04"
@@ -62,11 +64,6 @@ depends:
   - commons.systems/disposition-graph/viable-options#passed-over-options-stay
   - commons.systems/disposition-graph/rejected#passed-over-stays-listed
 ---
-## Disposition
-
-The author, 2026-09-04, in the sitting on the alignment page:
-
-> Structured data from the above must not be re-encoded into the prose (eg. "rejected" options). This is probably residue of the prose being written before the data model recorded rejected options.
 
 ## Facts
 
@@ -118,84 +115,15 @@ that already stand in the record; and it makes one claim of its own beyond
 the author's words, that an account is prose like any other. Adopted by the
 recommendation.
 
-#### duplicates-only
+**AI support.** Recorded on the author's words of 2026-09-04, that structured data must not be re-encoded into the prose and that the prose is probably residue of having been written before the data model recorded rejected options. The diagnosis is right in kind and was understated in degree, and the degree is what fixes the rule's scope. When the rejected passages were migrated on 2026-09-04, at graph commit 3bd99e91, forty-four passages on thirty-four nodes, twenty-six in a node's own rationale and eighteen in a recommendation fence, held a hundred and twenty-one candidates, of which eighteen duplicated an option already on the fact and a hundred and three were recorded nowhere else: the residue reading, on which the prose merely repeats the structure, was true of about one entry in seven, and a rule that removed the prose without giving its contents a field would have discarded the rest. The same measurement found the second kind, thirteen rationales carrying tradition lists, of which the eight traditions named in `commons.systems/disposition-graph/viable-options`' rationale became seven reading nodes, since a tradition named only in prose carries no `bears` entry and no pin. The third kind is in the accounts, where the conventions that preceded the facts encoding survive, among them a line that states a node's class on nodes no ruling grants.
 
-The rule binds duplication and nothing else. Prose that restates what a field
-already holds is liquidated; prose that holds what no field holds stays as
-the rationale's argument by elimination, which
-`commons.systems/disposition-graph/rejected`'s standing licence allows and
-which `commons.systems/disposition-graph/rationale-edge` and
-`commons.systems/disposition-graph/node` both state. It is the author's
-diagnosis taken exactly at its word, residue and no more. Against it: on the
-census the residue was eighteen entries of a hundred and twenty-one, so a
-hundred and three candidates, thirteen tradition lists and the accounts'
-claims of class stay outside the structure, unqueryable and unpinnable; the
-record keeps two homes for one kind of thing with the boundary drawn by a
-judgment the author never sees; and the fold that the tradition pass on
-`commons.systems/disposition-graph/alignment-page` ranked first stays open,
-since the AI still decides which candidates reach the structure the page
-renders. What ruling for it now would mean for a record already migrated is a
-question for the author and no argument here: the migration ran under the
-grant of 2026-09-04 before this node was ruled, so either the prose it
-removed is restored or the migration stands as more than the rule required,
-and the choice between the options turns on neither.
+Where each thing goes is not settled here. The membership of an option list is `commons.systems/disposition-graph/viable-options`' question and `commons.systems/disposition-graph/rejected`'s, and this ruling waits on theirs; the conflict with the sentence of `commons.systems/disposition-graph/node` that the rationale says which alternatives were rejected is recorded there as an option and is not resolved by this answer. What is settled here is that prose is argument and the structure is the record, one home per fact with the projections deriving the rest, which the reading `commons.systems/disposition-graph/codd-update-anomaly` under this node grounds and which this record has already been caught by once. The three narrower answers stay on the fact with what each keeps and loses: binding the rule to duplication alone; binding it to the answer and the rationale and exempting the account; and liquidating the prose without migrating what it held.
 
-#### version-control-holds-the-rest
+What the rule costs, as a consequence of it and no part of the case for it: option lists grow to the size the rationales carried in prose; every projection that recovers structure by matching a heading is rewritten; the accounts that still carry the replaced conventions are edited; and the check the instrument names has to be written before anything but review guards the rule.
 
-The prose is liquidated and its contents are not migrated: a candidate the AI
-does not hold viable is not an option, as
-`commons.systems/disposition-graph/viable-options`' standing text has it, and
-version control holds what left, as
-`commons.systems/disposition-graph/rejected`'s does. The record is smallest
-and both standing answers are applied without amendment. Against it: the
-census prices this at a hundred and three entries, among them the three
-rejections on `commons.systems/disposition-graph/purpose` the author ruled on
-and the fourth the AI added in its fence, the legacy record's measurement of
-what a transient node cost on
-`commons.systems/disposition-graph/transience`, and both rejected
-alternatives to the root archē on `commons.systems/public/agency`; beyond the
-census, the single candidates the migration left standing as argument, among
-them the ratify command on `commons.systems/disposition-graph/authority`,
-which carries the author's own words on it; and every tradition named only in
-a rationale. Version control is not a projection, so a later session meets
-none of it.
+**AI divergence.** The author diagnosed residue and named one example, and this rule binds the answer, the rationale and the account of every node on the strength of a measurement they have not answered, where the narrower reading strikes the duplicates and leaves every argument in the record standing.
 
-#### answer-and-rationale-only
-
-The rule binds the answer and the rationale, and an account restates what it
-likes. The ground for it is that the account is the one prose the record
-already means to discard, since the dialogue folds at the recording and the
-account goes with it, so a duplicate there cannot outlive the question; and
-that a movement's minutes record what was proposed then, where the fields
-hold what stands now. Against it: the account is what the author reads at the
-ruling and what a session resuming a node reads first, so a line that has
-gone stale there misleads the two readers the record exists for; twenty-seven
-of the fifty-one `Facts:` lines in the accounts open `authority ratified` on
-nodes that no ruling grants, which is the claim
-`commons.systems/disposition-graph/authority` says the AI never writes for
-itself; and `commons.systems/disposition-graph/dialogue`'s own rationale
-already names three of those conventions as what the facts encoding replaced,
-so exempting the account keeps them past the answer that superseded them.
-Recorded by the design unit of 2026-09-04 as the option the fact was missing
-on the scope of the rule.
-
-### authority
-
-Ratified. The rule binds the prose of every node and the projections that
-read prose, and both ways of being wrong are expensive: too broad, and it
-discards argument no field can re-derive; too narrow, and the record keeps
-two homes for one fact, which is capture-shaped in the small, the AI's prose
-drifting from the AI's structure with the author reading whichever of the two
-a projection puts in front of them. `deferred` is the option beside it and is
-the author's to take: it would let the rule act while the record it prices is
-watched and would keep the node on the alignment frontier. It is not
-recommended because a rule acting on the AI's recommendation across the prose
-of every node is the case the record escalates toward ratified rather than
-the case it defers. `delegated` is the weakest fit of the three, since it
-says the author does not want to be asked again about what the record's prose
-may say, and the prose is the surface they read.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -215,15 +143,166 @@ Nothing. Prose carries argument, which has no other home, and the structure carr
 What this liquidates, wherever it stands: the rejected passages of the rationales, whose candidates go to the fact's options; the tradition lists of the rationales, whose entries go to readings; and, in the accounts, the conventions the facts encoding replaced, the `Facts:` line, the `Options:` block, `Feeds:`, `Depends on:`, `Proposed text:` and `Responses open:`, each of which restates a field, a field's derived inverse, or what a page renders, and three of which `commons.systems/disposition-graph/dialogue`'s rationale already names among the prose conventions its answer turned into data. What it keeps: the argument of a rationale, an argument by elimination included, which names the options it beats without listing them; the author's words, verbatim and dated, as `commons.systems/disposition-graph/quotes` decides; and the account as the record of what happened at each movement, its evidence, its findings, the reviews and the replies, none of which any field holds.
 
 What checks it: the validator, on the part that is lexical, that no heading and no line-initial label in a node's prose names a field of the encoding, and that every reading's `bears` entry resolves to an option, which the reader checks today and the rest of which is owed; and the projections by construction, since a page that renders the options, their status, their readings and their rulings from the facts reads no prose for them, which is what `commons.systems/disposition-graph/alignment-page` requires of the alignment page, and a projection that recovers structure by matching the text of a heading reads the prose for what the fields hold and is unsupported implementation on the terms `commons.systems/disposition-graph/materialization` sets, whatever prose the record still carries. The rest is review's: whether a passage argues or enumerates is a judgment, and no label catches a sentence that lists without one.
-
-## Rationale
-
-Recorded on the author's words of 2026-09-04, that structured data must not be re-encoded into the prose and that the prose is probably residue of having been written before the data model recorded rejected options. The diagnosis is right in kind and was understated in degree, and the degree is what fixes the rule's scope. When the rejected passages were migrated on 2026-09-04, at graph commit 3bd99e91, forty-four passages on thirty-four nodes, twenty-six in a node's own rationale and eighteen in a recommendation fence, held a hundred and twenty-one candidates, of which eighteen duplicated an option already on the fact and a hundred and three were recorded nowhere else: the residue reading, on which the prose merely repeats the structure, was true of about one entry in seven, and a rule that removed the prose without giving its contents a field would have discarded the rest. The same measurement found the second kind, thirteen rationales carrying tradition lists, of which the eight traditions named in `commons.systems/disposition-graph/viable-options`' rationale became seven reading nodes, since a tradition named only in prose carries no `bears` entry and no pin. The third kind is in the accounts, where the conventions that preceded the facts encoding survive, among them a line that states a node's class on nodes no ruling grants.
-
-Where each thing goes is not settled here. The membership of an option list is `commons.systems/disposition-graph/viable-options`' question and `commons.systems/disposition-graph/rejected`'s, and this ruling waits on theirs; the conflict with the sentence of `commons.systems/disposition-graph/node` that the rationale says which alternatives were rejected is recorded there as an option and is not resolved by this answer. What is settled here is that prose is argument and the structure is the record, one home per fact with the projections deriving the rest, which the reading `commons.systems/disposition-graph/codd-update-anomaly` under this node grounds and which this record has already been caught by once. The three narrower answers stay on the fact with what each keeps and loses: binding the rule to duplication alone; binding it to the answer and the rationale and exempting the account; and liquidating the prose without migrating what it held.
-
-What the rule costs, as a consequence of it and no part of the case for it: option lists grow to the size the rationales carried in prose; every projection that recovers structure by matching a heading is rewritten; the accounts that still carry the replaced conventions are edited; and the check the instrument names has to be written before anything but review guards the rule.
 ```
+
+#### duplicates-only
+
+The rule binds duplication and nothing else. Prose that restates what a field
+already holds is liquidated; prose that holds what no field holds stays as
+the rationale's argument by elimination, which
+`commons.systems/disposition-graph/rejected`'s standing licence allows and
+which `commons.systems/disposition-graph/rationale-edge` and
+`commons.systems/disposition-graph/node` both state. It is the author's
+diagnosis taken exactly at its word, residue and no more.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: on the
+census the residue was eighteen entries of a hundred and twenty-one, so a
+hundred and three candidates, thirteen tradition lists and the accounts'
+claims of class stay outside the structure, unqueryable and unpinnable; the
+record keeps two homes for one kind of thing with the boundary drawn by a
+judgment the author never sees; and the fold that the tradition pass on
+`commons.systems/disposition-graph/alignment-page` ranked first stays open,
+since the AI still decides which candidates reach the structure the page
+renders. What ruling for it now would mean for a record already migrated is a
+question for the author and no argument here: the migration ran under the
+grant of 2026-09-04 before this node was ruled, so either the prose it
+removed is restored or the migration stands as more than the rule required,
+and the choice between the options turns on neither.
+
+**Content.**
+
+```markdown
+---
+question: What may a node's prose restate of what the record already carries as data?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+instrument:
+  kind: check
+  ref: packages/disposition/read.mjs on the implementation ref
+  note: no heading and no line-initial label in a node's prose names a field of the encoding, and every reading's `bears` entry resolves to an option; the second is checked today, the first is not yet materialized, and what is left is review's
+---
+## Answer
+
+The rule binds duplication and nothing else. Prose that restates what a field
+already holds is liquidated; prose that holds what no field holds stays as
+the rationale's argument by elimination, which
+`commons.systems/disposition-graph/rejected`'s standing licence allows and
+which `commons.systems/disposition-graph/rationale-edge` and
+`commons.systems/disposition-graph/node` both state. It is the author's
+diagnosis taken exactly at its word, residue and no more.
+```
+
+#### version-control-holds-the-rest
+
+The prose is liquidated and its contents are not migrated: a candidate the AI
+does not hold viable is not an option, as
+`commons.systems/disposition-graph/viable-options`' standing text has it, and
+version control holds what left, as
+`commons.systems/disposition-graph/rejected`'s does. The record is smallest
+and both standing answers are applied without amendment.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: the
+census prices this at a hundred and three entries, among them the three
+rejections on `commons.systems/disposition-graph/purpose` the author ruled on
+and the fourth the AI added in its fence, the legacy record's measurement of
+what a transient node cost on
+`commons.systems/disposition-graph/transience`, and both rejected
+alternatives to the root archē on `commons.systems/public/agency`; beyond the
+census, the single candidates the migration left standing as argument, among
+them the ratify command on `commons.systems/disposition-graph/authority`,
+which carries the author's own words on it; and every tradition named only in
+a rationale. Version control is not a projection, so a later session meets
+none of it.
+
+**Content.**
+
+```markdown
+---
+question: What may a node's prose restate of what the record already carries as data?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+instrument:
+  kind: check
+  ref: packages/disposition/read.mjs on the implementation ref
+  note: no heading and no line-initial label in a node's prose names a field of the encoding, and every reading's `bears` entry resolves to an option; the second is checked today, the first is not yet materialized, and what is left is review's
+---
+## Answer
+
+The prose is liquidated and its contents are not migrated: a candidate the AI
+does not hold viable is not an option, as
+`commons.systems/disposition-graph/viable-options`' standing text has it, and
+version control holds what left, as
+`commons.systems/disposition-graph/rejected`'s does. The record is smallest
+and both standing answers are applied without amendment.
+```
+
+#### answer-and-rationale-only
+
+The rule binds the answer and the rationale, and an account restates what it
+likes. The ground for it is that the account is the one prose the record
+already means to discard, since the dialogue folds at the recording and the
+account goes with it, so a duplicate there cannot outlive the question; and
+that a movement's minutes record what was proposed then, where the fields
+hold what stands now.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: the account is what the author reads at the
+ruling and what a session resuming a node reads first, so a line that has
+gone stale there misleads the two readers the record exists for; twenty-seven
+of the fifty-one `Facts:` lines in the accounts open `authority ratified` on
+nodes that no ruling grants, which is the claim
+`commons.systems/disposition-graph/authority` says the AI never writes for
+itself; and `commons.systems/disposition-graph/dialogue`'s own rationale
+already names three of those conventions as what the facts encoding replaced,
+so exempting the account keeps them past the answer that superseded them.
+Recorded by the design unit of 2026-09-04 as the option the fact was missing
+on the scope of the rule.
+
+**Content.**
+
+```markdown
+---
+question: What may a node's prose restate of what the record already carries as data?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+instrument:
+  kind: check
+  ref: packages/disposition/read.mjs on the implementation ref
+  note: no heading and no line-initial label in a node's prose names a field of the encoding, and every reading's `bears` entry resolves to an option; the second is checked today, the first is not yet materialized, and what is left is review's
+---
+## Answer
+
+The rule binds the answer and the rationale, and an account restates what it
+likes. The ground for it is that the account is the one prose the record
+already means to discard, since the dialogue folds at the recording and the
+account goes with it, so a duplicate there cannot outlive the question; and
+that a movement's minutes record what was proposed then, where the fields
+hold what stands now.
+```
+
+### authority
+
+Ratified. The rule binds the prose of every node and the projections that
+read prose, and both ways of being wrong are expensive: too broad, and it
+discards argument no field can re-derive; too narrow, and the record keeps
+two homes for one fact, which is capture-shaped in the small, the AI's prose
+drifting from the AI's structure with the author reading whichever of the two
+a projection puts in front of them. `deferred` is the option beside it and is
+the author's to take: it would let the rule act while the record it prices is
+watched and would keep the node on the alignment frontier. It is not
+recommended because a rule acting on the AI's recommendation across the prose
+of every node is the case the record escalates toward ratified rather than
+the case it defers. `delegated` is the weakest fit of the three, since it
+says the author does not want to be asked again about what the record's prose
+may say, and the prose is the surface they read.
 
 ## Account
 
@@ -540,3 +619,7 @@ the derived read model on
 entry the account asks for on
 `commons.systems/disposition-graph/madr-decision-records`. Codd's entry here
 already existed and was not owed.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/prose-and-structure stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `prose-argues-structure-records`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/32, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none. The record wrote no text of its own for `duplicates-only`, `version-control-holds-the-rest`, `answer-and-rationale-only`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `ee669918bcfe861c5b70d3497774f08f207554ea` was already past the recommendation and is left as it stood.

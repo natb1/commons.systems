@@ -21,10 +21,6 @@ facts:
 under:
   - commons.systems/disposition-graph/readings
 ---
-## Disposition
-
-The author, 2026-09-02:
-> do not replicate tradition references in the rationale section. There is already a tradition section.
 
 ## Facts
 
@@ -34,13 +30,25 @@ The author, 2026-09-02:
 
 Every list of traditions to record as readings in a rationale becomes root nodes in the traditions graph, each an open question until read, and the list leaves the rationale; about thirty stub nodes, written by a unit after the traditions-home ruling. The proposal enumerates the rationales it would drain and rejects leaving the lists in place until each tradition is read, on the ground that the author ruled rationales do not carry tradition references and an unread tradition is an open question, which is a node. Its own text says the proposed node is pending, and it depends on traditions-home.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### regenerate-enumeration
 
 The cross-reference finding verifies by grep that fourteen nodes carry prose tradition lists and that the enumeration here misses three of them, dialogue, recording and scope, while naming instruments, which carries its traditions without the marker phrase. It proposes that the enumeration be regenerated from the record rather than maintained by hand, the same class of drift the scope node's order field was introduced to prevent, and that until then the three missing nodes be added. Raised on commons.systems/disposition-graph/audience.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### one-ruling-for-the-prose-lists
 
 Stub-traditions' answer says that the ruling on where prose tradition lists go settles it for every rationale that carries one, so the `traditions-to-readings` alternatives pending on materialization, validation-order, instruments and evaluation are consequences of this ruling rather than four separate ones. Verified that fourteen rationales carry such lists while this node's enumeration names twelve and misses dialogue, recording and scope, which is why the node's own `regenerate-enumeration` alternative asks that the enumeration be derived from the record instead of maintained by hand. On this alternative the two are taken together: the enumeration is derived, and the derived list is what the ruling drains, so no rationale needs its own pending alternative to say the same thing.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 ## Account
 
@@ -132,3 +140,7 @@ Two nodes maintain a hand-written census of the same population, and they disagr
 Also named: commons.systems/disposition-graph/readings, commons.systems/disposition-graph/codd-update-anomaly, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order.
 
 Proposed: The survivor is `commons.systems/disposition-graph/readings`, which owns how references to tradition are recorded. Its answer already says "the rationale of a node never repeats its readings", which is the rule the censuses are counting violations of, so the count belongs to an instrument and not to an option's prose: derive the list of rationales carrying prose tradition lists rather than writing it down, and have `stub-traditions`' options cite `readings` instead of recounting. Strike the numbers from both option texts. `traditions-to-readings` is settled once, on `readings`, and cited from the four nodes rather than pending on each.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/stub-traditions stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 1 `## Disposition` entry became the ledger entry words/2026-09-02/36, referenced by 0 options the entry's own date names. No content is recorded for `traditions-graph-stubs`, `regenerate-enumeration`, `one-ruling-for-the-prose-lists`: the record never wrote one and the migration invents none.

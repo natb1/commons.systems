@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -34,6 +33,45 @@ bears:
     option: pointers-for-what-grows-with-the-record
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of these two papers the record has
+produced, and no second account of what it takes from them is on the table.
+
+#### standing
+
+Supports the objection being optional, and is the reason it is.
+
+**AI support.** Named in the pass with reference to tradition of `commons.systems/disposition-graph/recording`'s maieutic movement of 2026-09-04, among the traditions surfaced there and each owed as a reading under that node: "Peirce on paper doubt, for the steelman that is optional because a manufactured objection is not a doubt." The same node's standing rationale had named it in prose since 2026-09-03, which `commons.systems/disposition-graph/readings` and `commons.systems/disposition-graph/prose-and-structure` both forbid. It bears on `per-fact-after-two-readings`, the recommended option, which states that a forwarded recommendation carries the reading's counter-argument or says that it has none. `commons.systems/disposition-graph/instruments` names the same tradition in prose for a different question, when a first-principles review is triggered, adopting Peirce against the periodic convention; a `bears` entry on that node's answer fact is owed when its options are settled and is not written here.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does Peirce on paper doubt say about an objection that is not felt, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/recording
+source: Charles Sanders Peirce on genuine doubt against the doubt that is only professed. "The Fixation of Belief", Popular Science Monthly 12 (1877), where inquiry begins in a real and living doubt produced by surprise and ends when belief is settled, so that a doubt adopted as a method is not a doubt at all; and "Some Consequences of Four Incapacities", Journal of Speculative Philosophy 2 (1868), whose first consequence is that we cannot begin with complete doubt, against the Cartesian pretence of doubting everything on paper. Locus to be checked, the paragraph where the sense of paper doubt is stated, and whether that phrase is Peirce's own wording or a later gloss on it.
+bears:
+  - fact: answer
+    option: per-fact-after-two-readings
+    relation: adopted
+  - node: commons.systems/disposition-graph/clean-context-review
+    fact: answer
+    option: per-draft-and-survey
+    relation: adopted
+  - node: commons.systems/disposition-graph/clean-context-review
+    fact: answer
+    option: pointers-for-what-grows-with-the-record
+    relation: adopted
+---
+
 ## Answer
 
 Supports the objection being optional, and is the reason it is. Peirce's argument is that doubt is a state and not a performance. Real doubt is produced by something, a surprise, a conflict between what was expected and what happened, and it is what sets inquiry going and what inquiry ends by settling. A doubt that a method requires the inquirer to produce, on schedule and about everything, is written down rather than felt, and nothing follows from it, because there is no irritation for the inquiry to remove and no belief the inquiry can fix in its place.
@@ -43,17 +81,7 @@ The record takes it for the steelman. The reading returns the strongest counter-
 The tension inside the answer is worth naming, because the same node adopts an office whose whole function is to object. `commons.systems/disposition-graph/promotor-fidei` under this node supplies the adversary attached to every candidate, and this reading supplies the limit on what may be demanded of it: attach the reader to every recommendation, and require of it a report rather than a grievance. The two are compatible only if the report of no counter-argument is genuinely acceptable, which is what the answer states and what the record has to keep true in practice.
 
 The counter, attached. A reader permitted to find nothing is a reader that can be lazy at no cost, and the record has no way to tell an honest report of no doubt from an unread draft; the office that must object at least produces something to check. Peirce would not concede much here, since his point is about what inquiry is and not about how to audit an inquirer, so the tradition supplies no answer to it. What the record has instead is the account, in which the reading's findings and the session's reply are written where the author reads them, so a reading that found nothing is visible as such rather than invisible.
-
-## Rationale
-
-Named in the pass with reference to tradition of `commons.systems/disposition-graph/recording`'s maieutic movement of 2026-09-04, among the traditions surfaced there and each owed as a reading under that node: "Peirce on paper doubt, for the steelman that is optional because a manufactured objection is not a doubt." The same node's standing rationale had named it in prose since 2026-09-03, which `commons.systems/disposition-graph/readings` and `commons.systems/disposition-graph/prose-and-structure` both forbid. It bears on `per-fact-after-two-readings`, the recommended option, which states that a forwarded recommendation carries the reading's counter-argument or says that it has none. `commons.systems/disposition-graph/instruments` names the same tradition in prose for a different question, when a first-principles review is triggered, adopting Peirce against the periodic convention; a `bears` entry on that node's answer fact is owed when its options are settled and is not written here.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of these two papers the record has
-produced, and no second account of what it takes from them is on the table.
+```
 
 ### authority
 
@@ -82,3 +110,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/peirce-paper-doubt stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

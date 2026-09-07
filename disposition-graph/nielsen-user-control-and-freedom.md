@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -26,17 +25,6 @@ bears:
     option: every-fact-every-option
     relation: adopted
 ---
-## Answer
-
-Supports the marking, which is the smaller half of the kick-back question and the half the record takes. The heuristic's claim is not that an exit should exist, which everyone grants, but that it should be legible as an exit: named for where it leads and set apart from the choices it is not, so that a user can see at a glance how to leave rather than discovering it by reading every option. An unmarked exit in a list of choices is worse than no exit, because the user takes it for one more choice.
-
-The record adopts it. The kick-back is the last row on every fact, set apart from the options, its caption saying what it does to the node rather than summarising an option it is not, and its feedback control opening with it. The heuristic is what rules out the alternative that reads more tidily, a kick-back row written like the others with a one-line summary of what rejecting would mean, because that is precisely an exit disguised as a choice.
-
-The divergence is in what the exit costs. The heuristic's exit is cheap and reversible, a way out of a state entered by mistake, and its guarantee is that leaving loses nothing. The kick-back is dispositive: it returns the node to the maieutic movement, sends the AI back to draft options again, and is recorded. So the caption has to say more than a way out; it has to say what taking it does, which is more than the heuristic asks for and is the record's own addition rather than the tradition's.
-
-## Rationale
-
-Recorded in the tradition pass on the alignment page, 2026-09-04, in the finding on where the kick-back sits, where it stands beside Robert's Rules as the second of the two traditions that win the row its marking. It bears on `every-fact-every-option` because that option carries the clause the reading informed, the last row set apart and captioned with what it does to the node.
 
 ## Facts
 
@@ -44,6 +32,38 @@ Recorded in the tradition pass on the alignment page, 2026-09-04, in the finding
 
 The standing text is the only reading of this heuristic the pass produced, and
 no second account of what the record takes from it is on the table.
+
+#### standing
+
+Supports the marking, which is the smaller half of the kick-back question and the half the record takes.
+
+**AI support.** Recorded in the tradition pass on the alignment page, 2026-09-04, in the finding on where the kick-back sits, where it stands beside Robert's Rules as the second of the two traditions that win the row its marking. It bears on `every-fact-every-option` because that option carries the clause the reading informed, the last row set apart and captioned with what it does to the node.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the user-control-and-freedom heuristic say about marking an exit, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/alignment-page
+source: Nielsen's third usability heuristic, user control and freedom, which asks that a user who has entered a state by mistake be given a clearly marked exit from it rather than having to work through an extended dialogue. Nielsen and Molich, "Heuristic Evaluation of User Interfaces" (CHI 1990); Nielsen, "Enhancing the Explanatory Power of Usability Heuristics" (CHI 1994), the revised list of ten; Nielsen, Usability Engineering (1993), chapter 5. Locus to be checked, which list numbers this heuristic third.
+bears:
+  - fact: answer
+    option: every-fact-every-option
+    relation: adopted
+---
+
+## Answer
+
+Supports the marking, which is the smaller half of the kick-back question and the half the record takes. The heuristic's claim is not that an exit should exist, which everyone grants, but that it should be legible as an exit: named for where it leads and set apart from the choices it is not, so that a user can see at a glance how to leave rather than discovering it by reading every option. An unmarked exit in a list of choices is worse than no exit, because the user takes it for one more choice.
+
+The record adopts it. The kick-back is the last row on every fact, set apart from the options, its caption saying what it does to the node rather than summarising an option it is not, and its feedback control opening with it. The heuristic is what rules out the alternative that reads more tidily, a kick-back row written like the others with a one-line summary of what rejecting would mean, because that is precisely an exit disguised as a choice.
+
+The divergence is in what the exit costs. The heuristic's exit is cheap and reversible, a way out of a state entered by mistake, and its guarantee is that leaving loses nothing. The kick-back is dispositive: it returns the node to the maieutic movement, sends the AI back to draft options again, and is recorded. So the caption has to say more than a way out; it has to say what taking it does, which is more than the heuristic asks for and is the record's own addition rather than the tradition's.
+```
 
 ### authority
 
@@ -68,3 +88,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/nielsen-user-control-and-freedom stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

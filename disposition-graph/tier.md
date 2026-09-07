@@ -67,10 +67,6 @@ facts:
 under:
   - commons.systems/disposition-graph/under
 ---
-## Disposition
-
-The author, 2026-09-03:
-> 'Tier' (as in global-tier) needs a disposition. As a disposition references in the projected documentation must be hyperlinked. Is 'tier' even the right primitive? Even cross-cutting non-functional concerns have scope. A static typing convention doesn't apply to the purpose node. Evaluate adversarially and from greenfield perspective whether cross-cutting non-functional concern could be reduced to topology and/or citations.
 
 ## Facts
 
@@ -80,13 +76,25 @@ The author, 2026-09-03:
 
 The second option of the sitting: tier stays a stored flag on the node and the rules projection reads it, which is what the record runs on and what the projector implements today. The reviewer's counter-argument favours it, noting that all five global-tier nodes genuinely do bind every session and that no narrower cross-cutting rule has ever been recorded here.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### scope-by-under-alone
 
 The third option of the sitting: a rule binds the subtree it sits in, and tier is pruned. The sitting's own reasoning rejects it because a rule's home question and its scope differ, evaluation living under growth while binding every evaluation, but the author has not ruled on it.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### record-what-makes-a-rule-global
 
 The reviewer's cheaper answer, offered when the recommended option was kicked back: record what makes a rule global and keep the flag as its projection, so tier is derived from a stated property rather than being either an unexplained field or a new citation mechanism. The session accepted the kickback and named this as one of the two readings the maieutic movement must draw out.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 ## Account
 
@@ -159,3 +167,7 @@ Alternatives pending, with their sources: `keep-tier-as-a-stored-flag` (ai, 2026
 Merge analysis of the author's words: 2026-09-03, own-question: Tier needs a disposition and may not be the right primitive, since even cross-cutting non-functional concerns have scope; evaluate adversarially and greenfield whether a cross-cutting concern reduces to topology or citations, and hyperlink every reference in the projected documentation.
 Moved to other nodes as alternatives: `strike-the-field-link-clause` on commons.systems/disposition-graph/projection.
 The census unit's note: The node carries no answer, no draft and no recommendation field, so adopts is null: the recommended option was withdrawn by the session's own reply after the kickback, which is why I did not record it as pending. What is pending are the two surviving options from the sitting and the reviewer's third reading, that tier be derived from a stated property of a rule while the flag remains its projection. The reviewer's two probes, whether the author wants a rule narrower than global and what such a rule would be, are questions with no candidate answer and I left them out. The author's block is this node's own question, though its hyperlink clause is answered by projection; the finding that carries that to projection is the elsewhere entry. The decomposition and placement findings on this node concern under and are recorded from under.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/tier stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 1 `## Disposition` entry became the ledger entry words/2026-09-03/77, referenced by 0 options the entry's own date names. No content is recorded for `keep-tier-as-a-stored-flag`, `scope-by-under-alone`, `record-what-makes-a-rule-global`: the record never wrote one and the migration invents none. The draft review's pin `b33788c35f071c2873d8b1bb6d951a3f0c89bbed` was already past the recommendation and is left as it stood.

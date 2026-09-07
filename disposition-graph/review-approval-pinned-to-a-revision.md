@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -26,6 +25,37 @@ bears:
     option: facts-carry-options
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of this practice the record has
+produced, and no second account of what it takes from it is on the table.
+
+#### standing
+
+Supports pinning the verdict to what was read, and gives the reason in the form the record uses.
+
+**AI support.** Named in prose in `commons.systems/disposition-graph/dialogue`'s standing rationale by the sitting of 2026-09-03, "review approvals pinned to a revision in code review, where a new revision marks the approval stale", and left owed as a reading; the fence of 2026-09-04 carries it among the three that sitting named and left owed, which `commons.systems/disposition-graph/prose-and-structure` holds may not stay in prose. It bears on `facts-carry-options`, the option that stands, whose `review` field carries the pin and whose answer already says that a recommendation changed since the review shows as changed while an option added beside it does not; the composed option `every-part-in-the-record` states what the pin covers exactly, and no second relation is written there, the account giving one.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a code review approval pinned to a revision say about a verdict that has gone stale, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/dialogue
+source: The practice of tying a review approval to the revision it read. Gerrit Code Review, where a new patch set drops the review scores given on the previous one unless the project's copy condition holds that the change was trivial; the branch-protection setting of GitHub pull requests that dismisses stale approvals when new commits are pushed; and Phabricator Differential, where a new diff on an accepted revision returns it to needs-review. Locus to be checked, the Gerrit configuration key by name and the version it took its present form in, and whether Differential's behaviour is configurable in the same way as the other two.
+bears:
+  - fact: answer
+    option: facts-carry-options
+    relation: adopted
+---
+
 ## Answer
 
 Supports pinning the verdict to what was read, and gives the reason in the form the record uses. An approval is an act on a particular text and not on a name. Once the text moves, the approval says something about a document that no longer exists, and the failure the practice guards against is nobody noticing: the approval is still displayed, the reader trusts it, and the change that lands is not the change that was read. So the systems tie the vote to the revision and drop or mark it when a new one arrives, which converts a silent staleness into a visible one.
@@ -35,17 +65,7 @@ The record takes exactly that. `review.of` is the pin of the recommendation the 
 Where the record is more exact than the practice, and the tradition supports it. A revision-scoped rule treats every change to the artifact as staling, which is why these systems all carry an escape for the trivial case. The record scopes the pin to what was recommended and why rather than to the whole node, so an option added beside the recommendation does not stale a review, and a status marked or a reason recorded does not either. That is the copy-condition idea made structural rather than configurable, and it is what the practice's escape hatch was reaching for.
 
 The counter is the one the practice has never settled. Deciding what change is substantive is a judgment, and Gerrit's answer is a configuration each project sets differently, which is an admission that no rule fits. Here the judgment is the drafting session's, made about its own edit, and the party whose text is under review decides whether the reader has to look again. The record's answer is that the pin is content-addressed and derived rather than asserted, so the judgment is about what goes into the recommendation and not about whether to re-run the reading, which narrows the discretion without removing it.
-
-## Rationale
-
-Named in prose in `commons.systems/disposition-graph/dialogue`'s standing rationale by the sitting of 2026-09-03, "review approvals pinned to a revision in code review, where a new revision marks the approval stale", and left owed as a reading; the fence of 2026-09-04 carries it among the three that sitting named and left owed, which `commons.systems/disposition-graph/prose-and-structure` holds may not stay in prose. It bears on `facts-carry-options`, the option that stands, whose `review` field carries the pin and whose answer already says that a recommendation changed since the review shows as changed while an option added beside it does not; the composed option `every-part-in-the-record` states what the pin covers exactly, and no second relation is written there, the account giving one.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of this practice the record has
-produced, and no second account of what it takes from it is on the table.
+```
 
 ### authority
 
@@ -70,3 +90,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/review-approval-pinned-to-a-revision stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

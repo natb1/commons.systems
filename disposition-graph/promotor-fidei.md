@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -34,19 +33,6 @@ bears:
     option: pointers-for-what-grows-with-the-record
     relation: adopted
 ---
-## Answer
-
-Supports a reading attached by office rather than raised by whoever happens to object, and supplies the constitution of it. The tradition's move is to stop treating the objection as something that may or may not turn up. It is an office, it is on every cause without exception, and the case for the candidate is not complete until the office has argued against it and been answered. Two limits go with the office and both are structural. The promoter argues on the record, so its objection is a document the deciders must meet rather than a private reservation; and it cannot stop the cause, since it holds no vote and the decision belongs to the body it argues before.
-
-The record takes all three. A reading stands between every recorded recommendation and the author, invoked the moment the recommendation is recorded rather than when someone thinks it warranted; its findings and its counter-argument are written into the node, where the author reads them beside the recommendation; and it recommends and never writes, so a kickback is an objection the session answers and, where the session holds its ground, overrides on the record. That is the office's shape kept intact, including the part that is easy to lose, which is that the adversary does not decide.
-
-The abolition of 1983 is part of the tradition and the reading should carry it. The office was removed not because objection stopped mattering but because a permanent adversary was found to make the process slow and to produce objections at the rate the office was staffed for rather than at the rate the causes deserved. What replaced it puts the case together with its difficulties in one document and has a college judge it. That is a live argument against the record's design, and the record's own answer to the manufactured objection is not this office but `commons.systems/disposition-graph/peirce-paper-doubt` under this node, which is why the counter-argument is optional and the reading says when it found none.
-
-Where the analogy is thin. The promoter is a different person, in a different office, with an interest of its own in the integrity of the process, and its independence is institutional. Both readings here are contexts of one class of mind, so what the record buys is independence of framing and not of interest, which is the same limit `commons.systems/disposition-graph/segregation-of-duties` records under `commons.systems/disposition-graph/review-model`. The tradition lends no support to the substitute; it supplies the office and leaves the record to say what fills it.
-
-## Rationale
-
-Named in the pass with reference to tradition of `commons.systems/disposition-graph/recording`'s maieutic movement of 2026-09-04, among the traditions surfaced there and each owed as a reading under that node: "The office of the promotor fidei, an adversary attached by office to every candidate and unable to stall, only to object on the record, for the reading that stands between a draft and the author." The same node's standing rationale had named it in prose since 2026-09-03, which `commons.systems/disposition-graph/readings` and `commons.systems/disposition-graph/prose-and-structure` both forbid, since a tradition named only in prose carries no `bears` entry and no pin. It bears on `per-fact-after-two-readings`, the recommended option, which is where the reading's standing before the author is set out. `commons.systems/disposition-graph/review-model`'s tradition survey surfaced the same office and did not mint it, since it informed no resolution there; it informed one here, which is why the reading is filed under this node.
 
 ## Facts
 
@@ -56,6 +42,48 @@ The standing text is the only reading of this office the record has produced,
 and no second account of what it takes from it is on the table. What is open
 is the fidelity the source line names, the dating of the office and the
 articles of its abolition.
+
+#### standing
+
+Supports a reading attached by office rather than raised by whoever happens to object, and supplies the constitution of it.
+
+**AI support.** Named in the pass with reference to tradition of `commons.systems/disposition-graph/recording`'s maieutic movement of 2026-09-04, among the traditions surfaced there and each owed as a reading under that node: "The office of the promotor fidei, an adversary attached by office to every candidate and unable to stall, only to object on the record, for the reading that stands between a draft and the author." The same node's standing rationale had named it in prose since 2026-09-03, which `commons.systems/disposition-graph/readings` and `commons.systems/disposition-graph/prose-and-structure` both forbid, since a tradition named only in prose carries no `bears` entry and no pin. It bears on `per-fact-after-two-readings`, the recommended option, which is where the reading's standing before the author is set out. `commons.systems/disposition-graph/review-model`'s tradition survey surfaced the same office and did not mint it, since it informed no resolution there; it informed one here, which is why the reading is filed under this node.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the office of the promotor fidei say about an adversary attached to every candidate, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/recording
+source: The promotor fidei, the promoter of the faith, the office established under Sixtus V in 1587 and charged with arguing against every cause for beatification and canonization, popularly the devil's advocate; and its abolition as a party to the process by the apostolic constitution Divinus perfectionis Magister of 1983, which replaced the adversarial procedure with a relator preparing a positio and a college of theological consultors voting on it. Locus to be checked, the 1587 constitution by name and date, the articles of the 1983 constitution, and whether the office's later name, prelate theologian, carries the same function.
+bears:
+  - fact: answer
+    option: per-fact-after-two-readings
+    relation: adopted
+  - node: commons.systems/disposition-graph/clean-context-review
+    fact: answer
+    option: per-draft-and-survey
+    relation: adopted
+  - node: commons.systems/disposition-graph/clean-context-review
+    fact: answer
+    option: pointers-for-what-grows-with-the-record
+    relation: adopted
+---
+
+## Answer
+
+Supports a reading attached by office rather than raised by whoever happens to object, and supplies the constitution of it. The tradition's move is to stop treating the objection as something that may or may not turn up. It is an office, it is on every cause without exception, and the case for the candidate is not complete until the office has argued against it and been answered. Two limits go with the office and both are structural. The promoter argues on the record, so its objection is a document the deciders must meet rather than a private reservation; and it cannot stop the cause, since it holds no vote and the decision belongs to the body it argues before.
+
+The record takes all three. A reading stands between every recorded recommendation and the author, invoked the moment the recommendation is recorded rather than when someone thinks it warranted; its findings and its counter-argument are written into the node, where the author reads them beside the recommendation; and it recommends and never writes, so a kickback is an objection the session answers and, where the session holds its ground, overrides on the record. That is the office's shape kept intact, including the part that is easy to lose, which is that the adversary does not decide.
+
+The abolition of 1983 is part of the tradition and the reading should carry it. The office was removed not because objection stopped mattering but because a permanent adversary was found to make the process slow and to produce objections at the rate the office was staffed for rather than at the rate the causes deserved. What replaced it puts the case together with its difficulties in one document and has a college judge it. That is a live argument against the record's design, and the record's own answer to the manufactured objection is not this office but `commons.systems/disposition-graph/peirce-paper-doubt` under this node, which is why the counter-argument is optional and the reading says when it found none.
+
+Where the analogy is thin. The promoter is a different person, in a different office, with an interest of its own in the integrity of the process, and its independence is institutional. Both readings here are contexts of one class of mind, so what the record buys is independence of framing and not of interest, which is the same limit `commons.systems/disposition-graph/segregation-of-duties` records under `commons.systems/disposition-graph/review-model`. The tradition lends no support to the substitute; it supplies the office and leaves the record to say what fills it.
+```
 
 ### authority
 
@@ -84,3 +112,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/promotor-fidei stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

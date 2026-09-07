@@ -16,6 +16,9 @@ facts:
       - name: criteria-draft
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-02/11
+          - words/2026-09-02/12
       - name: facts-name-the-migration
         source: review
         ref: "2026-09-03"
@@ -46,7 +49,6 @@ facts:
         reason: "an answer commonly has a check and an assessment"
     recommends: criteria-draft
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -64,66 +66,49 @@ defines:
   - re-grasp
   - evidence
 ---
-## Disposition
-
-The author, 2026-09-02:
-> I see no projected documentation of instrumentation. Doesn't every disposition have instrumentation or criteria or something like that?
-
-The author, 2026-09-02:
-> Is assumption a form at all? I think the concept of an assumption started as instrumentation. Something like "this answer is valid so long as this assumption holds".
-
-## Answer
-
-By an instrument bound to the answer: a check the machine runs, or an assessment, a dated human judgment. A ratified answer with no instrument is unguarded, and the record says so. Instruments differ by form. A target's failing check is work. A rule's failing check is a variance that gates the work that broke it. An assumption's failure sends the question above it back to the author. An archē is never tested by derivation; it is re-grasped, and only on events, never on a calendar: a proposal under it rejected for conflict with it; a failed assumption in its subtree; an action taken under it that the author rejects at review; anomalies past a ratified threshold; a reading under it re-ratified with a changed verdict. A proposal that contradicts doctrine also opens review of the delegated disposition it came from. Expiry stays where the traditions put it, on delegated authority and on assessments of lower answers.
-
-## Rationale
-
-The author rejected cadence review of first principles on 2026-09-02; the record diverges from the periodic-convention strand (Jefferson to Madison, 1789; New York Constitution Article XIX) and adopts Peirce, for whom inquiry begins with genuine doubt from surprise and manufactured doubt is paper doubt. The other triggers come from reflective equilibrium (Rawls, Goodman, Daniels), Kuhn's anomalies, the overruling factors of Planned Parenthood v. Casey, and management of change in process safety; the proof-test interval of IEC 61508 is where expiry belongs. Each is owed a reading. Open: whether a delegated stamp itself sunsets. Readings also owed for Seneca, De Ira III.36, and the Ignatian examen, the periodic review of conduct against principle, and for sunset clauses on delegated and emergency powers.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+By an instrument bound to the answer: a check the machine runs, or an assessment, a dated human judgment.
+
+**AI support.** The author rejected cadence review of first principles on 2026-09-02; the record diverges from the periodic-convention strand (Jefferson to Madison, 1789; New York Constitution Article XIX) and adopts Peirce, for whom inquiry begins with genuine doubt from surprise and manufactured doubt is paper doubt. The other triggers come from reflective equilibrium (Rawls, Goodman, Daniels), Kuhn's anomalies, the overruling factors of Planned Parenthood v. Casey, and management of change in process safety; the proof-test interval of IEC 61508 is where expiry belongs. Each is owed a reading. Open: whether a delegated stamp itself sunsets. Readings also owed for Seneca, De Ira III.36, and the Ignatian examen, the periodic review of conduct against principle, and for sunset clauses on delegated and emergency powers.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How would we know an answer still holds?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - instrument
+  - check
+  - assessment
+  - re-grasp
+  - evidence
+---
+
+## Answer
+
+By an instrument bound to the answer: a check the machine runs, or an assessment, a dated human judgment. A ratified answer with no instrument is unguarded, and the record says so. Instruments differ by form. A target's failing check is work. A rule's failing check is a variance that gates the work that broke it. An assumption's failure sends the question above it back to the author. An archē is never tested by derivation; it is re-grasped, and only on events, never on a calendar: a proposal under it rejected for conflict with it; a failed assumption in its subtree; an action taken under it that the author rejects at review; anomalies past a ratified threshold; a reading under it re-ratified with a changed verdict. A proposal that contradicts doctrine also opens review of the delegated disposition it came from. Expiry stays where the traditions put it, on delegated authority and on assessments of lower answers.
+```
+
 #### criteria-draft
 
 The draft replaces the single instrument bound to an answer with criteria of three kinds, a check the machine runs, an assessment that is a dated human judgment, and an assumption, a condition about the world under which the answer holds. It moves assumption out of the forms and into instrumentation, adds criterion and unguarded to defines and drops instrument, and says every page shows an answer's criteria or the word unguarded. The standing answer instead keeps one instrument, keeps assumption a form, and carries the target-versus-rule distinction in the sentence that a target's failing check is work while a rule's is a variance.
 
-#### facts-name-the-migration
+**AI support.** The author rejected cadence review of first principles on 2026-09-02; the record diverges from the periodic-convention strand and adopts Peirce, for whom inquiry begins with genuine doubt from surprise and manufactured doubt is paper doubt. Assumption moved from the forms to the criteria because it was instrumentation from the start, the condition under which an answer stays valid, and the requirements tradition records domain assumptions beside the specification for the same reason. Open: whether a delegated stamp itself sunsets.
 
-Both reviews found that the draft renames the field in prose while nothing implements it: criteria is not a schema key, so no node can carry criteria today, and four nodes still carry an instrument field. This alternative has the node's facts state that confirming it orders a schema change and the migration of those four nodes, which the session's reply promised and the text does not say.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-#### assumption-stays-a-form
-
-The second review's counter-argument is that with the achieve-or-maintain sentence withdrawn and forms keeping rule beside disposition, the argument that carried assumption out of the forms is gone, so the criterion kinds should be re-read whole rather than patched. On this alternative assumption stays a form, two nodes keep it today, and criteria carry only checks and assessments. The session accepted that the draft should be re-read as a whole, which is what the maieutic stage is for.
-
-#### traditions-to-readings
-
-The rationale names Peirce, reflective equilibrium, Kuhn, Casey, management of change and IEC 61508 in prose, which readings' draft forbids and which stub-traditions names this node among the offenders for. The alternative moves them to readings under that ruling and leaves the rationale with the argument alone.
-
-#### define-criterion
-
-The vocabulary finding of 2026-09-03 verified that criterion and criteria are used in the answers of transience, scope, work-loop and purpose's draft, and as a frontmatter key on four drafts, while no node's defines carries the term and the schema has no criteria key: it is defined only inside instruments' own draft. Instruments is the survivor and must be ruled before the nodes that use the word. At its recording its defines gains criterion and unguarded, the schema gains the criteria key, and the four nodes carrying an instrument field are migrated; until then the answers that use the word say instrument or disclose that the term arrives with instruments. (Raised on commons.systems/disposition-graph/scope.)
-
-#### no-hard-fail-on-an-unratified-answer
-
-This node and transience both leave the same question open on instruments and neither decides it: whether a machine check should ever hard-fail an answer that is not ratified. The no-children rule was enforced by a check that hard-failed, which gave a deferred answer the force of a ratified one and removed in practice the overrule evaluation grants in principle. Instruments carries nothing about it today, so the candidate answer is that a check on an unanswered or deferred answer warns and does not fail. (Raised on commons.systems/disposition-graph/un-aligned-children.)
-
-#### one-ruling-for-the-word
-
-Instruments' answer says that its ruling settles the word for every node that uses it, so the four `say-instrument-not-criterion` alternatives now pending on scope, work-loop, transience and purpose are consequences of this ruling rather than four separate ones. Verified that 'criterion' is carried by no node's `defines`, that 'criteria' is not in FRONTMATTER_KEYS, and that three recommendation fences (knowledge-store, capture, node) carry a `criteria:` block the validator's key set would refuse. On this alternative the recording of instruments migrates the four nodes carrying an `instrument:` field, adds 'criterion' and 'unguarded' to `defines`, and adds the schema key, in one landing; it is on the table because the author is otherwise asked the same vocabulary question five times on five pages.
-
-#### criteria-as-nodes-of-their-own
-
-Each criterion is a node of its own rather than a field on the node it guards.
-It was passed over because a criterion that needs its own stamp is a question
-of its own, and becomes a node at that point.
-
-#### a-single-instrument-per-node
-
-A node carries one instrument. It was passed over because an answer commonly
-has both a check and an assessment.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -143,10 +128,244 @@ defines:
 ## Answer
 
 By criteria bound to the answer, and every page shows them or says the answer is unguarded. A criterion is one of three kinds: a check the machine runs; an assessment, a dated human judgment; or an assumption, a condition about the world under which the answer holds, which is not a form of answer but a criterion, and whose failure sends the question back to the author. A ratified answer with no criterion is unguarded, and the record says so. An archē is never tested by derivation; it is re-grasped, and only on events, never on a calendar: a proposal under it rejected for conflict with it; a failed assumption in its subtree; an action taken under it that the author rejects at review; anomalies past a ratified threshold; a reading under it re-ratified with a changed verdict. A proposal that contradicts doctrine also opens review of the delegated disposition it came from. Expiry stays where the traditions put it, on delegated authority and on assessments of lower answers.
+```
 
-## Rationale
+#### facts-name-the-migration
 
-The author rejected cadence review of first principles on 2026-09-02; the record diverges from the periodic-convention strand and adopts Peirce, for whom inquiry begins with genuine doubt from surprise and manufactured doubt is paper doubt. Assumption moved from the forms to the criteria because it was instrumentation from the start, the condition under which an answer stays valid, and the requirements tradition records domain assumptions beside the specification for the same reason. Open: whether a delegated stamp itself sunsets.
+Both reviews found that the draft renames the field in prose while nothing implements it: criteria is not a schema key, so no node can carry criteria today, and four nodes still carry an instrument field. This alternative has the node's facts state that confirming it orders a schema change and the migration of those four nodes, which the session's reply promised and the text does not say.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How would we know an answer still holds?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - instrument
+  - check
+  - assessment
+  - re-grasp
+  - evidence
+---
+
+## Answer
+
+Both reviews found that the draft renames the field in prose while nothing implements it: criteria is not a schema key, so no node can carry criteria today, and four nodes still carry an instrument field. This alternative has the node's facts state that confirming it orders a schema change and the migration of those four nodes, which the session's reply promised and the text does not say.
+```
+
+#### assumption-stays-a-form
+
+The second review's counter-argument is that with the achieve-or-maintain sentence withdrawn and forms keeping rule beside disposition, the argument that carried assumption out of the forms is gone, so the criterion kinds should be re-read whole rather than patched. On this alternative assumption stays a form, two nodes keep it today, and criteria carry only checks and assessments. The session accepted that the draft should be re-read as a whole, which is what the maieutic stage is for.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How would we know an answer still holds?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - instrument
+  - check
+  - assessment
+  - re-grasp
+  - evidence
+---
+
+## Answer
+
+The second review's counter-argument is that with the achieve-or-maintain sentence withdrawn and forms keeping rule beside disposition, the argument that carried assumption out of the forms is gone, so the criterion kinds should be re-read whole rather than patched. On this alternative assumption stays a form, two nodes keep it today, and criteria carry only checks and assessments. The session accepted that the draft should be re-read as a whole, which is what the maieutic stage is for.
+```
+
+#### traditions-to-readings
+
+The rationale names Peirce, reflective equilibrium, Kuhn, Casey, management of change and IEC 61508 in prose, which readings' draft forbids and which stub-traditions names this node among the offenders for. The alternative moves them to readings under that ruling and leaves the rationale with the argument alone.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How would we know an answer still holds?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - instrument
+  - check
+  - assessment
+  - re-grasp
+  - evidence
+---
+
+## Answer
+
+The rationale names Peirce, reflective equilibrium, Kuhn, Casey, management of change and IEC 61508 in prose, which readings' draft forbids and which stub-traditions names this node among the offenders for. The alternative moves them to readings under that ruling and leaves the rationale with the argument alone.
+```
+
+#### define-criterion
+
+The vocabulary finding of 2026-09-03 verified that criterion and criteria are used in the answers of transience, scope, work-loop and purpose's draft, and as a frontmatter key on four drafts, while no node's defines carries the term and the schema has no criteria key: it is defined only inside instruments' own draft. Instruments is the survivor and must be ruled before the nodes that use the word. At its recording its defines gains criterion and unguarded, the schema gains the criteria key, and the four nodes carrying an instrument field are migrated; until then the answers that use the word say instrument or disclose that the term arrives with instruments. (Raised on commons.systems/disposition-graph/scope.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How would we know an answer still holds?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - instrument
+  - check
+  - assessment
+  - re-grasp
+  - evidence
+---
+
+## Answer
+
+The vocabulary finding of 2026-09-03 verified that criterion and criteria are used in the answers of transience, scope, work-loop and purpose's draft, and as a frontmatter key on four drafts, while no node's defines carries the term and the schema has no criteria key: it is defined only inside instruments' own draft. Instruments is the survivor and must be ruled before the nodes that use the word. At its recording its defines gains criterion and unguarded, the schema gains the criteria key, and the four nodes carrying an instrument field are migrated; until then the answers that use the word say instrument or disclose that the term arrives with instruments. (Raised on commons.systems/disposition-graph/scope.)
+```
+
+#### no-hard-fail-on-an-unratified-answer
+
+This node and transience both leave the same question open on instruments and neither decides it: whether a machine check should ever hard-fail an answer that is not ratified. The no-children rule was enforced by a check that hard-failed, which gave a deferred answer the force of a ratified one and removed in practice the overrule evaluation grants in principle. Instruments carries nothing about it today, so the candidate answer is that a check on an unanswered or deferred answer warns and does not fail. (Raised on commons.systems/disposition-graph/un-aligned-children.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How would we know an answer still holds?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - instrument
+  - check
+  - assessment
+  - re-grasp
+  - evidence
+---
+
+## Answer
+
+This node and transience both leave the same question open on instruments and neither decides it: whether a machine check should ever hard-fail an answer that is not ratified. The no-children rule was enforced by a check that hard-failed, which gave a deferred answer the force of a ratified one and removed in practice the overrule evaluation grants in principle. Instruments carries nothing about it today, so the candidate answer is that a check on an unanswered or deferred answer warns and does not fail. (Raised on commons.systems/disposition-graph/un-aligned-children.)
+```
+
+#### one-ruling-for-the-word
+
+Instruments' answer says that its ruling settles the word for every node that uses it, so the four `say-instrument-not-criterion` alternatives now pending on scope, work-loop, transience and purpose are consequences of this ruling rather than four separate ones. Verified that 'criterion' is carried by no node's `defines`, that 'criteria' is not in FRONTMATTER_KEYS, and that three recommendation fences (knowledge-store, capture, node) carry a `criteria:` block the validator's key set would refuse. On this alternative the recording of instruments migrates the four nodes carrying an `instrument:` field, adds 'criterion' and 'unguarded' to `defines`, and adds the schema key, in one landing; it is on the table because the author is otherwise asked the same vocabulary question five times on five pages.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How would we know an answer still holds?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - instrument
+  - check
+  - assessment
+  - re-grasp
+  - evidence
+---
+
+## Answer
+
+Instruments' answer says that its ruling settles the word for every node that uses it, so the four `say-instrument-not-criterion` alternatives now pending on scope, work-loop, transience and purpose are consequences of this ruling rather than four separate ones. Verified that 'criterion' is carried by no node's `defines`, that 'criteria' is not in FRONTMATTER_KEYS, and that three recommendation fences (knowledge-store, capture, node) carry a `criteria:` block the validator's key set would refuse. On this alternative the recording of instruments migrates the four nodes carrying an `instrument:` field, adds 'criterion' and 'unguarded' to `defines`, and adds the schema key, in one landing; it is on the table because the author is otherwise asked the same vocabulary question five times on five pages.
+```
+
+#### criteria-as-nodes-of-their-own
+
+Each criterion is a node of its own rather than a field on the node it guards.
+It was passed over because a criterion that needs its own stamp is a question
+of its own, and becomes a node at that point.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How would we know an answer still holds?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - instrument
+  - check
+  - assessment
+  - re-grasp
+  - evidence
+---
+
+## Answer
+
+Each criterion is a node of its own rather than a field on the node it guards.
+It was passed over because a criterion that needs its own stamp is a question
+of its own, and becomes a node at that point.
+```
+
+#### a-single-instrument-per-node
+
+A node carries one instrument. It was passed over because an answer commonly
+has both a check and an assessment.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How would we know an answer still holds?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - instrument
+  - check
+  - assessment
+  - re-grasp
+  - evidence
+---
+
+## Answer
+
+A node carries one instrument. It was passed over because an answer commonly
+has both a check and an assessment.
 ```
 
 ## Account
@@ -269,3 +488,7 @@ Two vocabulary questions are each pending as an unruled option on four separate 
 Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/node, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/authority.
 
 Proposed: Strike the eight options and replace each with a citation. `commons.systems/disposition-graph/rejected` is the survivor for what a rejected alternative is, and `commons.systems/disposition-graph/authority` is the survivor for what a proposal is; each of the six bearer nodes cites the survivor's sentence where it currently carries the option. Where a bearer node believes its option means something the survivor's answer does not cover, that difference is the option, stated as the difference, and everything the survivor already says comes out. If the author would rather rule the two words once explicitly, mint the settling option on the survivor in the shape `instruments`' `one-ruling-for-the-word` takes, without a count in its prose.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/instruments stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `criteria-draft`; 2 `## Disposition` entries became the ledger entries words/2026-09-02/11, words/2026-09-02/12, referenced by 0 options the entry's own date names and by the recommended option for 2 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `facts-name-the-migration`, `assumption-stays-a-form`, `traditions-to-readings`, `define-criterion`, `no-hard-fail-on-an-unratified-answer`, `one-ruling-for-the-word`, `criteria-as-nodes-of-their-own`, `a-single-instrument-per-node`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `fbf4c5047cca6d46e77585d115ac371e239f89f4` was already past the recommendation and is left as it stood.

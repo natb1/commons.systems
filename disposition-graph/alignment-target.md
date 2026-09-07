@@ -9,7 +9,7 @@ review:
   against: "Taking the highest-ranked unanswered node is right if rank is the author's attention, and it is not: every boost in the record is the AI's and unratified, as attention's own answer now says, and the one order the author did state covers six nodes out of sixty-two. So 'rank answers it without the session's judgment entering' describes a queue the AI itself ordered and presents an AI choice to the author as the record's own. The session's reply — that the page shows the author the whole queue at every visit — is a real answer and is now true of the built page, which weakens but does not dissolve the objection."
   survey:
     date: 2026-09-05
-    of: b0dea316130efe6397be144452cb593680b1d073
+    of: 6326d8f230a4f6f6021c71dddfc0d6f6eebbbf22
 facts:
   - name: answer
     options:
@@ -19,6 +19,8 @@ facts:
       - name: ruling-order-not-rank
         source: author
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-03/23
       - name: onboarding-walk-from-purpose
         source: ai
         ref: "32600efe"
@@ -41,7 +43,6 @@ facts:
         reason: "the author's answer would be a boost, which they can set without being asked"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -53,26 +54,56 @@ form: rule
 under:
   - commons.systems/disposition-graph/growth
 ---
-## Disposition
-
-The author, 2026-09-03:
-> new disposition (alignment shim): `/align` usage (with no disposition or node id) choose the highest ranking unanswered disposition and progress it (through periogoge and miaeutic and adversarial review, etc. depending on unsanswered node state) up to confirmation.
-
-## Answer
-
-The highest-ranked unanswered disposition, and it progresses that one node through the movements still owed on it, from the stage it carries, up to the author's confirmation. Given no disposition and no node id, the session reads the frontier and takes the first unanswered node in rank order, this project's graph, read from the frontier by its id prefix, before the public graph, and so the purpose node first while it is unanswered, and runs the sitting from that node's stage: the periagogic stage when the author's account is not yet in the record, the maieutic stage when the answer is not yet drafted, the clean-context review when the draft has not had it, and then the ruling, put to the author in the interview by the question mechanics of the growth node and on the alignment page. A confirmation is recorded as the recording node describes, and a denial resumes the dialogue at the movement it calls for. A movement already behind the node is not repeated: the stage is the record of what the dialogue has done, and the session trusts it; the bootstrap's drafts stand at the review stage by the author's ruling of 2026-09-03 on the unanswered node, which set their stage. The author's choice of a different node is a boost, and the session takes the node the author names instead. One node at a time: when the node is recorded, or the author leaves it, the next highest unanswered node is the next sitting.
-
-## Rationale
-
-The author's ruling of 2026-09-03, quoted above. Rank is the order of the author's attention, and the unanswered nodes are the queue of the dialogue; a session given nothing has one question to answer, which item of that queue comes first, and rank answers it without the session's judgment entering. Progressing from the stage rather than from the beginning is what the stored stage is for: it exists, the transience node says, so that what the dialogue has done survives the session that did it. Up to confirmation and not beyond: the confirmation is the author's act, and the session's work on a node ends when it has put the node before the author with everything the ruling needs, the draft, the three facts, and the review's counter-argument; where the author is in the interview, the session asks for the ruling there, and where the author rules on the page, the session reads the ruling back at its next sitting.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+The highest-ranked unanswered disposition, and it progresses that one node through the movements still owed on it, from the stage it carries, up to the author's confirmation.
+
+**AI support.** The author's ruling of 2026-09-03, quoted above. Rank is the order of the author's attention, and the unanswered nodes are the queue of the dialogue; a session given nothing has one question to answer, which item of that queue comes first, and rank answers it without the session's judgment entering. Progressing from the stage rather than from the beginning is what the stored stage is for: it exists, the transience node says, so that what the dialogue has done survives the session that did it. Up to confirmation and not beyond: the confirmation is the author's act, and the session's work on a node ends when it has put the node before the author with everything the ruling needs, the draft, the three facts, and the review's counter-argument; where the author is in the interview, the session asks for the ruling there, and where the author rules on the page, the session reads the ruling back at its next sitting.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the alignment session take up when given nothing?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+The highest-ranked unanswered disposition, and it progresses that one node through the movements still owed on it, from the stage it carries, up to the author's confirmation. Given no disposition and no node id, the session reads the frontier and takes the first unanswered node in rank order, this project's graph, read from the frontier by its id prefix, before the public graph, and so the purpose node first while it is unanswered, and runs the sitting from that node's stage: the periagogic stage when the author's account is not yet in the record, the maieutic stage when the answer is not yet drafted, the clean-context review when the draft has not had it, and then the ruling, put to the author in the interview by the question mechanics of the growth node and on the alignment page. A confirmation is recorded as the recording node describes, and a denial resumes the dialogue at the movement it calls for. A movement already behind the node is not repeated: the stage is the record of what the dialogue has done, and the session trusts it; the bootstrap's drafts stand at the review stage by the author's ruling of 2026-09-03 on the unanswered node, which set their stage. The author's choice of a different node is a boost, and the session takes the node the author names instead. One node at a time: when the node is recorded, or the author leaves it, the next highest unanswered node is the next sitting.
+```
+
 #### ruling-order-not-rank
 
 The alignment-order draft answers that a session given nothing takes the first node of the ruling order, derived from the tangle the record carries, and not the highest-ranked unanswered node; rank breaks ties only. The author's words there: rank was "the only order the record had to hand" when this node was ruled, and every statement applying it to alignment is reconsidered, since the alignment frontier has no confirmed authority and a greedy rank order is not necessarily optimal for untangling it. The alternative amends this answer's first sentence and its rejected heuristics, whose rejection rested on rank already being the order. It amends the clause "this project's graph before the public graph" as well: the ruling order is one order over the whole alignment frontier, the manifest's graphs together, since the dependencies cross them and the public graph carries the root that this project's graph hangs under, so a graph precedence would put a descendant's ruling before its ancestor's. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the alignment session take up when given nothing?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+The alignment-order draft answers that a session given nothing takes the first node of the ruling order, derived from the tangle the record carries, and not the highest-ranked unanswered node; rank breaks ties only. The author's words there: rank was "the only order the record had to hand" when this node was ruled, and every statement applying it to alignment is reconsidered, since the alignment frontier has no confirmed authority and a greedy rank order is not necessarily optimal for untangling it. The alternative amends this answer's first sentence and its rejected heuristics, whose rejection rested on rank already being the order. It amends the clause "this project's graph before the public graph" as well: the ruling order is one order over the whole alignment frontier, the manifest's graphs together, since the dependencies cross them and the public graph carries the root that this project's graph hangs under, so a graph precedence would put a descendant's ruling before its ancestor's. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+```
 
 #### onboarding-walk-from-purpose
 
@@ -81,11 +112,54 @@ question in the author's words. It was passed over because it presumed a
 record with nothing unanswered to take up; while any node is unanswered, the
 first unanswered node is that walk.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the alignment session take up when given nothing?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+A session given nothing walks the onboarding path from the purpose node to a
+question in the author's words. It was passed over because it presumed a
+record with nothing unanswered to take up; while any node is unanswered, the
+first unanswered node is that walk.
+```
+
 #### choose-by-the-oldest-stage
 
 The session takes the unanswered node whose stage is oldest. It was passed
 over because it substitutes a heuristic for the rank the record already
 carries.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the alignment session take up when given nothing?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+The session takes the unanswered node whose stage is oldest. It was passed
+over because it substitutes a heuristic for the rank the record already
+carries.
+```
 
 #### choose-by-the-fewest-movements-owed
 
@@ -93,10 +167,51 @@ The session takes the unanswered node owing the fewest movements of the
 dialogue. It was passed over for the same reason as the oldest stage: it
 substitutes a heuristic for the rank the record already carries.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the alignment session take up when given nothing?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+The session takes the unanswered node owing the fewest movements of the
+dialogue. It was passed over for the same reason as the oldest stage: it
+substitutes a heuristic for the rank the record already carries.
+```
+
 #### ask-the-author-which-node
 
 The session asks the author which node to take up. It was passed over because
 the author's answer would be a boost, which they can set without being asked.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the alignment session take up when given nothing?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+The session asks the author which node to take up. It was passed over because
+the author's answer would be a boost, which they can set without being asked.
+```
 
 ## Account
 
@@ -170,3 +285,7 @@ Also named: commons.systems/disposition-graph/growth, commons.systems/dispositio
 Proposed: growth is the node whose text must change: the third usage and the rationale sentence are brought into line with the queue sentence and with alignment-order's recommended answer, so that one order governs the whole fence. alignment-order survives as the owner of the order and is cited rather than contradicted; alignment-target already carries the matching option `ruling-order-not-rank`, sourced to the author, and needs no change from this finding.
 
 Recorded as an option on commons.systems/disposition-graph/growth's answer fact: `third-usage-in-the-ruling-order` (source review, 2026-09-07).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/alignment-target stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-03/23, referenced by 1 option the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `ruling-order-not-rank`, `onboarding-walk-from-purpose`, `choose-by-the-oldest-stage`, `choose-by-the-fewest-movements-owed`, `ask-the-author-which-node`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `1c5395eea68a14452e88040c5894830533188fdf` was already past the recommendation and is left as it stood. The survey's pin `b0dea316130efe6397be144452cb593680b1d073` is re-computed for the encoding as `6326d8f230a4f6f6021c71dddfc0d6f6eebbbf22`; nothing it read changed.

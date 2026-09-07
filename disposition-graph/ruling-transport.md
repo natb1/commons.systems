@@ -14,6 +14,9 @@ facts:
       - name: instruction-canonical-buffer-optional
         source: ai
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-04/39
+          - words/2026-09-04/40
       - name: database-as-the-record-with-a-fallback
         source: ai
         ref: "717485e6"
@@ -46,16 +49,6 @@ shims:
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
-## Disposition
-
-The author, 2026-09-04, on reading that "Submit" writes to the artifact's own
-database rather than starting a session:
-
-> Compare a stateful artifact approach to a stateless session flow (either via claude.ai/code session seed or copied instruction)
-
-The author, 2026-09-04, on reading the comparison:
-
-> claude.ai/code session initialization can be kept as a stub out shim (in ui and implementation). Author will rely on incstruction copy for now. You have bootstrap authority to reconcile.
 
 ## Facts
 
@@ -90,6 +83,49 @@ seeded from a `claude.ai/code` link has that tool is precisely the case this
 refinement is about. And nothing deletes it: a landed response stays in the
 collection and the record carries no rule for when it goes.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does a ruling made on the page reach the record?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+## Answer
+
+What the page does today. A ruling is staged in the browser and submitted into
+the artifact's database as one document per node in the collection
+`responses`, and the alignment skill reads that collection back with the
+Artifact tool at the head of every sitting. The database is where a ruling
+lives between the author making it and a session landing it in the graph.
+
+It buys three things that are real. It survives the device: the author can
+rule from a phone and a session can land it from a laptop with no clipboard
+crossing between them. It is exact: a session reads structured documents and
+nothing is transcribed, parsed out of prose, or truncated. And it has no size:
+a sitting of seventy rulings costs no more than one.
+
+It costs four. It is a second store of authored content outside git, and
+`materialization` says all materialized implementation is a projection of the
+graph -- a database holding the author's own rulings is not a projection but a
+source, which makes the artifact a second write surface for a record the
+alignment skill says only that skill writes. Nothing pins it: a response
+document names a node and a stage, never the text it was ruling on, so when
+the graph moves between the ruling and the recording -- and it moved six times
+on 2026-09-04 alone -- the response can refer to a state that no longer exists
+and nothing detects it, which is exactly what `amends`, `at` and `of` exist to
+catch everywhere else in the record. It depends on a capability and a tool: a
+session without the Artifact tool cannot read it, and whether a cloud session
+seeded from a `claude.ai/code` link has that tool is precisely the case this
+refinement is about. And nothing deletes it: a landed response stays in the
+collection and the record carries no rule for when it goes.
+```
+
 #### stateless-instruction-only
 
 The page holds no server state at all. A ruling leaves as an instruction: a
@@ -109,6 +145,40 @@ per-viewer draft buffer and not a record, but not eliminated. The device that
 rules must be the device that pastes. And a seed link has a length limit that
 a sitting does not fit; `prompt_url` answers that by hosting the prompt
 somewhere, which is another store under another name.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does a ruling made on the page reach the record?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+## Answer
+
+The page holds no server state at all. A ruling leaves as an instruction: a
+seed link, `https://claude.ai/code?prompt=...&repositories=...`, which
+pre-fills a session, or the same text on the clipboard for a session already
+open. The graph is the only store, the page is a projection of it, and the
+transport holds nothing.
+
+It buys the four the incumbent costs, and one more: it is what the shim on
+`alignment-page` already names as its own liquidation, "the alignment skill
+reads the responses without the artifact tool". The record has therefore
+already said this is the direction, and the incumbent is the declared stand-in.
+
+It costs three. The tab is the state, so closing it before copying loses the
+work -- much reduced by the local staging the page already keeps, which is a
+per-viewer draft buffer and not a record, but not eliminated. The device that
+rules must be the device that pastes. And a seed link has a length limit that
+a sitting does not fit; `prompt_url` answers that by hosting the prompt
+somewhere, which is another store under another name.
+```
 
 #### instruction-canonical-buffer-optional
 
@@ -130,34 +200,17 @@ badly. Making the instruction canonical settles the design without settling
 the open question, and the open question then decides only whether the buffer
 is worth keeping.
 
-#### database-as-the-record-with-a-fallback
+**AI support.** The author asked for the comparison on 2026-09-04, after finding that "Submit" writes to the artifact's database rather than starting a session, which is what the button's own name had not told them.
 
-The artifact's database is the record of a ruling, with the copied instruction
-as a fallback. It was passed over because it inverts which one the graph
-depends on, and a fallback that is never exercised is a fallback that does not
-work.
+The stateful incumbent buys device independence, an exact structured round trip, and no size limit. It costs a second store of authored content outside git, which `materialization` does not allow a projection to be; an unpinned one, where every other reference in the record carries `amends`, `at` or `of` precisely so that text moving underneath a reading is caught; a dependence on a tool that the seeded cloud session at issue here may not have; and no rule for when a landed response is deleted.
 
-#### prompt-url-for-a-whole-sitting
+The stateless flow costs the tab, the device, and the length of a URL, and buys the four back, along with agreement with the shim on `alignment-page`, whose liquidation condition already reads "the alignment skill reads the responses without the artifact tool". The record has already called the database a stand-in.
 
-A `prompt_url` carries a whole sitting past the length limit of a URL. It was
-passed over because it answers a length problem by hosting the prompt
-somewhere, which is the second store again under another name.
+Neither pure form is taken, because the question that separates them is open and cheap to settle: whether a session seeded from a `claude.ai/code` link can read the artifact's database at all. Making the instruction canonical settles the design without waiting on that, and leaves the buffer as the only thing the answer decides. If the buffer never earns its keep it is deleted and nothing is redesigned, which is what the shim's liquidation asks for and what neither pure alternative gives.
 
-#### two-copy-controls-one-per-route
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-The page offers two copy controls, one per route. It was passed over because
-the routes differ in where the text goes and never in what it says, so two
-controls emitting one string is one control.
-
-### authority
-
-Delegated: this is how one projection carries a ruling to the record, under an
-answer about the page that is itself unanswered, and it commits the author to
-nothing they cannot reverse by ruling the page's own question differently.
-Escalate it to ratified if the answer turns out to move where the record lives,
-which none of the three alternatives does.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -177,17 +230,95 @@ The launch half is a stub and is marked as one, on the author's ruling of 2026-0
 The artifact's database keeps one job: letting a session skip the paste when the author ruled on another device. It is a buffer and never the record. No ruling exists only there, a session that cannot reach it loses a paste and nothing else, and the alignment skill treats a response it finds there as a convenience, reading it exactly as it would read the same instruction pasted by hand.
 
 The record is the graph and there is no second place a ruling lives. That is the whole of the rule, and everything above is how it is kept while a page stands between the author and the graph.
-
-## Rationale
-
-The author asked for the comparison on 2026-09-04, after finding that "Submit" writes to the artifact's database rather than starting a session, which is what the button's own name had not told them.
-
-The stateful incumbent buys device independence, an exact structured round trip, and no size limit. It costs a second store of authored content outside git, which `materialization` does not allow a projection to be; an unpinned one, where every other reference in the record carries `amends`, `at` or `of` precisely so that text moving underneath a reading is caught; a dependence on a tool that the seeded cloud session at issue here may not have; and no rule for when a landed response is deleted.
-
-The stateless flow costs the tab, the device, and the length of a URL, and buys the four back, along with agreement with the shim on `alignment-page`, whose liquidation condition already reads "the alignment skill reads the responses without the artifact tool". The record has already called the database a stand-in.
-
-Neither pure form is taken, because the question that separates them is open and cheap to settle: whether a session seeded from a `claude.ai/code` link can read the artifact's database at all. Making the instruction canonical settles the design without waiting on that, and leaves the buffer as the only thing the answer decides. If the buffer never earns its keep it is deleted and nothing is redesigned, which is what the shim's liquidation asks for and what neither pure alternative gives.
 ```
+
+#### database-as-the-record-with-a-fallback
+
+The artifact's database is the record of a ruling, with the copied instruction
+as a fallback. It was passed over because it inverts which one the graph
+depends on, and a fallback that is never exercised is a fallback that does not
+work.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does a ruling made on the page reach the record?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+## Answer
+
+The artifact's database is the record of a ruling, with the copied instruction
+as a fallback. It was passed over because it inverts which one the graph
+depends on, and a fallback that is never exercised is a fallback that does not
+work.
+```
+
+#### prompt-url-for-a-whole-sitting
+
+A `prompt_url` carries a whole sitting past the length limit of a URL. It was
+passed over because it answers a length problem by hosting the prompt
+somewhere, which is the second store again under another name.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does a ruling made on the page reach the record?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+## Answer
+
+A `prompt_url` carries a whole sitting past the length limit of a URL. It was
+passed over because it answers a length problem by hosting the prompt
+somewhere, which is the second store again under another name.
+```
+
+#### two-copy-controls-one-per-route
+
+The page offers two copy controls, one per route. It was passed over because
+the routes differ in where the text goes and never in what it says, so two
+controls emitting one string is one control.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does a ruling made on the page reach the record?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+## Answer
+
+The page offers two copy controls, one per route. It was passed over because
+the routes differ in where the text goes and never in what it says, so two
+controls emitting one string is one control.
+```
+
+### authority
+
+Delegated: this is how one projection carries a ruling to the record, under an
+answer about the page that is itself unanswered, and it commits the author to
+nothing they cannot reverse by ruling the page's own question differently.
+Escalate it to ratified if the answer turns out to move where the record lives,
+which none of the three alternatives does.
 
 ## Account
 
@@ -226,3 +357,7 @@ and that a stub that looks finished is worse than no stub, because the author
 cannot tell which of the two routes they are being offered. Both controls now
 carry the same mark. Landed on `greenfield` at `87e4b24e` under the author's
 grant of 2026-09-04.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/ruling-transport stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `instruction-canonical-buffer-optional`; 2 `## Disposition` entries became the ledger entries words/2026-09-04/39, words/2026-09-04/40, referenced by 0 options the entry's own date names and by the recommended option for 2 the date named none. The record wrote no text of its own for `stateful-artifact-record`, `stateless-instruction-only`, `database-as-the-record-with-a-fallback`, `prompt-url-for-a-whole-sitting`, `two-copy-controls-one-per-route`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it.

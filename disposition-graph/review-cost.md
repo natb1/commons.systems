@@ -70,6 +70,21 @@ facts:
       - name: the-surveys-selection-moves-to-its-own-node
         source: commons.systems/disposition-graph/survey-selection
         ref: "2026-09-07"
+        supports:
+          - words/2026-09-05/4
+          - words/2026-09-07/2
+          - words/2026-09-07/3
+          - words/2026-09-07/4
+          - words/2026-09-07/5
+          - words/2026-09-07/6
+          - words/2026-09-07/7
+          - words/2026-09-07/8
+          - words/2026-09-07/9
+          - words/2026-09-07/11
+          - words/2026-09-07/12
+          - words/2026-09-07/13
+          - words/2026-09-07/15
+          - words/2026-09-07/16
     recommends: the-surveys-selection-moves-to-its-own-node
     boldness: moderate
     against: "Every clause of it narrows what the reviewer is shown, on measurements taken by the party the review exists to check. A reader that must search for what it is no longer given searches for what it thinks to look for, which is the drafter's own frame, and the failure the index guarded against, a contradiction with a node nobody thought to name, is the one failure a search cannot be aimed at. The answer's reply, that the survey holds the whole graph and is the reader of last resort, is good only while the survey runs before every ruling; this design moves that load onto it: at graph commit 1cde11f6 on 2026-09-05, before the first survey ran, forty-eight nodes stood at the review or the ruling stage and none carried a survey pin, and what the survey costs once the load is on it is the question the author raised on 2026-09-07 and `survey-selection` answers beneath this node."
@@ -85,7 +100,7 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: f32d722609f7815130f2b7de88fd0647d809edca
+  of: 388a136d38ca73f6e73c1f4030df0be4de25665a
   commit: d35b0014367874f0376fea8e271f1737b798857c
   against: "The last reading's finding was that the node made a false present-tense claim citing a node, `survey-cost`, that did not exist. The amendment's fix is to rename the citation to `survey-selection` and assert in its own account that this is 'the child minted this sitting' -- but this delta reading is barred from checking the neighbourhood or the disk, so the only evidence that `survey-selection` actually exists, rather than being a second not-yet-minted placeholder under a new name, is the record's own narration by the party the finding was raised against. Against that: the citation is corroborated from three independent loci (the fact's `against` clause, the new option's `source` field, and a `depends` entry naming a specific option slug on it), which is stronger internal evidence than a bare rename would leave, and the scope of this reading explicitly defers cross-node verification to the survey rather than asking the delta reader to open other files."
   survey:
@@ -102,78 +117,6 @@ depends:
   - commons.systems/disposition-graph/dialogue
   - commons.systems/disposition-graph/survey-selection#candidate-pairs-with-their-nominating-key
 ---
-## Disposition
-
-The author, 2026-09-05, during the sitting's readings, after three readers died on their models' session limits:
-
-> This review process is burning tokens very rapidly. Some of it is acceptable as cost of draining a backlog. Are there lessons from this sitting to inform improvements to the alignment review disposition - esp. for the optimization of token usage, context management and AI attention?
->
-> If so, record and reconcile that disposition first before proceeding with review (you have bootstrap authority)
-
-And, in the same turn, on the model the readings run on:
-
-> Continue with opus instead of fable
-
-The author, 2026-09-07, on the cost of the clean-context reading, asked of the session after a wave of readings on the alignment page's children:
-
-> this iterative clean-context reading is very expensive. Are there token/context optimizations that would achieve similar quality results? eg. is the model choice (fable/opus/sonnet) right sized for the task?
-
-The author, 2026-09-07, in the same turn's continuation:
-
-> also consider optimzations to the dialogue workflow
-
-The author, 2026-09-07, after the session's assessment of where the cost goes:
-
-> record the recommended optimizations as dispositions, progress them up to confirmation, and include them in the list of reconciliations of alignment dialogue/review/survey/artifact
-
-The author, 2026-09-07, later in the same turn:
-
-> begin applying the optimizations as you progress
-
-The author, 2026-09-07, while the survey of that day was running:
-
-> The fronteir-survey appears to be very expensive. Is it part of the recommended alignment design from this sitting? What function does it serve that's not served by the frontier consistency check?
-
-The author, 2026-09-07, in reply to the session's answer on what the survey serves and what it costs:
-
-> do not stop the current survey, we do not want to lose the work it has already done. For future surveys, make your own recommendation about how to optimize. It could involve changes to how data on unconfirmed nodes is accumulated, or how the survey is orchestrated, improvements to the algorithms/heuristics for full graph analysis, or any other optimization that you recommend. Fold this optimization in to the sittings alignment and bootstrap reconciliation.
-
-The author, 2026-09-07, while the design of the survey's optimization was in hand, on what shape it must take:
-
-> The optimizations must involve some accumulation strategy, with the full history preserved only in git but enough context in the unconfirmed node to support alignment across an unconfirmed frontier. Something between keeping the full pre-confirmation record in the graph and the accumulation that is performed after confirmation. One the recommendation is established, you have bootstrap authority to reconcile that accumulation.
-
-The author, 2026-09-07, in the next turn:
-
-> (The accumulation strategy may be used in conjunction with other recommended optimizations)
-
-The author, 2026-09-07, when the design had been drafted and before it was recorded:
-
-> stop before reconciling the accumulation strategy. First describe the recommended strategy to let me review.
-
-The author, 2026-09-07, after the session described the recommended accumulation strategy, refining the disposition on what an option carries and what an unconfirmed node keeps:
-
-> record this refinement to disposition and ensure the accumulation strategy supports it:
-> - each option for each fact is recorded with its actual fact content so that when the author selects an option via the alignment artifact the context pane is dynamically updated to preview the node that is being confirmed.
-> - "standing" is just a label that can be applied to an option (similar to an AI recommendation) to indicate that it was the last confirmed option for that fact on that node.
-> - the expanded details of an option (before and also after confirmation) shows a) the history of author quotes that both support and/or contradict the option (implies that one quote may be reference by multiple options) b) the accumulated/current AI support and/or rejection rationale for that option (independent of ultimate recommendation)
->
-> Anything else that doesn't support the alignment dialogue/artifact disposition is subject to accumulation/removal.
-
-The author, 2026-09-07, in the next turn, granting the reconciliation of the refinement above:
-
-> reconciliation of that disposition in included in the bootstrap reconciliation authority for this sitting
-
-The author, 2026-09-07, answering the three calls the session put before them on the revised accumulation strategy:
-
-> 1. named-change form legibility tradeoff is acceptable as long as the exact node preview can be mechanically derived (eg. via patch syntax)
-> 2. previously confirmed and standing are just one and the same thing (we can probably just remove reference to "standing" and replace it with "confirmed"
-> 3. All of AI and author rationale and references to tradition are recorded as support and/or divergence for each option. AI response is accumulated, reference to tradition is accumulated, author response is concatenated quotation. AI support and divergence can be recorded for any option. The AI recommendation is the judgement that weighs AI support/divergence for each option.
->
-> This implies guidance for which quotes from the author need to be retained and which options need to be recorded. We don't need to retain author quotes that neither support or diverge from an option. If a quote from an author expresses support or divergence from an option then that option must be recorded. Any option with support or divergence in tradition must be recorded. If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded.
-
-The author, 2026-09-07, on the ledger question and on how the sitting proceeds:
-
-> choice is for confirmation. if there is periagogic grounding or meiutic clarification required then do so, otherwise make a recommendation and proceed to bootstrap reconciliation.
 
 ## Facts
 
@@ -191,37 +134,231 @@ Moderate boldness. What rests on the author is the criterion, now stated three t
 
 The rules the recommended text sets out: a draft's brief carries its neighbourhood in full, and the rules of the reading itself in the same way rather than as a list of files for the reader to open, and every other node as its id and its question on one line; a re-reading's object is the amendment and not the node; a draft gets two readings of one answer, a kickback being a new answer and not a third round, and what survives goes to the author as an option; and a brief is written to be held whole by the reader that gets it.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+By the object each reading is given, and never by a budget or a clock. A reading's cost is set almost entirely by what its brief puts in front of it, so the bound is written into the brief and not into the reader.
+
+**What a draft's reading is given.** Its object is one draft, so its brief carries that node in full and its neighbourhood in full: the ancestry to the root, the rules that bind every session, the nodes it names and the nodes its `depends` names, with the options named in them, the nodes under it, its siblings, and the readings that bear on it. A neighbour is carried by what it answers and not by its whole file: its question, the answer that stands on it, the answer it now recommends where those differ, and the names of the options on its answer fact. Its rationale, its facts prose, its option subsections and the rest of its recommendation are its own dialogue, and they stay in the file one read away, exactly as its account does and for the same reason. One exception, and it is the draft's own text and not the neighbour's: where an option on a neighbour's fact names the node under review as its source, that option's prose is carried in full, because it is what the draft put there and the validation that asks whether the draft contradicts the node above it turns on that prose. A reader given only the option's name has been told that the draft wrote something on its parent and not what it wrote. The generator does this as of the reconciliation of 2026-09-05: `renderNeighbourNode` takes the id of the node under review and carries whole any option whose `source` names it. Until that landing the clause was a rule stated and not a rule running, and the reading of 2026-09-05 paid the cost the exception exists to prevent, opening a neighbour's file from disk to check two options this node had sourced there. The node under review is the one node given whole, because it is the only one being judged. It carries the rules of the reading itself in the same way, in the brief and not as a list of files to open: what the review is and what it judges, the validations, the two readings and what each is given, and the encoding's own vocabulary, facts, options, rulings, the derived class, and what a node is. A brief that tells its reader to go and read a node it could have carried has the reader read that node twice, once where the brief already quotes it and once from disk, and pays for both. Of every other node in the record it carries the id, the question, and the file the node is in, on one line, and nothing else. The file is not decoration: a question tells the reader that the record asks this somewhere, and the path is what turns the pointer into a read the reader can actually make without a search. The round's other drafts, which the clean-context-review node's recommendation gives this reader so that texts written together are read together, are carried the same way and marked as the round: id, question, and the recommendation each now makes, one line each, since what the reader needs of a sibling draft is that it moved and what it moved to, and the text that moved is one file away. The questions are there because the merge validation asks whether the record already asks this question, and a reader cannot search for a question it cannot phrase; the answers behind those questions are the survey's object, because the whole graph is what the survey reads and not what a draft's reader reads. What lies outside the neighbourhood the reader reaches by searching the graph, which the brief tells it how to do, so the cost of reaching the rest of the record is the cost of what is found and not of what exists. The rule under all of it: a part of the brief that grows with the record rather than with the draft is carried as a list of pointers, and a part that is the draft's own is carried whole.
+
+**What a re-reading is given.** A draft amended in answer to a reading's findings is read again, and the second reading's object is the amendment: the node as it now stands, its difference from the text the last reading pinned, that reading's findings, and the session's reply to each. It answers two questions, whether the amendment answers the finding and whether it introduces anything the reading has not seen, and it is not a fresh reading of the node. A fresh reading is owed only where the answer itself was redrawn, which is what a kickback is. The difference is computable only if the first reading recorded the graph commit of the text it read, beside the pin it already records, and the dialogue node's answer enumerates the review's draft keys as four written together or not at all. This answer needs a fifth, and that is that node's decision and not this one's: it is recorded there as an option, and until it is ruled the re-reading falls back to a full reading of the amended node, which the tool reports when it does it. The commit is the text the reading read and not the text that answers it, so the order is fixed: the reading is applied first, on a clean tree, and the amendment is written after. A session that amends before it applies leaves the tree dirty, no commit is recorded, and the re-reading falls back to the full brief; that is not a loss of correctness but it is a loss of the saving, and it is the one sequencing rule this answer imposes on the session.
+
+**How many readings a draft gets.** Two: the reading, and the re-reading of its amendment. A finding that survives the second is recorded as an option on the fact it bears on, or as a probe where it asks the author what they meant, and it goes to the author with the node. A reader asked for findings will return some, so a loop that runs until a reading is silent ends on the reader's mood; two rounds ends it on the draft. The cap bounds amendment and not redrawing: either reading may still kick the draft back, and a kickback is a new answer, which owes a reading of its own. What the cap forbids is a third reading of the same answer.
+
+**What a brief must fit.** A brief is written to be held whole by the reader it is given to, and it states its own size and the discipline for reading it. A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim: a reading that dies of its own context returns nothing and is paid for twice.
+
+**What the main thread spends.** That validation is never delegated is the clean-context-review node's rule and is not restated here. What this node adds is where the main thread spends when it validates: at the locus the finding names, and not by re-deriving the neighbourhood the reader was already given. A finding names a file and a line, and the cost of checking it is the cost of that file; a thread that re-reads the brief to check a finding pays the reading a second time and adds nothing, since the reader's context is exactly what it was asked to distrust.
+
+**What attention is spent on.** Token efficiency and context management are bounds on what a reading is given; attention is what the reading does with it, and it is not the same quantity. A reader holds its object and cannot hold everything, so what a brief puts in front of it competes for the reading it can actually give, and a brief that fits is not thereby well aimed. The rule is that every part of a brief is there for a validation the reader is asked to run, and a part no validation reaches is struck rather than shortened: the questions are there for the merge validation, the neighbourhood for the contradiction validations, and the round for the merge validation too, since the index prints only the nodes outside the parts above and so leaves the round's questions unprinted; nothing is carried because it might prove useful. Consistency between two nodes of the frontier is the seventh validation and is the survey's, not this reader's, so it prices nothing in a draft's brief. What the round adds beyond a question, the recommendation each draft now makes, is reached by no validation on this reader's list, and whether that list should gain one is the `frontier-consistency` node's, where it is recorded as an option. This is what makes the answer more than a cut. Striking a part is cheaper and better aimed than compressing it, because a compressed part still asks for the reader's attention and no longer repays it.
+
+**What is not bounded, and is not waste.** The number of drafts on the frontier and the number of sittings. The review is priced per draft by design, and a backlog costs one reading a draft in it; that is the cost of having the drafts, not the cost of reading them. That the review is priced per draft at all is the `clean-context-review` node's decision and not this one's, and its measured price is recorded on the `decomposition` node: measured at implementation commit 8bb72b17, this sitting's twenty-three draft briefs total 7,926,691 bytes against the 838,923 of the batch brief of 2026-09-03 that the division replaced, and the survey's brief, at 1,083,638, exceeds the batch on its own. What this node bounds is one reading of one draft; the multiplication is the division's, it is on the node that made it, and the author's own words that some of the spend is the acceptable cost of draining a backlog cover the backlog and not the multiplier.
+```
+
 #### one-reading-per-draft
 
 The re-reading goes entirely: a draft is read once, the session amends in answer to the findings, and what the amendment got wrong is caught by the survey, which reads the whole graph before the author rules and is the record's reader of last resort by the frontier-consistency node's own answer. It is the cheapest answer on the table and it is not dominated: it costs one reading per draft against the recommended two, and the survey it leans on is owed before every ruling anyway. It is not recommended because the survey's object is the frontier's consistency and not this draft's claims, so an amendment that answers a finding wrongly, or that introduces a false statement about the record in the course of answering it, is exactly what the survey is not reading for; every one of the amendments this sitting wrote was written by the party whose draft the findings were against.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+The re-reading goes entirely: a draft is read once, the session amends in answer to the findings, and what the amendment got wrong is caught by the survey, which reads the whole graph before the author rules and is the record's reader of last resort by the frontier-consistency node's own answer. It is the cheapest answer on the table and it is not dominated: it costs one reading per draft against the recommended two, and the survey it leans on is owed before every ruling anyway. It is not recommended because the survey's object is the frontier's consistency and not this draft's claims, so an amendment that answers a finding wrongly, or that introduces a false statement about the record in the course of answering it, is exactly what the survey is not reading for; every one of the amendments this sitting wrote was written by the party whose draft the findings were against.
+```
 
 #### neighbours-carried-whole
 
 The recommended answer with one clause struck: the neighbourhood is carried, and each neighbour whole, as the briefs of this sitting carried it. It is named as its own option because a ruling has to be able to take it, and the clause is the one a reader who thinks the review should see everything would strike first; it was also reached by measuring the recommended option's own reconciliation rather than by argument, which is a weaker provenance than the rest of the answer and the author should see that it is. It is not recommended because sixteen neighbours rendered whole were 2,709 lines of a 3,181-line brief written to judge a 208-line node, so the clause is most of what the answer does. What it would cost is real and this sitting's own reader paid it: given its neighbours by answer only, the reader of this draft had to open `clean-context-review.md` from disk to run the validation that asks whether the draft contradicts the node above it, because that validation turns on the neighbour's option prose and not on its answer. The recommended answer takes that finding as a bound rather than as a strike, and carries in full any neighbour option the draft itself sourced.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+The recommended answer with one clause struck: the neighbourhood is carried, and each neighbour whole, as the briefs of this sitting carried it. It is named as its own option because a ruling has to be able to take it, and the clause is the one a reader who thinks the review should see everything would strike first; it was also reached by measuring the recommended option's own reconciliation rather than by argument, which is a weaker provenance than the rest of the answer and the author should see that it is. It is not recommended because sixteen neighbours rendered whole were 2,709 lines of a 3,181-line brief written to judge a 208-line node, so the clause is most of what the answer does. What it would cost is real and this sitting's own reader paid it: given its neighbours by answer only, the reader of this draft had to open `clean-context-review.md` from disk to run the validation that asks whether the draft contradicts the node above it, because that validation turns on the neighbour's option prose and not on its answer. The recommended answer takes that finding as a bound rather than as a strike, and carries in full any neighbour option the draft itself sourced.
+```
+
 #### answers-only-index
 
 Raised by this node's own reading. The index carries each node's id, question, file and standing answer, and nothing of its facts, options, rationale or recommendation: roughly a quarter of the index this sitting measured, and a small multiple of the one-line index. What it would answer is precisely the cost the recommended answer records against itself, that a reader shown only questions can see that a question exists without seeing how it was answered, which is enough to propose a merge and not enough to argue one. It is not recommended because the standing answers are the survey's object by the frontier-consistency node's answer, and a per-draft index that carries them is the batch's reading returning under another name; but the reading is right that this is the frontier's real middle point, and the author should rule on it rather than on the two ends.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+Raised by this node's own reading. The index carries each node's id, question, file and standing answer, and nothing of its facts, options, rationale or recommendation: roughly a quarter of the index this sitting measured, and a small multiple of the one-line index. What it would answer is precisely the cost the recommended answer records against itself, that a reader shown only questions can see that a question exists without seeing how it was answered, which is enough to propose a merge and not enough to argue one. It is not recommended because the standing answers are the survey's object by the frontier-consistency node's answer, and a per-draft index that carries them is the batch's reading returning under another name; but the reading is right that this is the frontier's real middle point, and the author should rule on it rather than on the two ends.
+```
 
 #### full-index-per-draft
 
 Every draft's brief carries the standing answer, the facts and the rationale of every node in the record, as the briefs of 2026-09-04 and 2026-09-05 did. What it would answer: the reader sees the whole record and can find a contradiction with any part of it without being told where to look. Passed over because a draft's reader is given one draft as its object, and the whole record is the object of the other reading; the index in the per-draft brief is what the batch's reading left behind when the review divided by its object on 2026-09-04, and the findings this sitting returned show what the reader used, the node, its ancestry, its depends, the options it names, its siblings, the readings that bear on it, and the implementation.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+Every draft's brief carries the standing answer, the facts and the rationale of every node in the record, as the briefs of 2026-09-04 and 2026-09-05 did. What it would answer: the reader sees the whole record and can find a contradiction with any part of it without being told where to look. Passed over because a draft's reader is given one draft as its object, and the whole record is the object of the other reading; the index in the per-draft brief is what the batch's reading left behind when the review divided by its object on 2026-09-04, and the findings this sitting returned show what the reader used, the node, its ancestry, its depends, the options it names, its siblings, the readings that bear on it, and the implementation.
+```
+
 #### no-index-at-all
 
 The brief carries the neighbourhood and nothing of the rest of the record, the reader searching the graph for whatever else it needs. Passed over because the fifteenth validation asks the reader whether the record already asks this question somewhere else, and a reader that has never seen the other questions cannot search for them: the list of questions is what makes that validation checkable, and it is one line a node.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+The brief carries the neighbourhood and nothing of the rest of the record, the reader searching the graph for whatever else it needs. Passed over because the fifteenth validation asks the reader whether the record already asks this question somewhere else, and a reader that has never seen the other questions cannot search for them: the list of questions is what makes that validation checkable, and it is one line a node.
+```
 
 #### full-re-read-on-every-move
 
 A recommendation that moves after its reading is read again from the beginning, the whole node and the whole brief, as this sitting did. Passed over because the record already knows what moved: the reading carries the pin of the text it read, and the difference between that text and the amended one is the amendment. Reading the node whole to find it pays the object's price a second time.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+A recommendation that moves after its reading is read again from the beginning, the whole node and the whole brief, as this sitting did. Passed over because the record already knows what moved: the reading carries the pin of the text it read, and the difference between that text and the amended one is the amendment. Reading the node whole to find it pays the object's price a second time.
+```
+
 #### unbounded-rounds
 
 The reading and the amendment repeat until a reading returns no findings. Passed over because a reader asked for findings returns some, and a reading that always finds something makes the loop end when a reader happens to be quiet rather than when the draft is sound; all thirteen of the readings this sitting landed on 2026-09-05 had findings accepted and moved their node's pin, so the loop as run has never once terminated of its own accord.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+The reading and the amendment repeat until a reading returns no findings. Passed over because a reader asked for findings returns some, and a reading that always finds something makes the loop end when a reader happens to be quiet rather than when the draft is sound; all thirteen of the readings this sitting landed on 2026-09-05 had findings accepted and moved their node's pin, so the loop as run has never once terminated of its own accord.
+```
+
 #### budget-per-sitting
 
 A token budget for the sitting's reviews, the reading stopping when it is spent. Passed over because it stops the reading by the clock: what goes unread is whatever stood last in the queue, which has nothing to do with what was least worth reading, and the bound this answer wants is on the object of each reading and not on their number.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+A token budget for the sitting's reviews, the reading stopping when it is spent. Passed over because it stops the reading by the clock: what goes unread is whatever stood last in the queue, which has nothing to do with what was least worth reading, and the bound this answer wants is on the object of each reading and not on their number.
+```
 
 #### neighbourhood-cited-not-restated
 
@@ -237,7 +374,11 @@ cites `clean-context-review` for what a reader is given: "what a reader is
 given is the clean-context-review node's; what it costs and why each part is
 that size is this node's." The case for it is `codd-update-anomaly`, and it is
 measured: three amendments in two days each produced a fresh divergence in the
-same sentence. Against it, the pricing argument is unreadable without the thing
+same sentence.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it, the pricing argument is unreadable without the thing
 priced, and a paragraph that says what a part costs while pointing elsewhere
 for what the part is makes the reader hold two files to follow one argument.
 The same option stands on `clean-context-review` from the other side, as
@@ -245,6 +386,34 @@ The same option stands on `clean-context-review` from the other side, as
 where the neighbourhood is stated, and ruling for one is ruling for the other.
 Raised by the clean-context readings of 2026-09-05 on that node, as their
 counter-argument, twice.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+The paragraph "What a draft's reading is given" states the parts of the brief
+in full, and `clean-context-review` states them too; the two enumerations
+disagreed on 2026-09-05 at exactly two points, `depends` against
+names-by-id-or-slug, and the author's words on each neighbour, which this
+node's list excluded and that node's list added, and at a third on the same
+day, the nodes a draft names, which the parent's list and the generator both
+carry and this node's list omitted until the reading found it. This option keeps here the
+pricing, the measurement, the pointer rule, the re-reading and the cap, and
+cites `clean-context-review` for what a reader is given: "what a reader is
+given is the clean-context-review node's; what it costs and why each part is
+that size is this node's." The case for it is `codd-update-anomaly`, and it is
+measured: three amendments in two days each produced a fresh divergence in the
+same sentence.
+```
 
 #### pin-names-the-text-the-reader-read
 
@@ -283,6 +452,59 @@ first number says is that the deadlock is not a corner case of the two nodes
 that reached the cap: on a frontier the size of this one it is the ordinary
 state, and every amendment a reading earns puts one more node into it.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+The sequencing rule this answer imposes has a consequence it does not state,
+and the consequence decides whether a node can ever become ready to rule. The
+reading is applied first and the amendment written after, so the review's pin
+names the text the reader read; the amendment then moves the recommendation
+past that pin, the frontier prints the node as changed since its review, and
+readiness, which asks that the pin name the recommendation as it stands, is not
+met. Under the cap no third reading is available to re-pin it. The three ways
+out are the option: the second reading's apply settles the pin over the
+amendment it read, which is what the applying script does today and which makes
+the pin attest a forward on text no reader saw; or readiness stops asking the
+draft-review pin to be current once the cap is reached and asks only that the
+two readings have happened; or an amendment after the second reading is
+forbidden outright and every surviving finding becomes an option. The record already holds the tradition that strikes the first:
+`commons.systems/disposition-graph/review-approval-pinned-to-a-revision` says
+that a practice which lets an approval stand over a revision nobody read is the
+failure the pinned approval exists to convert into a visible one, "the approval
+is still displayed, the reader trusts it, and the change that lands is not the
+change that was read", which is exactly what settling the pin over the
+amendment would do. This is not recorded as settled by any of them. Measured on this sitting: every reading of
+2026-09-04 and 2026-09-05 was applied after its amendment and not before, so no
+review block in the record carries a graph commit except one, every re-reading
+fell back to the full draft brief, and every pin written names text its reader
+had not seen. Raised by the clean-context reading of `authority` on 2026-09-05.
+
+Measured again at graph commit 4262d092, with the record's own predicates and
+not by eye: of 142 nodes, 48 carry a stage of `review` or `ruling`; 34 of the 48
+are stale by `reviewStale`, their pinned recommendation differing from the one
+that stands; 13 review blocks now carry the graph commit the reader read, the
+sequencing rule this answer imposes having taken effect on 2026-09-05; and
+`readyToRule` is true of none of the 48. The survey pin is the other half of
+that zero and is a different debt, since no node yet carries one. What the
+first number says is that the deadlock is not a corner case of the two nodes
+that reached the cap: on a frontier the size of this one it is the ordinary
+state, and every amendment a reading earns puts one more node into it.
+```
+
 #### brief-carries-the-recount-command
 
 Where a draft's rationale rests on a measurement, its brief carries the command
@@ -299,6 +521,38 @@ suggestion; this node answered it in the rationale with a recount instruction
 instead, and the second reading found that instruction false in both its limbs,
 which is why the option is on the list rather than in the prose.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+Where a draft's rationale rests on a measurement, its brief carries the command
+that reproduces the number, so that the reader checks the measurement rather
+than taking the drafter's word for it or re-inventing a way to re-take it. What
+it would answer is the validation that asks whether a claim about the record is
+true, which is the validation a reader can least afford to run by hand and the
+one this node's own rationale failed twice: once when a figure exceeded the
+maximum the same paragraph stated, and once when the repair for that was to
+write a different number rather than to re-measure. Its cost is that the
+command is a second thing to keep true, and a stale command is worse than none,
+since it looks checkable. It was the clean-context reading of 2026-09-05's own
+suggestion; this node answered it in the rationale with a recount instruction
+instead, and the second reading found that instruction false in both its limbs,
+which is why the option is on the list rather than in the prose.
+```
+
 #### rules-of-the-reading-named-as-files
 
 The brief names the twelve rule nodes for the reader to open rather than
@@ -314,6 +568,37 @@ and did not list, and the delta reading of 2026-09-07 found it still unlisted;
 it is on the fact so that the author sees the bytes it would save beside the
 read it would cost.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+The brief names the twelve rule nodes for the reader to open rather than
+carrying them, which is what the brief did until 2026-09-04. It would save the
+65,882 bytes those twelve cost in every brief, three times the index they
+displaced, and it is passed over for the double read it costs: the reader
+opening the twelve by instruction, five of them twice, since the five
+global-tier rules are in every neighbourhood already, and reaching outside its
+neighbourhood for the other seven, which is the fourth measurement in the
+rationale and the cheapest cost the brief was cut to remove. The clean-context
+reading of 2026-09-05 named it as a candidate this node argued against in prose
+and did not list, and the delta reading of 2026-09-07 found it still unlisted;
+it is on the fact so that the author sees the bytes it would save beside the
+read it would cost.
+```
+
 #### a-cap-on-redraws-per-node-per-sitting
 
 The cap of two bounds the readings of one answer and is silent on how many
@@ -327,7 +612,11 @@ of those readings was within the cap. What the option would add is a second
 bound, on redraws of one node within one sitting, past which the node stops being
 redrawn and goes to the author with the reading's findings recorded as options on
 the fact they bear on, which is what the answer already does with a finding that
-survives the second reading. Against it: the two nodes this record has read most
+survives the second reading.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: the two nodes this record has read most
 are the two whose answers were wrong in ways each reading caught and the last
 redraw fixed, so a bound would have shipped a known defect to the author to save
 tokens, and the record's own rule is that a kickback is a new answer precisely
@@ -335,6 +624,33 @@ because a redrawn answer is not the one that was read. Recorded on 2026-09-05, i
 the sitting whose cost raised the question, and not recommended: what the right
 bound is, or whether the right instrument is a bound at all rather than a
 different first draft, is not something this sitting measured.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+The cap of two bounds the readings of one answer and is silent on how many
+answers a node may have, because a kickback is a new answer and owes a reading of
+its own. Nothing in the record bounds the cycle those two rules make together:
+draft, reading, kickback, redraw, reading, kickback, and a node can be read any
+number of times while each reading obeys the cap. Measured on this record on
+2026-09-05, at graph commit 73e2a04f: `clean-context-review` has been read seven
+times, `what-acts-during-bootstrap` four, `class-recommendation` three, and each
+of those readings was within the cap. What the option would add is a second
+bound, on redraws of one node within one sitting, past which the node stops being
+redrawn and goes to the author with the reading's findings recorded as options on
+the fact they bear on, which is what the answer already does with a finding that
+survives the second reading.
+```
 
 #### one-answer-a-node-and-one-read
 
@@ -350,39 +666,11 @@ The finding and the mechanical defect. A finding names the file and the heading 
 
 Raised from the author's words of 2026-09-07 and from the measurement of that sitting's own seven briefs. Three of the four clauses -- the account, the verbatim locus, and the survey's carrying rule -- were already running in the working tree at 87e4b24e under the author's instruction to begin applying, which makes this recommendation the record catching up with its instrument, the same order the option `pointers-for-what-grows-with-the-record` had on the node above.
 
-#### a-waves-brief-is-one-brief
+**AI support.** The record wrote no case for this option; its support is owed.
 
-Everything `one-answer-a-node-and-one-read` says, with the wave's brief among what this node bounds: where a sitting's drafts are read as one wave, the shared neighbourhood is carried once and each object once, and the wave is split whenever the resulting brief exceeds what one reader holds whole.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-Measured on 2026-09-07 on the four children of the alignment page, at graph commit `d0942d57` and implementation commit `87e4b24e`: `draft-authors-words-on-the-page.brief.md` 307,920 bytes, `draft-what-an-option-row-carries.brief.md` 389,802, `draft-where-a-change-request-goes.brief.md` 317,061 and `draft-where-the-unconfirmed-indication-goes.brief.md` 344,563, totalling 1,359,346, of which the parts common to all four run 249,607, 255,194, 256,936 and 256,305 bytes, differing between them only by which of the four each brief excludes from its round and its siblings. One brief carrying their union once and the four objects once is about 598,240 bytes, fifty-six percent less than the four. That figure is a projection: no generator writes a wave brief. The one wave the record has run, later the same day at graph commit `2abca334` and implementation commit `cb0e02c6`, was one reader over four separately generated briefs -- `draft-clean-context-review.brief.md` 323,650, `draft-review-model.brief.md` 280,360, `draft-frontier-consistency.brief.md` 319,159 and `draft-unit-skills.brief.md` 263,766, 1,186,935 bytes in all -- which realized none of the saving and incurred the whole of the loss. Both sets are in `tmp/review/`, which is gitignored, and are re-taken by re-running the generator at the commit named.
-
-Against it: this node's recommended text cures a brief the reader cannot hold by narrowing the object, and a wave widens it; the split is what reconciles the two, and no instrument runs the split.
-
-Raised on `commons.systems/disposition-graph/clean-context-review`, whose recommendation makes the wave, and recorded here because what a brief must fit and how many readings an answer gets are this node's. Whether the clause stands there or here is the author's to rule, and the two rows name each other.
-
-#### the-surveys-unreached-node-is-one-line
-
-Everything `one-answer-a-node-and-one-read` says, with the survey's own graph priced by this node and its reach rule cited rather than restated: what the survey reads of a node it is not judging is `commons.systems/disposition-graph/frontier-consistency`'s, stated in its validations and conditioned there on the node; this node prices what that costs and states the bound, and restates neither the reach rule nor the one-line class.
-
-Measured on the survey brief of 2026-09-07: 1,202,450 bytes at implementation commit `87e4b24e`, before the cut, of which the eight judged nodes are 233,716 and the hundred and thirty-three context nodes 710,747; 994,467 bytes at implementation commit `cb0e02c6`, after it, which is the shape `packages/clean-context-review/brief.mjs` now writes.
-
-Against it: at a hundred and forty-three nodes neither shape is held whole by one reader, so what the cut buys is a smaller brief and not a brief that fits; and the one-line class rests on an earlier survey having read those nodes, which the survey of 2026-09-05 did for every node the record then had and does for none minted since.
-
-Raised on `commons.systems/disposition-graph/frontier-consistency`, whose validations state the inputs, and recorded here because what a reading is given is this node's. The author then rules the placement once rather than meeting the same rule on two nodes.
-
-#### the-surveys-selection-moves-to-its-own-node
-
-What a reading is given stays here; how a survey's object is selected and divided so that it is smaller without being narrower, which checks must be clean before a survey's reader is launched, and what the accumulation leaves in the judged node's place, are the `survey-selection` node's and are cited here and not restated.
-
-**AI support.** The selection is a design with its own options, measurements and traditions, and a ruling per fact needs a node per question; this node's rule that a brief is narrowed by its object and never by a budget is what the selection applies, and the citation keeps the two in one direction. The amendment also corrects the repair of 2026-09-07 that named `survey-cost`, a node that did not exist, which the second re-reading kicked back.
-
-**AI divergence.** A fourth clause of this answer now cites a child for its content, so a reader of this node alone learns that the object is narrowed and not how, and the child's boldness is high where this node's is moderate; the citation carries the confidence down with it.
-
-### authority
-
-Ratified. What this decides is how much of the record the adversarial reader is shown, and the party it is shown against is the party that would otherwise set it: a rule that lets the drafter narrow the review's object is capture-shaped in the way the `class-recommendation` node's escalation test names, and being wrong here is not visible in the record, since a review that reads too little returns fewer findings and looks cheaper and no worse. Moderate boldness: the escalation is the test the `class-recommendation` node states, and what rests on the AI is the judgment that the author's delegation of right-sizing does not reach the reviewer's object, which the case against disputes.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -395,23 +683,88 @@ defines:
 ---
 ## Answer
 
-By the object each reading is given, and never by a budget or a clock; how a survey's object is selected and divided, so that it is smaller without being narrower, is the `survey-selection` node's, and is cited here and not restated. A reading's cost is set almost entirely by what its brief puts in front of it, so the bound is written into the brief and not into the reader.
+By the object each reading is given, and never by a budget or a clock. A reading's cost is set almost entirely by what its brief puts in front of it, so the bound is written into the brief and not into the reader.
 
-**What a draft's reading is given.** Its object is one draft, so its brief carries that node in full and its neighbourhood in full: the ancestry to the root, the rules that bind every session, the nodes it names and the nodes its `depends` names, with the options named in them, the nodes under it, its siblings, and the readings that bear on it. A node a reading is not judging is carried by what it answers and never by its whole file, and it is one rule for every reading, a draft's neighbourhood and the survey's graph alike: its question, one answer, and the names of the options on its answer fact. One answer and never two. Where a ruling reaches the node the answer that stands is carried, since that is what binds; where no ruling reaches it the answer it now recommends is carried, since nothing else on the node is operative; and one line says which was carried, names the other, and gives the file it is in. Carrying both puts one node's argument in front of the reader twice, once as it is and once as it is about to be, and asks a reader whose object is a different node to work out which of the two it is judging against; that is the class's to say and not the reader's to infer. During bootstrap no ruling reaches any node, so a neighbour whose recommendation differs from what stands is carried by the recommended text alone. Its rationale, its facts prose, its option subsections and the rest of its recommendation are its own dialogue, and they stay in the file one read away, exactly as its account does and for the same reason. One exception, and it is the draft's own text and not the neighbour's: where an option on a neighbour's fact names the node under review as its source, that option's prose is carried in full, because it is what the draft put there and the validation that asks whether the draft contradicts the node above it turns on that prose. A reader given only the option's name has been told that the draft wrote something on its parent and not what it wrote. The generator does this as of the reconciliation of 2026-09-05: `renderNeighbourNode` takes the id of the node under review and carries whole any option whose `source` names it. Until that landing the clause was a rule stated and not a rule running, and the reading of 2026-09-05 paid the cost the exception exists to prevent, opening a neighbour's file from disk to check two options this node had sourced there. The node under review is the one node given whole, because it is the only one being judged; and whole is its question, the author's words its options reference, the resolved content of every option on its answer fact, and its facts with every option's accumulated support and divergence, together with the last section of its `## Account` and nothing before it, the manifest lines of what the accumulation folded or absorbed standing in the place of the rest. An account is the dialogue's history and not its text, which is the ground on which a neighbour's account already stays in the file, and it grows with every reading applied while the draft it records does not, so a node read four times pays for four accounts to be judged once. The last section is kept because the previous reading's findings and the session's replies to them are there, and a reader judging what a draft became is judging an answer to those. It carries the rules of the reading itself in the same way, in the brief and not as a list of files to open: what the review is and what it judges, the validations, the two readings and what each is given, and the encoding's own vocabulary, facts, options, rulings, the derived class, and what a node is. A brief that tells its reader to go and read a node it could have carried has the reader read that node twice, once where the brief already quotes it and once from disk, and pays for both. Of every other node in the record it carries the id, the question, and the file the node is in, on one line, and nothing else. The file is not decoration: a question tells the reader that the record asks this somewhere, and the path is what turns the pointer into a read the reader can actually make without a search. The round's other drafts, which the clean-context-review node's recommendation gives this reader so that texts written together are read together, are carried the same way and marked as the round: id, question, and the recommendation each now makes, one line each, since what the reader needs of a sibling draft is that it moved and what it moved to, and the text that moved is one file away. The questions are there because the merge validation asks whether the record already asks this question, and a reader cannot search for a question it cannot phrase; the answers behind those questions are the survey's object, because the whole graph is what the survey reads and not what a draft's reader reads. What lies outside the neighbourhood the reader reaches by searching the graph, which the brief tells it how to do, so the cost of reaching the rest of the record is the cost of what is found and not of what exists. The rule under all of it: a part of the brief that grows with the record rather than with the draft is carried as a list of pointers, and a part that is the draft's own is carried whole.
+**What a draft's reading is given.** Its object is one draft, so its brief carries that node in full and its neighbourhood in full: the ancestry to the root, the rules that bind every session, the nodes it names and the nodes its `depends` names, with the options named in them, the nodes under it, its siblings, and the readings that bear on it. A node a reading is not judging is carried by what it answers and never by its whole file, and it is one rule for every reading, a draft's neighbourhood and the survey's graph alike: its question, one answer, and the names of the options on its answer fact. One answer and never two. Where a ruling reaches the node the answer that stands is carried, since that is what binds; where no ruling reaches it the answer it now recommends is carried, since nothing else on the node is operative; and one line says which was carried, names the other, and gives the file it is in. Carrying both puts one node's argument in front of the reader twice, once as it is and once as it is about to be, and asks a reader whose object is a different node to work out which of the two it is judging against; that is the class's to say and not the reader's to infer. During bootstrap no ruling reaches any node, so a neighbour whose recommendation differs from what stands is carried by the recommended text alone. Its rationale, its facts prose, its option subsections and the rest of its recommendation are its own dialogue, and they stay in the file one read away, exactly as its account does and for the same reason. One exception, and it is the draft's own text and not the neighbour's: where an option on a neighbour's fact names the node under review as its source, that option's prose is carried in full, because it is what the draft put there and the validation that asks whether the draft contradicts the node above it turns on that prose. A reader given only the option's name has been told that the draft wrote something on its parent and not what it wrote. The generator does this as of the reconciliation of 2026-09-05: `renderNeighbourNode` takes the id of the node under review and carries whole any option whose `source` names it. Until that landing the clause was a rule stated and not a rule running, and the reading of 2026-09-05 paid the cost the exception exists to prevent, opening a neighbour's file from disk to check two options this node had sourced there. The node under review is the one node given whole, because it is the only one being judged; and whole is its question, the author's words, the text that stands, its rationale, its facts with every option's prose, and its recommendation, together with the last section of its `## Account` and nothing before it, the count of the sections left out standing in its place. An account is the dialogue's history and not its text, which is the ground on which a neighbour's account already stays in the file, and it grows with every reading applied while the draft it records does not, so a node read four times pays for four accounts to be judged once. The last section is kept because the previous reading's findings and the session's replies to them are there, and a reader judging what a draft became is judging an answer to those. It carries the rules of the reading itself in the same way, in the brief and not as a list of files to open: what the review is and what it judges, the validations, the two readings and what each is given, and the encoding's own vocabulary, facts, options, rulings, the derived class, and what a node is. A brief that tells its reader to go and read a node it could have carried has the reader read that node twice, once where the brief already quotes it and once from disk, and pays for both. Of every other node in the record it carries the id, the question, and the file the node is in, on one line, and nothing else. The file is not decoration: a question tells the reader that the record asks this somewhere, and the path is what turns the pointer into a read the reader can actually make without a search. The round's other drafts, which the clean-context-review node's recommendation gives this reader so that texts written together are read together, are carried the same way and marked as the round: id, question, and the recommendation each now makes, one line each, since what the reader needs of a sibling draft is that it moved and what it moved to, and the text that moved is one file away. The questions are there because the merge validation asks whether the record already asks this question, and a reader cannot search for a question it cannot phrase; the answers behind those questions are the survey's object, because the whole graph is what the survey reads and not what a draft's reader reads. What lies outside the neighbourhood the reader reaches by searching the graph, which the brief tells it how to do, so the cost of reaching the rest of the record is the cost of what is found and not of what exists. The rule under all of it: a part of the brief that grows with the record rather than with the draft is carried as a list of pointers, and a part that is the draft's own is carried whole.
 
 **What a re-reading is given.** A draft amended in answer to a reading's findings is read again, and the second reading's object is the amendment: the node as it now stands, its difference from the text the last reading pinned, that reading's findings, and the session's reply to each. It answers two questions, whether the amendment answers the finding and whether it introduces anything the reading has not seen, and it is not a fresh reading of the node. A fresh reading is owed only where the answer itself was redrawn, which is what a kickback is. The difference is computable only if the first reading recorded the graph commit of the text it read, beside the pin it already records, and the dialogue node's answer enumerates the review's draft keys as four written together or not at all. This answer needs a fifth, and that is that node's decision and not this one's: it is recorded there as an option, and until it is ruled the re-reading falls back to a full reading of the amended node, which the tool reports when it does it. The commit is the text the reading read and not the text that answers it, so the order is fixed: the reading is applied first, on a clean tree, and the amendment is written after. A session that amends before it applies leaves the tree dirty, no commit is recorded, and the re-reading falls back to the full brief; that is not a loss of correctness but it is a loss of the saving, and it is the one sequencing rule this answer imposes on the session.
 
 **How many readings a draft gets.** Two: the reading, and the re-reading of its amendment. A finding that survives the second is recorded as an option on the fact it bears on, or as a probe where it asks the author what they meant, and it goes to the author with the node. A reader asked for findings will return some, so a loop that runs until a reading is silent ends on the reader's mood; two rounds ends it on the draft. The cap bounds amendment and not redrawing: either reading may still kick the draft back, and a kickback is a new answer, which owes a reading of its own. What the cap forbids is a third reading of the same answer.
 
-**What a brief must fit.** A brief is written to be held whole by the reader it is given to, and it states its own size and the discipline for reading it. A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim, the object of a survey being narrowed as the `survey-selection` node says: a reading that dies of its own context returns nothing and is paid for twice. A brief that fits is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it. A reader that pages a brief it could have held re-sends everything it has already read with every further page, so the pieces multiply the brief by roughly half their number and buy nothing back; the bound on the size of a piece exists for the brief a reader cannot hold, which is the defect above, and it is not the rule for the ordinary case. The brief's own navigation line and the prompt that launches the reader state one discipline between them, or the reader has been given two rules and will follow whichever it read last.
+**What a brief must fit.** A brief is written to be held whole by the reader it is given to, and it states its own size and the discipline for reading it. A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim: a reading that dies of its own context returns nothing and is paid for twice. A brief that fits is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it. A reader that pages a brief it could have held re-sends everything it has already read with every further page, so the pieces multiply the brief by roughly half their number and buy nothing back; the bound on the size of a piece exists for the brief a reader cannot hold, which is the defect above, and it is not the rule for the ordinary case. The brief's own navigation line and the prompt that launches the reader state one discipline between them, or the reader has been given two rules and will follow whichever it read last.
 
 **What the main thread spends.** That validation is never delegated is the clean-context-review node's rule and is not restated here. What this node adds is where the main thread spends when it validates: at the locus the finding names, and not by re-deriving the neighbourhood the reader was already given. A finding names a file and a line, and the cost of checking it is the cost of that file; a thread that re-reads the brief to check a finding pays the reading a second time and adds nothing, since the reader's context is exactly what it was asked to distrust. So a finding names the file, names the heading it sits under, and quotes the sentence or the clause it bears on exactly as that text stands in the file, never paraphrased, never summarized, and never by a line number: the file and the heading are the address, the quoted bytes are what turn the validation into a search that returns either the text or nothing, and a line number is stale the moment anything above it is edited. A finding whose locus the thread has to reconstruct makes the thread read the node to find what the reader already had in front of it.
 
-**What attention is spent on.** Token efficiency and context management are bounds on what a reading is given; attention is what the reading does with it, and it is not the same quantity. A reader holds its object and cannot hold everything, so what a brief puts in front of it competes for the reading it can actually give, and a brief that fits is not thereby well aimed. The rule is that every part of a brief is there for a validation the reader is asked to run, and a part no validation reaches is struck rather than shortened: the questions are there for the merge validation, the neighbourhood for the contradiction validations, and the round for the merge validation too, since the index prints only the nodes outside the parts above and so leaves the round's questions unprinted; nothing is carried because it might prove useful. Consistency between two nodes of the frontier is the seventh validation and is the survey's, not this reader's, so it prices nothing in a draft's brief. What the round adds beyond a question, the recommendation each draft now makes, is reached by no validation on this reader's list, and whether that list should gain one is the `frontier-consistency` node's, where it is recorded as an option. This is what makes the answer more than a cut. Striking a part is cheaper and better aimed than compressing it, because a compressed part still asks for the reader's attention and no longer repays it. And a defect an instrument can name is the instrument's and never a reading's. A reading is the only reader in this record that can judge whether an answer is right, and it is the most expensive reader the record has; spending it on an option marked passed with no reason recorded, on prose that says an option was passed over where the row carries no status, on a fact whose prose opens straight onto an option subsection with no reason above it, on a pin naming a commit the node has moved past, on a dated passage quoted in a rationale that stands under no `## Disposition`, or on an account section byte-identical to the one above it, spends that attention on what a script decides. Each such finding is paid three times over, in the fix, in the re-reading the amendment owes, and in the main thread's validation. The rule binds the instrument before it binds the reader: every defect of that kind the record has met is a check the validator is owed, and a reading that meets one while the validator still lacks it reports it like any other; which checks are owed before a survey's reader is launched at all, and that a survey is not launched while one of them fires, is the `survey-selection` node's. What the rule forbids is a brief that asks a reader to run a check a script could have refused.
+**What attention is spent on.** Token efficiency and context management are bounds on what a reading is given; attention is what the reading does with it, and it is not the same quantity. A reader holds its object and cannot hold everything, so what a brief puts in front of it competes for the reading it can actually give, and a brief that fits is not thereby well aimed. The rule is that every part of a brief is there for a validation the reader is asked to run, and a part no validation reaches is struck rather than shortened: the questions are there for the merge validation, the neighbourhood for the contradiction validations, and the round for the merge validation too, since the index prints only the nodes outside the parts above and so leaves the round's questions unprinted; nothing is carried because it might prove useful. Consistency between two nodes of the frontier is the seventh validation and is the survey's, not this reader's, so it prices nothing in a draft's brief. What the round adds beyond a question, the recommendation each draft now makes, is reached by no validation on this reader's list, and whether that list should gain one is the `frontier-consistency` node's, where it is recorded as an option. This is what makes the answer more than a cut. Striking a part is cheaper and better aimed than compressing it, because a compressed part still asks for the reader's attention and no longer repays it. And a defect an instrument can name is the instrument's and never a reading's. A reading is the only reader in this record that can judge whether an answer is right, and it is the most expensive reader the record has; spending it on an option marked passed with no reason recorded, on prose that says an option was passed over where the row carries no status, on a fact whose prose opens straight onto an option subsection with no reason above it, on a pin naming a commit the node has moved past, on a dated passage quoted in a rationale that stands under no `## Disposition`, or on an account section byte-identical to the one above it, spends that attention on what a script decides. Each such finding is paid three times over, in the fix, in the re-reading the amendment owes, and in the main thread's validation. The rule binds the instrument before it binds the reader: every defect of that kind the record has met is a check the validator is owed, and a reading that meets one while the validator still lacks it reports it like any other. What the rule forbids is a brief that asks a reader to run a check a script could have refused.
 
 **What is not bounded, and is not waste.** The number of drafts on the frontier and the number of sittings. The review is priced per draft by design, and a backlog costs one reading a draft in it; that is the cost of having the drafts, not the cost of reading them. That the review is priced per draft at all is the `clean-context-review` node's decision and not this one's, and its measured price is recorded on the `decomposition` node: measured at implementation commit 8bb72b17, this sitting's twenty-three draft briefs total 7,926,691 bytes against the 838,923 of the batch brief of 2026-09-03 that the division replaced, and the survey's brief, at 1,083,638, exceeds the batch on its own. What this node bounds is one reading of one draft; the multiplication is the division's, it is on the node that made it, and the author's own words that some of the spend is the acceptable cost of draining a backlog cover the backlog and not the multiplier.
+```
 
-## Rationale
+#### a-waves-brief-is-one-brief
+
+Everything `one-answer-a-node-and-one-read` says, with the wave's brief among what this node bounds: where a sitting's drafts are read as one wave, the shared neighbourhood is carried once and each object once, and the wave is split whenever the resulting brief exceeds what one reader holds whole.
+
+Measured on 2026-09-07 on the four children of the alignment page, at graph commit `d0942d57` and implementation commit `87e4b24e`: `draft-authors-words-on-the-page.brief.md` 307,920 bytes, `draft-what-an-option-row-carries.brief.md` 389,802, `draft-where-a-change-request-goes.brief.md` 317,061 and `draft-where-the-unconfirmed-indication-goes.brief.md` 344,563, totalling 1,359,346, of which the parts common to all four run 249,607, 255,194, 256,936 and 256,305 bytes, differing between them only by which of the four each brief excludes from its round and its siblings. One brief carrying their union once and the four objects once is about 598,240 bytes, fifty-six percent less than the four. That figure is a projection: no generator writes a wave brief. The one wave the record has run, later the same day at graph commit `2abca334` and implementation commit `cb0e02c6`, was one reader over four separately generated briefs -- `draft-clean-context-review.brief.md` 323,650, `draft-review-model.brief.md` 280,360, `draft-frontier-consistency.brief.md` 319,159 and `draft-unit-skills.brief.md` 263,766, 1,186,935 bytes in all -- which realized none of the saving and incurred the whole of the loss. Both sets are in `tmp/review/`, which is gitignored, and are re-taken by re-running the generator at the commit named.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: this node's recommended text cures a brief the reader cannot hold by narrowing the object, and a wave widens it; the split is what reconciles the two, and no instrument runs the split.
+
+Raised on `commons.systems/disposition-graph/clean-context-review`, whose recommendation makes the wave, and recorded here because what a brief must fit and how many readings an answer gets are this node's. Whether the clause stands there or here is the author's to rule, and the two rows name each other.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+Everything `one-answer-a-node-and-one-read` says, with the wave's brief among what this node bounds: where a sitting's drafts are read as one wave, the shared neighbourhood is carried once and each object once, and the wave is split whenever the resulting brief exceeds what one reader holds whole.
+
+Measured on 2026-09-07 on the four children of the alignment page, at graph commit `d0942d57` and implementation commit `87e4b24e`: `draft-authors-words-on-the-page.brief.md` 307,920 bytes, `draft-what-an-option-row-carries.brief.md` 389,802, `draft-where-a-change-request-goes.brief.md` 317,061 and `draft-where-the-unconfirmed-indication-goes.brief.md` 344,563, totalling 1,359,346, of which the parts common to all four run 249,607, 255,194, 256,936 and 256,305 bytes, differing between them only by which of the four each brief excludes from its round and its siblings. One brief carrying their union once and the four objects once is about 598,240 bytes, fifty-six percent less than the four. That figure is a projection: no generator writes a wave brief. The one wave the record has run, later the same day at graph commit `2abca334` and implementation commit `cb0e02c6`, was one reader over four separately generated briefs -- `draft-clean-context-review.brief.md` 323,650, `draft-review-model.brief.md` 280,360, `draft-frontier-consistency.brief.md` 319,159 and `draft-unit-skills.brief.md` 263,766, 1,186,935 bytes in all -- which realized none of the saving and incurred the whole of the loss. Both sets are in `tmp/review/`, which is gitignored, and are re-taken by re-running the generator at the commit named.
+```
+
+#### the-surveys-unreached-node-is-one-line
+
+Everything `one-answer-a-node-and-one-read` says, with the survey's own graph priced by this node and its reach rule cited rather than restated: what the survey reads of a node it is not judging is `commons.systems/disposition-graph/frontier-consistency`'s, stated in its validations and conditioned there on the node; this node prices what that costs and states the bound, and restates neither the reach rule nor the one-line class.
+
+Measured on the survey brief of 2026-09-07: 1,202,450 bytes at implementation commit `87e4b24e`, before the cut, of which the eight judged nodes are 233,716 and the hundred and thirty-three context nodes 710,747; 994,467 bytes at implementation commit `cb0e02c6`, after it, which is the shape `packages/clean-context-review/brief.mjs` now writes.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: at a hundred and forty-three nodes neither shape is held whole by one reader, so what the cut buys is a smaller brief and not a brief that fits; and the one-line class rests on an earlier survey having read those nodes, which the survey of 2026-09-05 did for every node the record then had and does for none minted since.
+
+Raised on `commons.systems/disposition-graph/frontier-consistency`, whose validations state the inputs, and recorded here because what a reading is given is this node's. The author then rules the placement once rather than meeting the same rule on two nodes.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+Everything `one-answer-a-node-and-one-read` says, with the survey's own graph priced by this node and its reach rule cited rather than restated: what the survey reads of a node it is not judging is `commons.systems/disposition-graph/frontier-consistency`'s, stated in its validations and conditioned there on the node; this node prices what that costs and states the bound, and restates neither the reach rule nor the one-line class.
+
+Measured on the survey brief of 2026-09-07: 1,202,450 bytes at implementation commit `87e4b24e`, before the cut, of which the eight judged nodes are 233,716 and the hundred and thirty-three context nodes 710,747; 994,467 bytes at implementation commit `cb0e02c6`, after it, which is the shape `packages/clean-context-review/brief.mjs` now writes.
+```
+
+#### the-surveys-selection-moves-to-its-own-node
+
+What a reading is given stays here; how a survey's object is selected and divided so that it is smaller without being narrower, which checks must be clean before a survey's reader is launched, and what the accumulation leaves in the judged node's place, are the `survey-selection` node's and are cited here and not restated.
+
+**AI support.** The selection is a design with its own options, measurements and traditions, and a ruling per fact needs a node per question; this node's rule that a brief is narrowed by its object and never by a budget is what the selection applies, and the citation keeps the two in one direction. The amendment also corrects the repair of 2026-09-07 that named `survey-cost`, a node that did not exist, which the second re-reading kicked back.
 
 Recorded on the author's words of 2026-09-05, carried above: the review is burning tokens rapidly, part of that is the acceptable cost of draining a backlog, and the lessons of the sitting are to be taken as improvements for token usage, context management, and the management of the AI's attention.
 
@@ -446,7 +799,44 @@ This answer's later clauses describe an instrument that already runs, which is t
 Traditions, each owed as a reading under this node: the working set and thrashing (Denning, 1968), where a process given fewer frames than its working set spends its time faulting rather than working and the remedy is to allocate by the measured working set rather than uniformly, which is what the dead reader did and what the bound on the brief answers; separate compilation against interfaces, the unit compiled with its dependencies' interfaces and not their bodies, which is the neighbourhood; the diff as the unit of review, the ordinary practice of code review, which the re-reading adopts, and which is a second reading of a tradition the record already holds at `commons.systems/disposition-graph/change-reviewed-as-a-diff`, where the relation belongs and where that node's own answer states the objection this re-reading is the answer to, that a reviewer shown the whole reads the whole unless the projection that derives the edit is in front of it; the inspection rate and the yield of a large change (Fagan, 1976, for the rate; Rigby and Bird, 2013, for the fall in yield as the change grows, Bacchelli and Bird's 2013 study of modern code review being qualitative and not the source of that measure), so the remedy bounds the change and never hurries the reviewer, and this is a second reading of a tradition the record already holds at `commons.systems/disposition-graph/fagan-inspection-roles`, which is where it belongs and where the relation this node adds should be recorded; and satisficing (Simon, 1956), the search that stops at good enough, for the cap on rounds.
 
 What this costs, as a consequence of the design and not a reason for it. A draft's reader no longer holds the record's standing answers, so a contradiction with a distant node is found only if the reader thinks to search for it; what it misses falls to the survey, which holds the whole graph and is the reader of last resort, and this answer therefore leans harder on the survey being run before the author rules. The two-round cap means a finding first raised in the second reading is recorded as an option rather than answered in the text, so the author meets it as a row on a fact rather than as a redrawn draft. And the questions-only index means the reader can see that a question exists without seeing how it was answered, which is enough to propose a merge and not enough to argue one. The four clauses added on 2026-09-07 cost four more things. A neighbour carried by one answer hides from the reader that the node moved and how far, so a draft written against a parent's standing text and contradicting the text that parent now recommends is caught only because the line beside the answer says the other exists; the reader must open the file to see it, and readers open fewer files than they are told to. An account cut to its last section hides the reasons a defect was already answered once, so a reading may raise again what an earlier reading raised and an earlier amendment settled, and the session pays a validation to find that out. A brief read in one call is held by a reader that can hold it, and where the brief has grown past that the failure is a dead reading rather than a slow one, which is the more expensive failure and is why the bound on a piece stays for that case. And a rule that sends a class of defect to the validator means that until the validator holds the check nothing catches it but a reader who is no longer looking for it, so the checks are owed and the debt is this node's to carry until they land.
+
+**AI divergence.** A fourth clause of this answer now cites a child for its content, so a reader of this node alone learns that the object is narrowed and not how, and the child's boldness is high where this node's is moderate; the citation carries the confidence down with it.
+
+Every clause of it narrows what the reviewer is shown, on measurements taken by the party the review exists to check. A reader that must search for what it is no longer given searches for what it thinks to look for, which is the drafter's own frame, and the failure the index guarded against, a contradiction with a node nobody thought to name, is the one failure a search cannot be aimed at. The answer's reply, that the survey holds the whole graph and is the reader of last resort, is good only while the survey runs before every ruling; this design moves that load onto it: at graph commit 1cde11f6 on 2026-09-05, before the first survey ran, forty-eight nodes stood at the review or the ruling stage and none carried a survey pin, and what the survey costs once the load is on it is the question the author raised on 2026-09-07 and `survey-selection` answers beneath this node.
+
+**Content.**
+
+```markdown
+---
+question: What does a clean-context review cost, and how is that cost bounded?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - neighbourhood
+---
+## Answer
+
+By the object each reading is given, and never by a budget or a clock; how a survey's object is selected and divided, so that it is smaller without being narrower, is the `survey-selection` node's, and is cited here and not restated. A reading's cost is set almost entirely by what its brief puts in front of it, so the bound is written into the brief and not into the reader.
+
+**What a draft's reading is given.** Its object is one draft, so its brief carries that node in full and its neighbourhood in full: the ancestry to the root, the rules that bind every session, the nodes it names and the nodes its `depends` names, with the options named in them, the nodes under it, its siblings, and the readings that bear on it. A node a reading is not judging is carried by what it answers and never by its whole file, and it is one rule for every reading, a draft's neighbourhood and the survey's graph alike: its question, one answer, and the names of the options on its answer fact. One answer and never two. Where a ruling reaches the node the answer that stands is carried, since that is what binds; where no ruling reaches it the answer it now recommends is carried, since nothing else on the node is operative; and one line says which was carried, names the other, and gives the file it is in. Carrying both puts one node's argument in front of the reader twice, once as it is and once as it is about to be, and asks a reader whose object is a different node to work out which of the two it is judging against; that is the class's to say and not the reader's to infer. During bootstrap no ruling reaches any node, so a neighbour whose recommendation differs from what stands is carried by the recommended text alone. Its rationale, its facts prose, its option subsections and the rest of its recommendation are its own dialogue, and they stay in the file one read away, exactly as its account does and for the same reason. One exception, and it is the draft's own text and not the neighbour's: where an option on a neighbour's fact names the node under review as its source, that option's prose is carried in full, because it is what the draft put there and the validation that asks whether the draft contradicts the node above it turns on that prose. A reader given only the option's name has been told that the draft wrote something on its parent and not what it wrote. The generator does this as of the reconciliation of 2026-09-05: `renderNeighbourNode` takes the id of the node under review and carries whole any option whose `source` names it. Until that landing the clause was a rule stated and not a rule running, and the reading of 2026-09-05 paid the cost the exception exists to prevent, opening a neighbour's file from disk to check two options this node had sourced there. The node under review is the one node given whole, because it is the only one being judged; and whole is its question, the author's words its options reference, the resolved content of every option on its answer fact, and its facts with every option's accumulated support and divergence, together with the last section of its `## Account` and nothing before it, the manifest lines of what the accumulation folded or absorbed standing in the place of the rest. An account is the dialogue's history and not its text, which is the ground on which a neighbour's account already stays in the file, and it grows with every reading applied while the draft it records does not, so a node read four times pays for four accounts to be judged once. The last section is kept because the previous reading's findings and the session's replies to them are there, and a reader judging what a draft became is judging an answer to those. It carries the rules of the reading itself in the same way, in the brief and not as a list of files to open: what the review is and what it judges, the validations, the two readings and what each is given, and the encoding's own vocabulary, facts, options, rulings, the derived class, and what a node is. A brief that tells its reader to go and read a node it could have carried has the reader read that node twice, once where the brief already quotes it and once from disk, and pays for both. Of every other node in the record it carries the id, the question, and the file the node is in, on one line, and nothing else. The file is not decoration: a question tells the reader that the record asks this somewhere, and the path is what turns the pointer into a read the reader can actually make without a search. The round's other drafts, which the clean-context-review node's recommendation gives this reader so that texts written together are read together, are carried the same way and marked as the round: id, question, and the recommendation each now makes, one line each, since what the reader needs of a sibling draft is that it moved and what it moved to, and the text that moved is one file away. The questions are there because the merge validation asks whether the record already asks this question, and a reader cannot search for a question it cannot phrase; the answers behind those questions are the survey's object, because the whole graph is what the survey reads and not what a draft's reader reads. What lies outside the neighbourhood the reader reaches by searching the graph, which the brief tells it how to do, so the cost of reaching the rest of the record is the cost of what is found and not of what exists. The rule under all of it: a part of the brief that grows with the record rather than with the draft is carried as a list of pointers, and a part that is the draft's own is carried whole.
+
+**What a re-reading is given.** A draft amended in answer to a reading's findings is read again, and the second reading's object is the amendment: the node as it now stands, its difference from the text the last reading pinned, that reading's findings, and the session's reply to each. It answers two questions, whether the amendment answers the finding and whether it introduces anything the reading has not seen, and it is not a fresh reading of the node. A fresh reading is owed only where the answer itself was redrawn, which is what a kickback is. The difference is computable only if the first reading recorded the graph commit of the text it read, beside the pin it already records, and the dialogue node's answer enumerates the review's draft keys as four written together or not at all. This answer needs a fifth, and that is that node's decision and not this one's: it is recorded there as an option, and until it is ruled the re-reading falls back to a full reading of the amended node, which the tool reports when it does it. The commit is the text the reading read and not the text that answers it, so the order is fixed: the reading is applied first, on a clean tree, and the amendment is written after. A session that amends before it applies leaves the tree dirty, no commit is recorded, and the re-reading falls back to the full brief; that is not a loss of correctness but it is a loss of the saving, and it is the one sequencing rule this answer imposes on the session.
+
+**How many readings a draft gets.** Two: the reading, and the re-reading of its amendment. A finding that survives the second is recorded as an option on the fact it bears on, or as a probe where it asks the author what they meant, and it goes to the author with the node. A reader asked for findings will return some, so a loop that runs until a reading is silent ends on the reader's mood; two rounds ends it on the draft. The cap bounds amendment and not redrawing: either reading may still kick the draft back, and a kickback is a new answer, which owes a reading of its own. What the cap forbids is a third reading of the same answer.
+
+**What a brief must fit.** A brief is written to be held whole by the reader it is given to, and it states its own size and the discipline for reading it. A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim, the object of a survey being narrowed as the `survey-selection` node says: a reading that dies of its own context returns nothing and is paid for twice. A brief that fits is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it. A reader that pages a brief it could have held re-sends everything it has already read with every further page, so the pieces multiply the brief by roughly half their number and buy nothing back; the bound on the size of a piece exists for the brief a reader cannot hold, which is the defect above, and it is not the rule for the ordinary case. The brief's own navigation line and the prompt that launches the reader state one discipline between them, or the reader has been given two rules and will follow whichever it read last.
+
+**What the main thread spends.** That validation is never delegated is the clean-context-review node's rule and is not restated here. What this node adds is where the main thread spends when it validates: at the locus the finding names, and not by re-deriving the neighbourhood the reader was already given. A finding names a file and a line, and the cost of checking it is the cost of that file; a thread that re-reads the brief to check a finding pays the reading a second time and adds nothing, since the reader's context is exactly what it was asked to distrust. So a finding names the file, names the heading it sits under, and quotes the sentence or the clause it bears on exactly as that text stands in the file, never paraphrased, never summarized, and never by a line number: the file and the heading are the address, the quoted bytes are what turn the validation into a search that returns either the text or nothing, and a line number is stale the moment anything above it is edited. A finding whose locus the thread has to reconstruct makes the thread read the node to find what the reader already had in front of it.
+
+**What attention is spent on.** Token efficiency and context management are bounds on what a reading is given; attention is what the reading does with it, and it is not the same quantity. A reader holds its object and cannot hold everything, so what a brief puts in front of it competes for the reading it can actually give, and a brief that fits is not thereby well aimed. The rule is that every part of a brief is there for a validation the reader is asked to run, and a part no validation reaches is struck rather than shortened: the questions are there for the merge validation, the neighbourhood for the contradiction validations, and the round for the merge validation too, since the index prints only the nodes outside the parts above and so leaves the round's questions unprinted; nothing is carried because it might prove useful. Consistency between two nodes of the frontier is the seventh validation and is the survey's, not this reader's, so it prices nothing in a draft's brief. What the round adds beyond a question, the recommendation each draft now makes, is reached by no validation on this reader's list, and whether that list should gain one is the `frontier-consistency` node's, where it is recorded as an option. This is what makes the answer more than a cut. Striking a part is cheaper and better aimed than compressing it, because a compressed part still asks for the reader's attention and no longer repays it. And a defect an instrument can name is the instrument's and never a reading's. A reading is the only reader in this record that can judge whether an answer is right, and it is the most expensive reader the record has; spending it on an option marked passed with no reason recorded, on prose that says an option was passed over where the row carries no status, on a fact whose prose opens straight onto an option subsection with no reason above it, on a pin naming a commit the node has moved past, on a dated passage quoted in a rationale that stands under no `## Disposition`, or on an account section byte-identical to the one above it, spends that attention on what a script decides. Each such finding is paid three times over, in the fix, in the re-reading the amendment owes, and in the main thread's validation. The rule binds the instrument before it binds the reader: every defect of that kind the record has met is a check the validator is owed, and a reading that meets one while the validator still lacks it reports it like any other; which checks are owed before a survey's reader is launched at all, and that a survey is not launched while one of them fires, is the `survey-selection` node's. What the rule forbids is a brief that asks a reader to run a check a script could have refused.
+
+**What is not bounded, and is not waste.** The number of drafts on the frontier and the number of sittings. The review is priced per draft by design, and a backlog costs one reading a draft in it; that is the cost of having the drafts, not the cost of reading them. That the review is priced per draft at all is the `clean-context-review` node's decision and not this one's, and its measured price is recorded on the `decomposition` node: measured at implementation commit 8bb72b17, this sitting's twenty-three draft briefs total 7,926,691 bytes against the 838,923 of the batch brief of 2026-09-03 that the division replaced, and the survey's brief, at 1,083,638, exceeds the batch on its own. What this node bounds is one reading of one draft; the multiplication is the division's, it is on the node that made it, and the author's own words that some of the spend is the acceptable cost of draining a backlog cover the backlog and not the multiplier.
 ```
+
+### authority
+
+Ratified. What this decides is how much of the record the adversarial reader is shown, and the party it is shown against is the party that would otherwise set it: a rule that lets the drafter narrow the review's object is capture-shaped in the way the `class-recommendation` node's escalation test names, and being wrong here is not visible in the record, since a review that reads too little returns fewer findings and looks cheaper and no worse. Moderate boldness: the escalation is the test the `class-recommendation` node states, and what rests on the AI is the judgment that the author's delegation of right-sizing does not reach the reviewer's object, which the case against disputes.
 
 ## Account
 
@@ -895,3 +1285,7 @@ On the facts and what they recommend: The diff moves the answer fact's `recommen
 On the viability of the options: Every option present at the last reading's pin remains on the answer and authority facts unchanged; the diff only adds one new viable option (`the-surveys-selection-moves-to-its-own-node`, sourced to the newly cited `survey-selection` node, recommended) and removes none, so no prior option's viability is disturbed.
 
 Strongest counter-argument (weak): The last reading's finding was that the node made a false present-tense claim citing a node, `survey-cost`, that did not exist. The amendment's fix is to rename the citation to `survey-selection` and assert in its own account that this is 'the child minted this sitting' -- but this delta reading is barred from checking the neighbourhood or the disk, so the only evidence that `survey-selection` actually exists, rather than being a second not-yet-minted placeholder under a new name, is the record's own narration by the party the finding was raised against. Against that: the citation is corroborated from three independent loci (the fact's `against` clause, the new option's `source` field, and a `depends` entry naming a specific option slug on it), which is stronger internal evidence than a bare rename would leave, and the scope of this reading explicitly defers cross-node verification to the survey rather than asking the delta reader to open other files.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/review-cost stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `the-surveys-selection-moves-to-its-own-node`; 14 `## Disposition` entries became the ledger entries words/2026-09-05/4, words/2026-09-07/5, words/2026-09-07/6, words/2026-09-07/7, words/2026-09-07/8, words/2026-09-07/16, words/2026-09-07/9, words/2026-09-07/11, words/2026-09-07/12, words/2026-09-07/13, words/2026-09-07/2, words/2026-09-07/3, words/2026-09-07/4, words/2026-09-07/15, referenced by 0 options the entry's own date names and by the recommended option for 14 the date named none. The content of `neighbourhood-questions-and-delta (at 6a84b48e)`, `one-answer-a-node-and-one-read (at c55c9ebb)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `one-reading-per-draft`, `neighbours-carried-whole`, `answers-only-index`, `full-index-per-draft`, `no-index-at-all`, `full-re-read-on-every-move`, `unbounded-rounds`, `budget-per-sitting`, `neighbourhood-cited-not-restated`, `pin-names-the-text-the-reader-read`, `brief-carries-the-recount-command`, `rules-of-the-reading-named-as-files`, `a-cap-on-redraws-per-node-per-sitting`, `a-waves-brief-is-one-brief`, `the-surveys-unreached-node-is-one-line`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `f32d722609f7815130f2b7de88fd0647d809edca` is re-computed for the encoding as `388a136d38ca73f6e73c1f4030df0be4de25665a`; nothing it read changed. The survey's pin `b9e1b4e5b54bd35bfd1a6bc94aeaab7bfc8b9c32` was already past the recommendation and is left as it stood.

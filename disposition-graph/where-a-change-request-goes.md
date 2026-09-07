@@ -8,6 +8,8 @@ facts:
       - name: change-requests-go-to-the-kick-back
         source: author
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-04/36
       - name: edits-ride-on-the-option
         source: commons.systems/disposition-graph/alignment-page
         ref: "2026-09-05"
@@ -46,7 +48,6 @@ facts:
     recommends: change-requests-go-to-the-kick-back
     boldness: moderate
     against: "A kick-back on one fact moves the whole node, so under this answer the author who wants one word changed loses the ruling they were ready to give and the node's stage with it, and the record answers a request about a label by making the cheapest correction on the page the most expensive act on it."
-    stands: change-requests-go-to-the-kick-back
   - name: authority
     options:
       - name: ratified
@@ -59,18 +60,67 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-07
-  of: d4f8ef948c8eafe6b806634105220c447ef06558
+  of: b07cc280a4699ac17d3d67471bdc7cc6db6a8874
   against: "Every instance the last reading named is repaired, but the class of defect it was raised for is not: the amendment falsified a sentence of the account in the very paragraph it was editing, so for the fourth reading running this node reaches the author with an account that describes a state its own frontmatter does not carry, and the author cannot check the record from the page if the page's account of the record is what needs checking. On the first finding the repair is also the reading's own words rather than the reading's own test: \"it makes a confirmation carry a text the author confirmed in the same breath as changing it\" is the withdrawn pin objection with the word \"pin\" removed, and `recording`'s resolution — pinning `of` to the recommendation as the edits leave it, so the text confirmed is the author's own — answers that sentence as squarely as it answered the one struck from the `## Answer`. What holds the finding closed is the reason's first limb, the author's words of 2026-09-04 striking the option by name, which dominates the incumbent without the second limb; and what holds the verdict is that neither residue touches what either fact recommends, so both are correctable before the author rules without buying a redraft and a fourth reading."
   survey:
     date: 2026-09-07
-    of: d4f8ef948c8eafe6b806634105220c447ef06558
+    of: b07cc280a4699ac17d3d67471bdc7cc6db6a8874
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
-## Disposition
 
-The author, 2026-09-04, on the alignment page, queued from the sitting on author-questions:
-> - text input in option details is only for author reasoning, not for "changes you want made". All change requests are recorded in the kickback input only (any changes will necessarily require a kickback).
+## Facts
+
+### answer
+
+Recommended because the author's words say it and the page can do it without
+deciding anything else. The option's control keeps the ruling's reason, which
+`dialogue` already provides for on the ruling itself; the kick-back's control
+gains the change request, which is what the author's parenthesis makes it; and
+the confirmation with edits loses its home on the page without losing its place
+in the record, which stays `unanswered`'s to rule and `recording`'s to classify.
+
+Boldness moderate, and the reason is the reach rather than the routing. The
+routing is the author's own sentence. What is not theirs is the reading that a
+response class the record opens may have no control on the one surface where the
+author rules, and that reading is what the fact's `against` argues with.
+
+#### change-requests-go-to-the-kick-back
+
+The option's own text control holds the author's reason for their choice and
+nothing else, and its label says so: it asks for the reason, says it is optional,
+and names no edit.
+
+**AI support.** The author, 2026-09-04, on the alignment page: "text input in option details is
+only for author reasoning, not for 'changes you want made'. All change requests
+are recorded in the kickback input only (any changes will necessarily require a
+kickback)."
+
+The parenthesis is what the answer rests on, and the sentence before it is what
+the answer implements. The record's own reasoning ran the other way until this
+sitting: `alignment-page` had put the author's edits on the option they edit,
+"which is where an edit belongs", and had removed the older ruling-on-the-whole
+on the strength of it. The author's words say that an edit is not a confirmation
+at all, and once that is granted, an edit riding on a confirmed option is a
+confirmation the record cannot honour and the page must not offer it.
+
+What the answer beat is on the fact: `edits-ride-on-the-option`, the incumbent,
+which the author's words strike; `label-only-change`, which closes the channel
+behind a new label and leaves the session doing the same thing with the words;
+and `a-dedicated-change-request-control`, which is a third control where the
+kick-back already is one.
+
+**AI divergence.** A kick-back on one fact moves the whole node, so under this answer the author who wants one word changed loses the ruling they were ready to give and the node's stage with it, and the record answers a request about a label by making the cheapest correction on the page the most expensive act on it.
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
 
 ## Answer
 
@@ -115,43 +165,7 @@ buys a clean-context reading of the moved recommendation before it returns for
 confirmation. That is a reading and a further confirmation, not a second
 interview, and it is the price of a record in which a confirmation confirms a
 text the author has read as it stands.
-
-## Rationale
-
-The author, 2026-09-04, on the alignment page: "text input in option details is
-only for author reasoning, not for 'changes you want made'. All change requests
-are recorded in the kickback input only (any changes will necessarily require a
-kickback)."
-
-The parenthesis is what the answer rests on, and the sentence before it is what
-the answer implements. The record's own reasoning ran the other way until this
-sitting: `alignment-page` had put the author's edits on the option they edit,
-"which is where an edit belongs", and had removed the older ruling-on-the-whole
-on the strength of it. The author's words say that an edit is not a confirmation
-at all, and once that is granted, an edit riding on a confirmed option is a
-confirmation the record cannot honour and the page must not offer it.
-
-What the answer beat is on the fact: `edits-ride-on-the-option`, the incumbent,
-which the author's words strike; `label-only-change`, which closes the channel
-behind a new label and leaves the session doing the same thing with the words;
-and `a-dedicated-change-request-control`, which is a third control where the
-kick-back already is one.
-
-## Facts
-
-### answer
-
-Recommended because the author's words say it and the page can do it without
-deciding anything else. The option's control keeps the ruling's reason, which
-`dialogue` already provides for on the ruling itself; the kick-back's control
-gains the change request, which is what the author's parenthesis makes it; and
-the confirmation with edits loses its home on the page without losing its place
-in the record, which stays `unanswered`'s to rule and `recording`'s to classify.
-
-Boldness moderate, and the reason is the reach rather than the routing. The
-routing is the author's own sentence. What is not theirs is the reading that a
-response class the record opens may have no control on the one surface where the
-author rules, and that reading is what the fact's `against` argues with.
+```
 
 #### edits-ride-on-the-option
 
@@ -162,6 +176,30 @@ and the record's position before 2026-09-04. Passed over: the author's words
 strike it by name, and it makes a confirmation carry a text the author confirmed
 in the same breath as changing it.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, reversed: the option's control keeps its
+label naming edits, an edit written there is a confirmation with edits, and the
+session applies it and records the ruling. This is `alignment-page`'s incumbent
+and the record's position before 2026-09-04. Passed over: the author's words
+strike it by name, and it makes a confirmation carry a text the author confirmed
+in the same breath as changing it.
+```
+
 #### label-only-change
 
 Everything the recommended option says, with the label alone rewritten and the
@@ -169,6 +207,29 @@ routing unchanged: the control stops naming edits and the session goes on
 classifying whatever is written there as `recording` says. Passed over: it
 closes the channel in the wording and leaves it open in the record, which is the
 appearance of the author's instruction rather than the instruction.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the label alone rewritten and the
+routing unchanged: the control stops naming edits and the session goes on
+classifying whatever is written there as `recording` says. Passed over: it
+closes the channel in the wording and leaves it open in the record, which is the
+appearance of the author's instruction rather than the instruction.
+```
 
 #### a-dedicated-change-request-control
 
@@ -178,6 +239,29 @@ over: the kick-back's control already is that control under this answer, and a
 third one would ask the author to distinguish a change from a denial when the
 author's own words say a change is a denial.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with a third control for a change
+request, distinct from the reason box and from the kick-back's feedback. Passed
+over: the kick-back's control already is that control under this answer, and a
+third one would ask the author to distinguish a change from a denial when the
+author's own words say a change is a denial.
+```
+
 #### reason-goes-to-the-interview-too
 
 Everything the recommended option says, with the option's reason box removed as
@@ -185,6 +269,29 @@ well, so the page takes the ruling and nothing else and every word of the
 author's is given in the interview. Passed over: the reason is part of the
 ruling, `dialogue` carries it on the ruling itself, and a reason given anywhere
 but beside the choice it explains has to be re-attached by hand.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the option's reason box removed as
+well, so the page takes the ruling and nothing else and every word of the
+author's is given in the interview. Passed over: the reason is part of the
+ruling, `dialogue` carries it on the ruling itself, and a reason given anywhere
+but beside the choice it explains has to be re-attached by hand.
+```
 
 #### one-reason-box-per-fact
 
@@ -194,23 +301,90 @@ the reason attaches to the ruling either way; against it, the author writes the
 reason while reading the option they are choosing, and a box that is not beside
 that option asks them to name it again.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with one reason control on the fact
+rather than one on each option. Viable and not adopted: it is fewer controls and
+the reason attaches to the ruling either way; against it, the author writes the
+reason while reading the option they are choosing, and a box that is not beside
+that option asks them to name it again.
+```
+
 #### change-request-typed-to-review
 
 Everything the recommended option says, with a change request returning the node
 to the review stage rather than the maieutic. Viable and not adopted: where the
 author's words amend the text rather than reject its ground, the maieutic
-movement redraws what did not need redrawing. Against it, `recording`'s
+movement redraws what did not need redrawing.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it, `recording`'s
 `denial-typed-to-maieutic` types the kick-back to the maieutic and this answer
 does not reach that clause.
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with a change request returning the node
+to the review stage rather than the maieutic. Viable and not adopted: where the
+author's words amend the text rather than reject its ground, the maieutic
+movement redraws what did not need redrawing.
+```
 
 #### edit-applied-and-held-until-the-re-reading
 
 Everything the recommended option says, with the edit applied to the option and
 the ruling held until the re-reading returns, rather than the node kicked back.
 Viable and not adopted: it is the cheapest path for a small change and keeps the
-author's words as an edit rather than a denial. Against it, it is the
+author's words as an edit rather than a denial.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it, it is the
 confirmation with edits under another name, and it holds a ruling the author has
 given, which `recording` says is never done.
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the edit applied to the option and
+the ruling held until the re-reading returns, rather than the node kicked back.
+Viable and not adopted: it is the cheapest path for a small change and keeps the
+author's words as an edit rather than a denial.
+```
 
 #### kick-back-ask-unchanged
 
@@ -220,8 +394,33 @@ and the feedback control goes on asking for what the options miss rather than
 also asking for the change by name. It is the counterpart on the kick-back of
 `label-only-change` on the option, and it lets the author rule the routing
 without ruling on a control whose wording is `when-the-kickback-feedback-shows`'
-question. Against it: a channel that is the only home for a change request and
+question.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: a channel that is the only home for a change request and
 does not say so is a channel the author must be told about somewhere else.
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the kick-back's own control left
+exactly as it is: the routing changes, the option's label stops naming an edit,
+and the feedback control goes on asking for what the options miss rather than
+also asking for the change by name. It is the counterpart on the kick-back of
+`label-only-change` on the option, and it lets the author rule the routing
+without ruling on a control whose wording is `when-the-kickback-feedback-shows`'
+question.
+```
 
 #### the-caption-asks-and-the-control-collects
 
@@ -236,9 +435,13 @@ sentence that "that control is to ask for the change and not only for the ground
 of the refusal". Its reason is the reveal: a label the author cannot read while
 they are deciding whether to dissent cannot be what tells them that a change is
 made here, so under that answer the label goes on asking for what the options miss
-and the caption, which is on the screen the whole time, carries the ask. For it:
+and the caption, which is on the screen the whole time, carries the ask.
+
+**AI support.** For it:
 the ask has to be readable at the moment the author is deciding where their change
-belongs, and a caption is read then where a hidden label is not. Against it: a
+belongs, and a caption is read then where a hidden label is not.
+
+**AI divergence.** Against it: a
 caption that carries both what a kick-back does to the node and what may be
 written in the control asks for two things in one sentence, which is how a caption
 stops saying either, and this answer's own sentence names the control and not the
@@ -247,6 +450,32 @@ rules this control's wording, so the divergence is recorded rather than resolved
 and it is the author's to rule from either side — here by taking this option, or
 there by taking `the-control-asks-for-the-change-by-name`, which is the same
 question from the other end.
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says of the routing, with the ask moved off the
+control and onto the kick-back row's caption: the caption says that a change to
+what is recommended is asked for here, and the control beneath it collects the
+words. Recorded from
+`commons.systems/disposition-graph/when-the-kickback-feedback-shows`, whose
+recommended answer of 2026-09-07 shows the feedback control only once the
+kick-back is the chosen option, and which therefore departs from this answer's
+sentence that "that control is to ask for the change and not only for the ground
+of the refusal". Its reason is the reveal: a label the author cannot read while
+they are deciding whether to dissent cannot be what tells them that a change is
+made here, so under that answer the label goes on asking for what the options miss
+and the caption, which is on the screen the whole time, carries the ask.
+```
 
 ### authority
 
@@ -490,3 +719,7 @@ Findings:
 
 
 Strongest counter-argument (weak): The one sentence this answer writes about the control it routes to is already departed from by the node that owns that control. It says the change request goes to the kick-back's feedback control "and that control is to ask for the change and not only for the ground of the refusal", where when-the-kickback-feedback-shows recommends `revealed-with-the-choice`, under which the ask moves to the row's caption and the label goes on asking for the ground. That node names this one in depends, so this ruling comes first and its sentence is the one that will be false the moment the sibling is ruled; the divergence is recorded on both facts and resolved on neither.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/where-a-change-request-goes stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `change-requests-go-to-the-kick-back`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/36, referenced by 1 option the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `edits-ride-on-the-option`, `label-only-change`, `a-dedicated-change-request-control`, `reason-goes-to-the-interview-too`, `one-reason-box-per-fact`, `change-request-typed-to-review`, `edit-applied-and-held-until-the-re-reading`, `kick-back-ask-unchanged`, `the-caption-asks-and-the-control-collects`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `d4f8ef948c8eafe6b806634105220c447ef06558` is re-computed for the encoding as `b07cc280a4699ac17d3d67471bdc7cc6db6a8874`; nothing it read changed. The survey's pin `d4f8ef948c8eafe6b806634105220c447ef06558` is re-computed for the encoding as `b07cc280a4699ac17d3d67471bdc7cc6db6a8874`; nothing it read changed.

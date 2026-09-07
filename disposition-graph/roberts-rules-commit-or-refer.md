@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -26,17 +25,6 @@ bears:
     option: every-fact-every-option
     relation: diverged
 ---
-## Answer
-
-Diverges on placement and wins the marking. In the parliamentary tradition, sending a question back for more work is not one of the answers to it. Commit or Refer is a motion of its own, of its own rank among the subsidiary motions, put and decided before the main question, and while it is pending the main question is not before the assembly at all. The reason is that the two acts are of different kinds: the assembly is either choosing among answers or deciding that the answers are not ready, and putting the second among the first invites a member to treat "send it back" as a mild version of "no".
-
-The record puts the kick-back last in the same group as the options, and does so at the placement the author chose, for which the sitting supplies the affordance reason, that the affordance is where the ruling is made and a control elsewhere is a control not used. That is a departure and the reading records it as one. What the tradition changes about the row is its presentation: it is set apart from the options, and captioned with what it does to the node rather than with a summary of an option it is not, so a reader can see that choosing it is an act of a different kind. The same point arrives from the usability side in the heuristic that an exit must be marked as an exit.
-
-The tradition's own condition is not met here, and that is worth stating beside the divergence. In an assembly the motion has rank because there is an order of precedence and many members who may move it. Here there is one ruler, one node, and no order of precedence to place the motion in, so rank has nothing to attach to and what remains of the tradition's argument is the confusion it was guarding against. The record answers that with separation and a caption rather than with rank.
-
-## Rationale
-
-Recorded in the tradition pass on the alignment page, 2026-09-04, in the finding on where the kick-back sits. It bears on `every-fact-every-option` as a divergence because that option keeps the kick-back as the last row on every fact rather than as a decision taken before the fact is ruled; what the pass took from the tradition, that the row is set apart and captioned with what it does to the node, is in the same option's text.
 
 ## Facts
 
@@ -44,6 +32,38 @@ Recorded in the tradition pass on the alignment page, 2026-09-04, in the finding
 
 The standing text is the only reading of this motion the pass produced, and no
 second account of what the record takes from it is on the table.
+
+#### standing
+
+Diverges on placement and wins the marking.
+
+**AI support.** Recorded in the tradition pass on the alignment page, 2026-09-04, in the finding on where the kick-back sits. It bears on `every-fact-every-option` as a divergence because that option keeps the kick-back as the last row on every fact rather than as a decision taken before the fact is ruled; what the pass took from the tradition, that the row is set apart and captioned with what it does to the node, is in the same option's text.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the subsidiary motion to commit or refer say about where a kick-back sits, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/alignment-page
+source: Robert's Rules of Order Newly Revised (12th edition, 2020), the subsidiary motion Commit or Refer and the ranking of subsidiary motions, under which a motion to send the question to a committee for further work is put and decided before the main question and takes the main question out of the assembly's hands while it is pending. Locus to be checked, the section numbers, which differ between editions.
+bears:
+  - fact: answer
+    option: every-fact-every-option
+    relation: diverged
+---
+
+## Answer
+
+Diverges on placement and wins the marking. In the parliamentary tradition, sending a question back for more work is not one of the answers to it. Commit or Refer is a motion of its own, of its own rank among the subsidiary motions, put and decided before the main question, and while it is pending the main question is not before the assembly at all. The reason is that the two acts are of different kinds: the assembly is either choosing among answers or deciding that the answers are not ready, and putting the second among the first invites a member to treat "send it back" as a mild version of "no".
+
+The record puts the kick-back last in the same group as the options, and does so at the placement the author chose, for which the sitting supplies the affordance reason, that the affordance is where the ruling is made and a control elsewhere is a control not used. That is a departure and the reading records it as one. What the tradition changes about the row is its presentation: it is set apart from the options, and captioned with what it does to the node rather than with a summary of an option it is not, so a reader can see that choosing it is an act of a different kind. The same point arrives from the usability side in the heuristic that an exit must be marked as an exit.
+
+The tradition's own condition is not met here, and that is worth stating beside the divergence. In an assembly the motion has rank because there is an order of precedence and many members who may move it. Here there is one ruler, one node, and no order of precedence to place the motion in, so rank has nothing to attach to and what remains of the tradition's argument is the confusion it was guarding against. The record answers that with separation and a caption rather than with rank.
+```
 
 ### authority
 
@@ -68,3 +88,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/roberts-rules-commit-or-refer stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

@@ -26,7 +26,6 @@ facts:
       - name: cites-hash-tracks-or-freezes
         source: review
         ref: "2026-09-05"
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -41,36 +40,94 @@ defines:
   - ceiling
   - context
 ---
-## Disposition
-
-The author, 2026-09-03:
-> "Rationale" states that the node rationale stems from the node this node is under. Evaluate: would that always be the case? The disposition for the under edge seems to state this "Ask "why does this question exist?"; the answer names its parent." If so, does it make sense to make the "rationale" the prose property of the under edge?
-
-The author, 2026-09-03:
-> "Tier" (as in global-tier) needs a disposition. As a disposition references in the projected documentation must be hyperlinked. Is "tier" even the right primitive? Even cross-cutting non-functional concerns have scope. A static typing convention doesn't apply to the purpose node. Evaluate adversarially and from greenfield perspective whether cross-cutting non-functional concern could be reduced to topology and/or citations.
-
-The author, 2026-09-03:
-> The under edge disposition lists "rejected" as prose under "rationale" - it may make sense to record rejected dispositions, but this seems too ad-hoc.
-
-## Answer
-
-The question or questions named in its `under` field. This is the only hierarchical edge, and it means three things at once. Attention flows along it: a node's rank is its share of its parents' rank, split among siblings, so that the graph's shape is also its priority. Context loads along it: a session working on a node reads its ancestry. Authority is capped by it: a node's ceiling is its nearest ratified ancestor, and nothing the AI records under that ancestor may contradict it. A node may refine more than one question; then it draws rank and context from each. Roots have no `under`; a global-tier node has one like any other, tier only says the rule binds everywhere.
-
-## Rationale
-
-Ask "why does this question exist?"; the answer names its parent. Never choose a parent to change priority; that is what boost is for, and boost is the author's alone.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+The question or questions named in its `under` field.
+
+**AI support.** Ask "why does this question exist?"; the answer names its parent. Never choose a parent to change priority; that is what boost is for, and boost is the author's alone.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a node refine?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - under
+  - rank
+  - ceiling
+  - context
+---
+
+## Answer
+
+The question or questions named in its `under` field. This is the only hierarchical edge, and it means three things at once. Attention flows along it: a node's rank is its share of its parents' rank, split among siblings, so that the graph's shape is also its priority. Context loads along it: a session working on a node reads its ancestry. Authority is capped by it: a node's ceiling is its nearest ratified ancestor, and nothing the AI records under that ancestor may contradict it. A node may refine more than one question; then it draws rank and context from each. Roots have no `under`; a global-tier node has one like any other, tier only says the rule binds everywhere.
+```
+
 #### the-edge-alone
 
 The decomposition finding holds that this node answers four questions at once, what the edge means, how rank is computed, what a ceiling is and how context loads, and defines all four terms, while standing at the maieutic stage with no drafted text and with its own account saying it cannot be drafted until three other questions are ruled. Three of the four are answered in full elsewhere, so under survives as the edge alone: what a node refines, that it is the only hierarchical edge, and that a node may refine more than one question. Rank moves to attention, context to session-context and ceiling to authority, after which under can be drafted without waiting on rationale-edge and tier. Raised on commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/attention.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a node refine?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - under
+  - rank
+  - ceiling
+  - context
+---
+
+## Answer
+
+The decomposition finding holds that this node answers four questions at once, what the edge means, how rank is computed, what a ceiling is and how context loads, and defines all four terms, while standing at the maieutic stage with no drafted text and with its own account saying it cannot be drafted until three other questions are ruled. Three of the four are answered in full elsewhere, so under survives as the edge alone: what a node refines, that it is the only hierarchical edge, and that a node may refine more than one question. Rank moves to attention, context to session-context and ceiling to authority, after which under can be drafted without waiting on rationale-edge and tier. Raised on commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/attention.
+```
+
 #### draft-after-three-rulings
 
 The same finding proposes that under be drafted from the outcomes of rationale-edge and a re-answered tier, and simplified as the decomposition finding proposes, since under's own account plans a draft after three rulings and one of them, tier, was kicked back with its recommendation withdrawn, so under cannot be drafted as planned. (Raised on commons.systems/disposition-graph/traditions-home.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a node refine?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - under
+  - rank
+  - ceiling
+  - context
+---
+
+## Answer
+
+The same finding proposes that under be drafted from the outcomes of rationale-edge and a re-answered tier, and simplified as the decomposition finding proposes, since under's own account plans a draft after three rulings and one of them, tier, was kicked back with its recommendation withdrawn, so under cannot be drafted as planned. (Raised on commons.systems/disposition-graph/traditions-home.)
+```
 
 #### separate-edges-per-relation
 
@@ -78,11 +135,63 @@ The record carries separate edges for attention, context and containment. They
 were passed over because each turned out to be a reading of the same fact,
 which `under` already holds.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a node refine?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - under
+  - rank
+  - ceiling
+  - context
+---
+
+## Answer
+
+The record carries separate edges for attention, context and containment. They
+were passed over because each turned out to be a reading of the same fact,
+which `under` already holds.
+```
+
 #### a-second-reference-kind-for-cousins
 
 A second reference kind names cousin nodes beside `under`. It was passed over
 because it differs from `under` by exactly one bit, motivation, and is kept as
 `cites`.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a node refine?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - under
+  - rank
+  - ceiling
+  - context
+---
+
+## Answer
+
+A second reference kind names cousin nodes beside `under`. It was passed over
+because it differs from `under` by exactly one bit, motivation, and is kept as
+`cites`.
+```
 
 #### cites-hash-tracks-or-freezes
 
@@ -98,6 +207,41 @@ because a citation that freezes must also say what it froze and be re-read when
 the text moves, and neither instrument exists. Raised by the second clean-context
 reading of `author-questions` on 2026-09-05, which found the stale pin and asked
 that the question be put where `cites` is defined.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does a node refine?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - under
+  - rank
+  - ceiling
+  - context
+---
+
+## Answer
+
+The recommended answer with one clause added, saying what the `hash` of a `cites`
+entry means: either it tracks, naming the cited node's text as it stands and
+refreshed whenever that text moves, or it freezes, naming the version the citing
+node was written against and re-read when the citation is checked. The reader
+requires only a 40-character blob sha and the record says neither. It matters
+because the record's only `cites` entry, on `growth` citing `author-questions`,
+went stale the day it was written, and what is done with it is the precedent: at
+the landing of 2026-09-05 it was refreshed, which is the tracking reading, taken
+because a citation that freezes must also say what it froze and be re-read when
+the text moves, and neither instrument exists. Raised by the second clean-context
+reading of `author-questions` on 2026-09-05, which found the stale pin and asked
+that the question be put where `cites` is defined.
+```
 
 ## Account
 
@@ -158,3 +302,7 @@ The census unit's note: The node has a standing answer but no recommendation fie
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `the-edge-alone` absorbs `edge-alone`, `simplify-to-the-edge`. The merge unit's note: draft-after-three-rulings restates the simplification but its own proposal is about when and from what under is drafted, that it be drafted from the outcomes of rationale-edge and a re-answered tier since tier was kicked back with its recommendation withdrawn, so it stays separate.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/under stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 3 `## Disposition` entries became the ledger entries words/2026-09-03/85, words/2026-09-03/86, words/2026-09-03/87, referenced by 0 options the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `the-edge-alone`, `draft-after-three-rulings`, `separate-edges-per-relation`, `a-second-reference-kind-for-cousins`, `cites-hash-tracks-or-freezes`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it.

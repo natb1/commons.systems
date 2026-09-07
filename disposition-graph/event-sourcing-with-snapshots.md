@@ -14,7 +14,6 @@ facts:
     recommends: as-read
     boldness: moderate
     against: "In the tradition the snapshot is a discardable cache beside a stream that is never rewritten; here the accumulated node is the record and the fold rewrites it in place, so the rule against striking unpushed text is evidence that what is struck is state and not a cache, and the relation on the snapshot is a divergence repaired rather than the tradition restated."
-    stands: as-read
   - name: authority
     options:
       - name: ratified
@@ -27,7 +26,7 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 24ef57032196a1b7085aee9abe49c5fb09b0acde
+  of: c577f43f6f010c78428517f36ab6944cb698e9da
   commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
   against: "All five of the previous reading's findings are answered essentially verbatim against their suggested edits: the rationale/authority agreement, the `source` field's years and CQRS, the boldness figure and its `against`, the `## Answer` sentence scoping the `bears` relation away from absorption, and the new option. The remaining soft point is the same pattern seen on the sibling `blocking-and-canopies`: the answer fact's new `against` and the new option `diverges-on-the-snapshot` restate nearly the same argument (snapshot as state rather than cache) in two places, which is the shape finding five itself asked for (an argument on record both as a case-against and as a rulable option) rather than an unexplained duplication."
 under:
@@ -38,19 +37,40 @@ bears:
     option: the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed
     relation: adopted
 ---
-## Answer
-
-Supports on the fold, and is silent on absorption. The tradition holds that the append-only stream of events is the system of record, that current state is a fold over that stream, and that a snapshot is a materialized fold taken at a point in the stream so that a reader replays only what came after it. The answer takes every part: git is the journal, the accumulated node is the snapshot, the manifest line is the pointer from the snapshot back into the stream, and a session that needs what the fold struck replays from the commit the line names. The relation recorded on the option is `adopted` for the fold and its condition, which is what the tradition decides; the absorption rule the same option carries is outside the tradition's reach and no part of what this reading supports. The tradition's own condition is the answer's condition on pushing: a snapshot must be derivable from the stream, or it becomes a second record that can itself drift, so the fold refuses to strike anything not already reachable from `origin/disposition`, since text struck before it is in the stream is not snapshotted but lost. The tradition offers no rule for absorption, which rewrites rather than folds, and the answer's rule that absorption never runs unattended is the answer's own.
-
-## Rationale
-
-Recorded in the maieutic movement on `unconfirmed-accumulation`, 2026-09-07, as the tradition pass that node's evaluation requires, from the tradition survey of that day. Validated by the AI from its own knowledge of the sources; deferred because the attributions are the part of this reading the record cannot check, and the primary reading a deferral queues is what would settle them.
 
 ## Facts
 
 ### answer
 
 `as-read` is the only reading of this tradition on the record and it is recommended because the mapping it makes is checkable part by part against the option it bears on: journal, snapshot, pointer and replay each name something `the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed` already has, and the condition on pushing is the tradition's own derivability condition rather than an addition to it. Boldness moderate, on the relation, which is what the fact recommends: the mapping is checkable part by part against the option. The citation risk is carried where it belongs, in `source`, which names Fowler and Young without the years the survey behind it did not license, in the account, and in the authority fact's argument; that survey recorded the attributions at moderate confidence only, both being widely used and loosely attributed patterns, and at high confidence on write-ahead logging as the ancestor. The case against is on the fact.
+
+#### as-read
+
+Supports on the fold, and is silent on absorption.
+
+**AI support.** Recorded in the maieutic movement on `unconfirmed-accumulation`, 2026-09-07, as the tradition pass that node's evaluation requires, from the tradition survey of that day. Validated by the AI from its own knowledge of the sources; deferred because the attributions are the part of this reading the record cannot check, and the primary reading a deferral queues is what would settle them.
+
+**AI divergence.** In the tradition the snapshot is a discardable cache beside a stream that is never rewritten; here the accumulated node is the record and the fold rewrites it in place, so the rule against striking unpushed text is evidence that what is struck is state and not a cache, and the relation on the snapshot is a divergence repaired rather than the tradition restated.
+
+**Content.**
+
+```markdown
+---
+question: Does event sourcing with snapshots ground the fold at the checkpoint and its condition on pushing?
+form: reading
+under:
+  - commons.systems/disposition-graph/unconfirmed-accumulation
+source: Event sourcing with snapshots, as described by Martin Fowler and by Greg Young; behind it the write-ahead log and the accountant's journal and ledger.
+bears:
+  - fact: answer
+    option: the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed
+    relation: adopted
+---
+
+## Answer
+
+Supports on the fold, and is silent on absorption. The tradition holds that the append-only stream of events is the system of record, that current state is a fold over that stream, and that a snapshot is a materialized fold taken at a point in the stream so that a reader replays only what came after it. The answer takes every part: git is the journal, the accumulated node is the snapshot, the manifest line is the pointer from the snapshot back into the stream, and a session that needs what the fold struck replays from the commit the line names. The relation recorded on the option is `adopted` for the fold and its condition, which is what the tradition decides; the absorption rule the same option carries is outside the tradition's reach and no part of what this reading supports. The tradition's own condition is the answer's condition on pushing: a snapshot must be derivable from the stream, or it becomes a second record that can itself drift, so the fold refuses to strike anything not already reachable from `origin/disposition`, since text struck before it is in the stream is not snapshotted but lost. The tradition offers no rule for absorption, which rewrites rather than folds, and the answer's rule that absorption never runs unattended is the answer's own.
+```
 
 #### diverges-on-the-snapshot
 
@@ -59,6 +79,26 @@ Supports on the journal and the fold, departs on the snapshot, and is silent on 
 **AI support.** It is the counter-argument of the clean-context reading of abb15a3e, recorded so the author can rule for it: a rule that exists to stop a deletion from being final is evidence that the thing struck is state and not a cache, which is the property the tradition is cited to supply.
 
 **AI divergence.** The condition on pushing is the same condition under either reading, and the recommended reading holds that a snapshot which must be derivable from the stream is what the tradition already requires, the record's rule being that requirement applied to a snapshot the dialogue happens to read; the two divide on the name of the condition and not on its content.
+
+**Content.**
+
+```markdown
+---
+question: Does event sourcing with snapshots ground the fold at the checkpoint and its condition on pushing?
+form: reading
+under:
+  - commons.systems/disposition-graph/unconfirmed-accumulation
+source: Event sourcing with snapshots, as described by Martin Fowler and by Greg Young; behind it the write-ahead log and the accountant's journal and ledger.
+bears:
+  - fact: answer
+    option: the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed
+    relation: adopted
+---
+
+## Answer
+
+Supports on the journal and the fold, departs on the snapshot, and is silent on absorption. The tradition holds that an append-only stream is the system of record and that current state is a fold over it, and the answer takes both: git is the journal and a session that needs what the fold struck replays from the commit the manifest line names. It departs on the snapshot. In the tradition a snapshot is a discardable cache held apart from a stream that is never rewritten, so losing one costs only time; here the accumulated node is the record the dialogue reads and the fold rewrites it in place, with the stream underneath it rather than beside it. That is why the answer needs a rule against striking unpushed text, a rule the tradition never needs, and the rule is the record's own answer to a risk the tradition does not run. The condition on pushing is therefore a divergence repaired rather than the tradition's derivability condition restated.
+```
 
 ### authority
 
@@ -114,3 +154,7 @@ Strongest counter-argument (weak): All five of the previous reading's findings a
 ### The session's reply to the re-reading of 24ef5703, 2026-09-07
 
 Recorded in its own entry because the apply that landed the reading carried no reply, the replies file it was given being another wave's. The residual the counter names, that the case against and the new option say one argument twice, is the shape the previous reading asked for: the case against is what the recommended row carries and the option is what the author can rule for, and the two are the same argument by design.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/event-sourcing-with-snapshots stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `as-read`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `diverges-on-the-snapshot`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `24ef57032196a1b7085aee9abe49c5fb09b0acde` is re-computed for the encoding as `c577f43f6f010c78428517f36ab6944cb698e9da`; nothing it read changed.

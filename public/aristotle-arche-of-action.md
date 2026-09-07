@@ -5,7 +5,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: d8e37f57ecea1ea28331867dccb730aa100663d6
+  of: a6ba8e9c882e66473588e0205f551d74031098c6
   against: "Eudemian II.6 makes the person an archē of actions the way archai are of proofs, but the analogy is about indemonstrability, not about authorship surviving through intermediaries. Politics I.4 does the opposite work from the one the reading puts it to: it argues that self-moving instruments would remove the need for subordinate humans, not that the master's origin-hood is preserved when they are used. Adopting the identification without recording that divergence takes the strongest support of the graph's root from a text that does not quite say it. The counter is unchanged from the previous review and has not been answered on the node."
 facts:
   - name: answer
@@ -21,7 +21,6 @@ facts:
         ref: "2026-09-03"
     recommends: standing
     boldness: high
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -38,25 +37,80 @@ bears:
     option: standing
     relation: adopted
 ---
-## Answer
-
-Supports, and supplies the identification this graph rests on: the first principle in the derivation sense and the agent in the action sense are one archē. Politics I.4 supplies the delegation image. If the shuttle wove by itself and the plectrum played by itself, masters would need no servants; the question this graph answers is what the master is then.
-
-## Rationale
-
-Metaphysics V.1 gives the word its senses at once, the starting point of a derivation, the origin of motion or action, and rule. Posterior Analytics I.3 makes first principles indemonstrable, which is why an archē in this graph is held by the author and never derived by the AI. Validated by the AI on 2026-09-02 from its own knowledge of the loci; deferred until the author reads them.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+Supports, and supplies the identification this graph rests on: the first principle in the derivation sense and the agent in the action sense are one archē.
+
+**AI support.** Metaphysics V.1 gives the word its senses at once, the starting point of a derivation, the origin of motion or action, and rule. Posterior Analytics I.3 makes first principles indemonstrable, which is why an archē in this graph is held by the author and never derived by the AI. Validated by the AI on 2026-09-02 from its own knowledge of the loci; deferred until the author reads them.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does Aristotle's account of the agent as archē support this root?
+form: reading
+under:
+  - commons.systems/public/agency
+source: Aristotle, Eudemian Ethics II.6, 1222b15 to 1223a20 (a person is an archē of actions as the archai of mathematics are of proofs); Nicomachean Ethics III.3, 1112b31 to 32, and III.5, 1113b17 to 21 (a person is the origin and begetter of actions); Politics I.4, 1253b33 to 1254a1 (instruments that work by themselves); Metaphysics V.1, 1012b34 to 1013a23 (the senses of archē).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+Supports, and supplies the identification this graph rests on: the first principle in the derivation sense and the agent in the action sense are one archē. Politics I.4 supplies the delegation image. If the shuttle wove by itself and the plectrum played by itself, masters would need no servants; the question this graph answers is what the master is then.
+```
+
 #### record-divergence
 
 Both readings press the same divergence and the session accepted it as owed at the sitting: Politics I.4 introduces the self-working instrument to argue about natural slavery, not to preserve a master's origin-hood through delegation, and Eudemian II.6's analogy between a person and the archai of mathematics is about indemonstrability rather than about authorship surviving through intermediaries. This alternative records that divergence in the node and sets the relation to diverged, against the standing text's relation of adopted with the divergence named nowhere. Evaluation makes an unrecorded conflict with a cited tradition a frontier item deferred to neither side, which is why the choice is the author's.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -12,4 +12,4 @@
+ 
+ ## Answer
+ 
+-Supports, and supplies the identification this graph rests on: the first principle in the derivation sense and the agent in the action sense are one archē. Politics I.4 supplies the delegation image. If the shuttle wove by itself and the plectrum played by itself, masters would need no servants; the question this graph answers is what the master is then.
++Both readings press the same divergence and the session accepted it as owed at the sitting: Politics I.4 introduces the self-working instrument to argue about natural slavery, not to preserve a master's origin-hood through delegation, and Eudemian II.6's analogy between a person and the archai of mathematics is about indemonstrability rather than about authorship surviving through intermediaries. This alternative records that divergence in the node and sets the relation to diverged, against the standing text's relation of adopted with the divergence named nowhere. Evaluation makes an unrecorded conflict with a cited tradition a frontier item deferred to neither side, which is why the choice is the author's.
+```
+
 #### disclose-unstated-arche
 
 The placement finding of 2026-09-03 records that public/agency stands at the periagogic stage with no author words anywhere on it, while this reading stands at the ruling stage arguing for the AI's draft of the answer it is said to support. This alternative adds one clause saying the reading rests on an archē the author has not yet stated, and holds the reading to be re-read against whatever account the author gives at agency's periagogic sitting before it is ruled. Raised on commons.systems/public/agency.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -12,4 +12,4 @@
+ 
+ ## Answer
+ 
+-Supports, and supplies the identification this graph rests on: the first principle in the derivation sense and the agent in the action sense are one archē. Politics I.4 supplies the delegation image. If the shuttle wove by itself and the plectrum played by itself, masters would need no servants; the question this graph answers is what the master is then.
++The placement finding of 2026-09-03 records that public/agency stands at the periagogic stage with no author words anywhere on it, while this reading stands at the ruling stage arguing for the AI's draft of the answer it is said to support. This alternative adds one clause saying the reading rests on an archē the author has not yet stated, and holds the reading to be re-read against whatever account the author gives at agency's periagogic sitting before it is ruled. Raised on commons.systems/public/agency.
+```
 
 ## Account
 
@@ -129,3 +183,7 @@ The census unit's note: No Disposition section, so no dispositions to classify. 
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `disclose-unstated-arche` absorbs `reread-after-arche`.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/public/aristotle-arche-of-action stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `record-divergence`, `disclose-unstated-arche`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `d8e37f57ecea1ea28331867dccb730aa100663d6` is re-computed for the encoding as `a6ba8e9c882e66473588e0205f551d74031098c6`; nothing it read changed.

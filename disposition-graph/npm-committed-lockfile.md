@@ -10,7 +10,6 @@ facts:
       - name: reparent-under-lockfile
         source: ai
         ref: "2026-09-03"
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -25,17 +24,16 @@ bears:
     option: standing
     relation: adopted
 ---
-## Answer
 
-The committed surface of an npm workspace is the manifests and the lockfile: a root `package.json` declaring the workspaces, one `package.json` per package, and a single `package-lock.json` at the root covering every workspace. The answer above adopts the first two and is silent on the third, but the standard does not treat it as a separate choice — the lockfile is part of what the convention says a repository carries, and the standard directs that the generated lockfile be committed to source control.
+## Facts
 
-The reason is the one this record cares about. A `package.json` declares ranges, so it describes a set of possible dependency trees rather than one tree; `package-lock.json` describes the single tree actually installed, exactly, transitively, with integrity hashes. Committing it is what makes an install reproducible across machines and across time, and what makes a change to the tree arrive as a reviewable diff rather than as a silent difference between two checkouts. Under workspaces this is more load-bearing, not less: one root lockfile is the only artifact that records how the whole hoisted tree resolved.
+### answer
 
-`npm ci` is the sharp end of it. The command exists to install strictly from the lockfile and refuses to run without one, so a repository that omits the lockfile has no reproducible install command at all, only `npm install`, whose result depends on when it is run.
+#### standing
 
-## Rationale
+The committed surface of an npm workspace is the manifests and the lockfile: a root `package.json` declaring the workspaces, one `package.json` per package, and a single `package-lock.json` at the root covering every workspace.
 
-Adopted, and narrowly: what the standard settles is that a lockfile which exists is committed rather than ignored, and that omitting it is not a neutral choice but the loss of reproducibility and of `npm ci`. It does not settle whether this repository wants one, which is the question the child asks.
+**AI support.** Adopted, and narrowly: what the standard settles is that a lockfile which exists is committed rather than ignored, and that omitting it is not a neutral choice but the loss of reproducibility and of `npm ci`. It does not settle whether this repository wants one, which is the question the child asks.
 
 This discharges part of the reading the answer above already says it owes. That rationale names Lerna, Yarn workspaces and Potvin and Levenberg in prose, which readings forbids; this reading takes the npm strand of it. The strand is stronger than the layout convention it accompanies: the monorepo layout is one convention among several, while the committed lockfile is the ecosystem's documented default.
 
@@ -45,13 +43,59 @@ Where projects do depart, it is normally a published library, whose consumers re
 
 Validated by the AI on 2026-09-03 from its own knowledge of the npm documentation, not from a fetch of the source; deferred until the author reads it. A reading whose verdict changes on re-reading is a re-grasp trigger for the node it grounds.
 
-## Facts
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-### answer
+**Content.**
+
+```markdown
+---
+question: What does the npm standard say a workspace commits?
+form: reading
+under:
+  - commons.systems/disposition-graph/materialization
+source: npm CLI documentation, "package-lock.json" (npm 7 and later), the Description section; "npm ci", the Description section; and "workspaces". The lockfile was introduced in npm 5 (2017); the workspaces model this repository uses arrived in npm 7 (2020).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+The committed surface of an npm workspace is the manifests and the lockfile: a root `package.json` declaring the workspaces, one `package.json` per package, and a single `package-lock.json` at the root covering every workspace. The answer above adopts the first two and is silent on the third, but the standard does not treat it as a separate choice — the lockfile is part of what the convention says a repository carries, and the standard directs that the generated lockfile be committed to source control.
+
+The reason is the one this record cares about. A `package.json` declares ranges, so it describes a set of possible dependency trees rather than one tree; `package-lock.json` describes the single tree actually installed, exactly, transitively, with integrity hashes. Committing it is what makes an install reproducible across machines and across time, and what makes a change to the tree arrive as a reviewable diff rather than as a silent difference between two checkouts. Under workspaces this is more load-bearing, not less: one root lockfile is the only artifact that records how the whole hoisted tree resolved.
+
+`npm ci` is the sharp end of it. The command exists to install strictly from the lockfile and refuses to run without one, so a repository that omits the lockfile has no reproducible install command at all, only `npm install`, whose result depends on when it is run.
+```
 
 #### reparent-under-lockfile
 
 The npm reading moves from under materialization to under lockfile, the question it actually grounds. It was placed on the parent only because the struck no-children rule blocked its proper parent; un-aligned-children now answers that a disposition plus dialogue state may be refined by children exactly as an answered node may, naming this very reading as the misplacement the struck rule caused. The node's own account says the move is a graph edit that changes what the reading is a reading of, so it is put to the author rather than done silently. It still sits under materialization in the record. Raised on commons.systems/disposition-graph/un-aligned-children, commons.systems/disposition-graph/lockfile.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the npm standard say a workspace commits?
+form: reading
+under:
+  - commons.systems/disposition-graph/materialization
+source: npm CLI documentation, "package-lock.json" (npm 7 and later), the Description section; "npm ci", the Description section; and "workspaces". The lockfile was introduced in npm 5 (2017); the workspaces model this repository uses arrived in npm 7 (2020).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+The npm reading moves from under materialization to under lockfile, the question it actually grounds. It was placed on the parent only because the struck no-children rule blocked its proper parent; un-aligned-children now answers that a disposition plus dialogue state may be refined by children exactly as an answered node may, naming this very reading as the misplacement the struck rule caused. The node's own account says the move is a graph edit that changes what the reading is a reading of, so it is put to the author rather than done silently. It still sits under materialization in the record. Raised on commons.systems/disposition-graph/un-aligned-children, commons.systems/disposition-graph/lockfile.
+```
 
 ## Account
 
@@ -76,3 +120,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/npm-committed-lockfile stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `reparent-under-lockfile`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it.

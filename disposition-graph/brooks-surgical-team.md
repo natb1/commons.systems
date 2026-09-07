@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -29,6 +28,41 @@ bears:
     option: the-smaller-model-on-a-re-reading
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of the surgical team the survey
+produced, and no second account of what the record takes from it is on the
+table.
+
+#### standing
+
+Against the flat rule in part, and the part matters less here than it does in the book.
+
+**AI support.** Read in the tradition survey of the review sitting of 2026-09-04, and named in `review-model`'s account among the six that its pass with reference to tradition owes: "the surgical team, from Brooks, diverged from in part on `fable-for-both-readings`, since the most capable model makes the draft here and checks it too, so the allocation it prescribes is kept rather than inverted". The survey ranged Weinberg's egoless programming beside it, for review as routine, mutual and non-hierarchical; that tradition is surfaced and not minted, since its mechanism is the human ego and nothing here has one, as `review-model`'s account records.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does Brooks's surgical team say about where the strongest mind belongs, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/review-model
+source: Frederick P. Brooks, Jr., The Mythical Man-Month (1975), chapter 3, "The Surgical Team", after Harlan Mills's chief-programmer team, where the scarce excellent mind is concentrated where conceptual integrity is made and is surrounded by support roles, the copilot being able to do any part of the job but less experienced, on the ground that average minds do not substitute for one good one. Locus to be checked, the wording of the copilot's description.
+bears:
+  - fact: answer
+    option: fable-for-both-readings
+    relation: diverged
+  - fact: answer
+    option: the-smaller-model-on-a-re-reading
+    relation: adopted
+---
+
 ## Answer
 
 Against the flat rule in part, and the part matters less here than it does in the book. Brooks's argument is an allocation of a scarce excellent mind: put it where conceptual integrity is made, surround it with support roles who can do any part of the job and are less experienced, and do not spend it on the work that can be done beside it. The team is a shape for making one design whole, and the second seat is deliberately the lesser one.
@@ -38,18 +72,7 @@ Read straight across, the tradition prescribes the strongest reader on the draft
 The condition the allocation rests on is the one that has gone. Brooks is pricing hours of a person of whom there is one, and every hour spent checking is an hour not spent designing, so the excellence has to be placed. A reading here is bought again at the same rank for the price of tokens and takes nothing from the drafting, so the scarcity that made the allocation a choice is absent and the prescription loses its premise before it loses its argument. What survives is the warning the answer should keep: a second pass by the same mind over its own work is the weakest kind of check, which is why the reading's independence is bought by the clean context and not by the rank.
 
 Adopted in part on `the-smaller-model-on-a-re-reading`. The tradition prescribes the strongest reader on the draft and a lesser one on the check, and this clause makes the check a lesser reader for the first time, which narrows the divergence recorded on `fable-for-both-readings` without closing it: the first reading of an answer and the survey both stay at the top rank, so only the third of the three readings is arranged as the tradition would arrange it.
-
-## Rationale
-
-Read in the tradition survey of the review sitting of 2026-09-04, and named in `review-model`'s account among the six that its pass with reference to tradition owes: "the surgical team, from Brooks, diverged from in part on `fable-for-both-readings`, since the most capable model makes the draft here and checks it too, so the allocation it prescribes is kept rather than inverted". The survey ranged Weinberg's egoless programming beside it, for review as routine, mutual and non-hierarchical; that tradition is surfaced and not minted, since its mechanism is the human ego and nothing here has one, as `review-model`'s account records.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of the surgical team the survey
-produced, and no second account of what the record takes from it is on the
-table.
+```
 
 ### authority
 
@@ -86,3 +109,7 @@ Also named: commons.systems/disposition-graph/review-model, commons.systems/disp
 Proposed: The option's rank and the readings' rank are the survivor, since three texts name it against the fence's one: the fence is corrected to the larger model, the rank delegation gives a reconciliation session's main thread and one down from the model the other two readings run on, and the fence's citation of delegation's smaller-model clause is redrawn to the ground the option actually gives, that the re-reading's contract fixes what it looks for. The option is recorded so the author may instead rule for the smaller model, in which case the option's prose and both readings' entries move with it.
 
 Recorded as an option on commons.systems/disposition-graph/review-model's answer fact: `the-larger-model-on-a-re-reading` (source review, 2026-09-07).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/brooks-surgical-team stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

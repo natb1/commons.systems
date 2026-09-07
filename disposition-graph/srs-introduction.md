@@ -5,11 +5,11 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-05
-  of: 9de579468ecfc1b520b1284b2474951f7085a0f8
+  of: 8091a9aa9d990c1ac7535cc2f1b2237f4ed34c78
   against: "Every substantive claim in this reading is the AI's recall of two standards the record does not hold and no one has checked, and this reading found one of those claims wrong in the node's own frontmatter. The authority fact nonetheless recommends delegated, which under the readings node means the AI's reading stands and the author declines to review it — so a confirmation would fix on unchecked recall the ground of four other arrangements: the onboarding walk's order, definitions met by links, the overview's home, and the readers stated inside purpose, the last of which `audience`'s prune already cites as its reason. The reading's one uncontested claim, that the standard opens with purpose and then scope, was never in doubt; the claims that carry weight in the record are exactly the unverified ones. The remedy is written into the node already and contradicted by its own fact: 'deferred until the author reads the sections'."
   survey:
     date: 2026-09-05
-    of: 9de579468ecfc1b520b1284b2474951f7085a0f8
+    of: 8091a9aa9d990c1ac7535cc2f1b2237f4ed34c78
 facts:
   - name: answer
     options:
@@ -19,6 +19,8 @@ facts:
       - name: draft
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-02/35
       - name: record-overview-divergence
         source: review
         ref: "2026-09-03"
@@ -29,7 +31,6 @@ facts:
         ref: "2026-09-05"
     recommends: draft
     boldness: high
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -49,18 +50,6 @@ bears:
     option: draft
     relation: adopted
 ---
-## Disposition
-
-The author, 2026-09-02:
-> The tradition is a good reference but the title alone of the tradition doesn't seem to support progression to audience. That's ok - The progression from purpose to scope to reference makes sense (definitions are covered on the way via hyperlinks and overview can be provided later by blog-shaped content). The question for the reference should be re-oriented around that.
-
-## Answer
-
-Supports. The tradition opens a specification with purpose, then scope, then the intended audience and definitions, and this graph's onboarding walk adopts that order: the purpose node first, with scope, audience, and the vocabulary-defining nodes as its first refinements. It also settles the author's question whether "scope" or "purpose" is the better starting place: both, in that order. Purpose is the why and sits under the archē; scope is the what and follows from purpose.
-
-## Rationale
-
-Validated by the AI from its own knowledge of the standards on 2026-09-02; deferred until the author reads the sections. The one divergence to record: an SRS is a document about one product release, while this graph is a standing record, so "scope" here is a node that can be re-answered rather than a section that is rewritten.
 
 ## Facts
 
@@ -76,37 +65,15 @@ those recalled claims wrong, the outline of ISO/IEC/IEEE 29148 the node's own
 stays viable; `record-overview-divergence` is passed over, the recommended text
 having recorded every divergence it asked for.
 
-#### draft
+#### standing
 
-The draft re-orients the reading on the author's words of 2026-09-02. Where the standing answer says the tradition opens with purpose, then scope, then the intended audience and definitions, and adopts purpose, scope, audience and the vocabulary-defining nodes, the draft gives each source its own order, adopts only the opening the two share, and leaves what follows in the walk to the nodes that own it. It also drops the standing answer's settling of scope against purpose as a starting place. The rationale records four divergences: the standing record against the single release, and the three introduction sections, definitions, references and the overview, that have no counterpart here.
+Supports.
 
-#### record-overview-divergence
+**AI support.** Validated by the AI from its own knowledge of the standards on 2026-09-02; deferred until the author reads the sections. The one divergence to record: an SRS is a document about one product release, while this graph is a standing record, so "scope" here is a node that can be re-answered rather than a section that is rewritten.
 
-Both readings of 2026-09-03 found a second divergence the draft's rationale did not record: the standard has an Overview section and this graph does not, which evaluation calls an unrecorded conflict with a cited tradition. Passed over on 2026-09-05, the recommended text now recording that divergence and two more, definitions and references, each with the node that owns it named. Lifting the status would take a divergence the rationale still leaves out.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-#### say-only-what-the-source-says
-
-The answer states the order each standard gives and nothing about this graph:
-the adoption is carried by the relation on the reading's `bears` entries, and
-where the walk goes, how definitions are met, where the overview lives and where
-the readers are stated are the `scope`, `second-stop`, `self-documentation` and
-`audience` nodes' to answer. The case for it is that a reading which states this
-record's arrangements in prose puts a second answer beside theirs and goes stale
-when either moves; the case against is that a divergence cannot be recorded
-without saying what the record does instead, which is what the rationale does.
-Raised by the clean-context review of 2026-09-05.
-
-### authority
-
-Deferred, at moderate boldness: the readings node's gloss makes deferred the
-class for a reading the author accepts for now while the primary reading is
-queued, and this node's own rationale says the author will read the sections.
-Delegated, which the uniform pass of 2026-09-03 wrote here, says the opposite,
-that the author declines to review it. Whether every reading's class should move
-together is the `readings` node's question, under its option
-`one-ruling-for-the-reading-class`.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -123,16 +90,105 @@ bears:
     option: draft
     relation: adopted
 ---
+
 ## Answer
 
-Supports. The tradition opens a specification with purpose, then scope. IEEE 830-1998 then gives definitions, references and an overview, in that order; ISO/IEC/IEEE 29148:2018 places a product overview and definitions inside the introduction and gives references a clause of their own. Both state the intended readers inside the purpose section. This graph adopts the opening, the purpose node with scope refining it, as the scope node's order records; what the walk reaches after that is the scope and second-stop nodes' question and not this reading's. Four of the standard's arrangements have no counterpart here, and the rationale records them as divergences.
+Supports. The tradition opens a specification with purpose, then scope, then the intended audience and definitions, and this graph's onboarding walk adopts that order: the purpose node first, with scope, audience, and the vocabulary-defining nodes as its first refinements. It also settles the author's question whether "scope" or "purpose" is the better starting place: both, in that order. Purpose is the why and sits under the archē; scope is the what and follows from purpose.
+```
 
-## Rationale
+#### draft
 
-Validated by the AI from its own knowledge of the standards on 2026-09-02, and re-oriented on the author's words of that day, that the progression from purpose to scope to reference makes sense, that definitions are covered on the way via hyperlinks, and that the overview can be provided later by blog-shaped content. Deferred until the author reads the sections: neither standard is in the record, no one has checked this reading against them, and the review of 2026-09-05 found one recalled claim about the second wrong.
+The draft re-orients the reading on the author's words of 2026-09-02. Where the standing answer says the tradition opens with purpose, then scope, then the intended audience and definitions, and adopts purpose, scope, audience and the vocabulary-defining nodes, the draft gives each source its own order, adopts only the opening the two share, and leaves what follows in the walk to the nodes that own it. It also drops the standing answer's settling of scope against purpose as a starting place. The rationale records four divergences: the standing record against the single release, and the three introduction sections, definitions, references and the overview, that have no counterpart here.
+
+**AI support.** Validated by the AI from its own knowledge of the standards on 2026-09-02, and re-oriented on the author's words of that day, that the progression from purpose to scope to reference makes sense, that definitions are covered on the way via hyperlinks, and that the overview can be provided later by blog-shaped content. Deferred until the author reads the sections: neither standard is in the record, no one has checked this reading against them, and the review of 2026-09-05 found one recalled claim about the second wrong.
 
 Four divergences to record. A requirements specification is a document about one product release, while this graph is a standing record, so scope here is a node that can be re-answered rather than a section that is rewritten. Definitions are a numbered section there and are met on the way here, through the terms each node defines. References are a numbered section there and are here the traditions the record reads, reached from each node's readings. And the overview is a numbered section there and is not a node here: the author's words of 2026-09-02 leave it to blog-shaped content, later, which the record does not yet make; where the record's overview lives is `self-documentation`'s question, and the option `overview-as-blog-shaped-content` is recorded there.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -12,7 +12,6 @@
+     option: draft
+     relation: adopted
+ ---
+-
+ ## Answer
+ 
+-Supports. The tradition opens a specification with purpose, then scope, then the intended audience and definitions, and this graph's onboarding walk adopts that order: the purpose node first, with scope, audience, and the vocabulary-defining nodes as its first refinements. It also settles the author's question whether "scope" or "purpose" is the better starting place: both, in that order. Purpose is the why and sits under the archē; scope is the what and follows from purpose.
++Supports. The tradition opens a specification with purpose, then scope. IEEE 830-1998 then gives definitions, references and an overview, in that order; ISO/IEC/IEEE 29148:2018 places a product overview and definitions inside the introduction and gives references a clause of their own. Both state the intended readers inside the purpose section. This graph adopts the opening, the purpose node with scope refining it, as the scope node's order records; what the walk reaches after that is the scope and second-stop nodes' question and not this reading's. Four of the standard's arrangements have no counterpart here, and the rationale records them as divergences.
 ```
+
+#### record-overview-divergence
+
+Both readings of 2026-09-03 found a second divergence the draft's rationale did not record: the standard has an Overview section and this graph does not, which evaluation calls an unrecorded conflict with a cited tradition. Passed over on 2026-09-05, the recommended text now recording that divergence and two more, definitions and references, each with the node that owns it named. Lifting the status would take a divergence the rationale still leaves out.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -15,4 +15,4 @@
+ 
+ ## Answer
+ 
+-Supports. The tradition opens a specification with purpose, then scope, then the intended audience and definitions, and this graph's onboarding walk adopts that order: the purpose node first, with scope, audience, and the vocabulary-defining nodes as its first refinements. It also settles the author's question whether "scope" or "purpose" is the better starting place: both, in that order. Purpose is the why and sits under the archē; scope is the what and follows from purpose.
++Both readings of 2026-09-03 found a second divergence the draft's rationale did not record: the standard has an Overview section and this graph does not, which evaluation calls an unrecorded conflict with a cited tradition. Passed over on 2026-09-05, the recommended text now recording that divergence and two more, definitions and references, each with the node that owns it named. Lifting the status would take a divergence the rationale still leaves out.
+```
+
+#### say-only-what-the-source-says
+
+The answer states the order each standard gives and nothing about this graph:
+the adoption is carried by the relation on the reading's `bears` entries, and
+where the walk goes, how definitions are met, where the overview lives and where
+the readers are stated are the `scope`, `second-stop`, `self-documentation` and
+`audience` nodes' to answer. The case for it is that a reading which states this
+record's arrangements in prose puts a second answer beside theirs and goes stale
+when either moves; the case against is that a divergence cannot be recorded
+without saying what the record does instead, which is what the rationale does.
+Raised by the clean-context review of 2026-09-05.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -15,4 +15,12 @@
+ 
+ ## Answer
+ 
+-Supports. The tradition opens a specification with purpose, then scope, then the intended audience and definitions, and this graph's onboarding walk adopts that order: the purpose node first, with scope, audience, and the vocabulary-defining nodes as its first refinements. It also settles the author's question whether "scope" or "purpose" is the better starting place: both, in that order. Purpose is the why and sits under the archē; scope is the what and follows from purpose.
++The answer states the order each standard gives and nothing about this graph:
++the adoption is carried by the relation on the reading's `bears` entries, and
++where the walk goes, how definitions are met, where the overview lives and where
++the readers are stated are the `scope`, `second-stop`, `self-documentation` and
++`audience` nodes' to answer. The case for it is that a reading which states this
++record's arrangements in prose puts a second answer beside theirs and goes stale
++when either moves; the case against is that a divergence cannot be recorded
++without saying what the record does instead, which is what the rationale does.
++Raised by the clean-context review of 2026-09-05.
+```
+
+### authority
+
+Deferred, at moderate boldness: the readings node's gloss makes deferred the
+class for a reading the author accepts for now while the primary reading is
+queued, and this node's own rationale says the author will read the sections.
+Delegated, which the uniform pass of 2026-09-03 wrote here, says the opposite,
+that the author declines to review it. Whether every reading's class should move
+together is the `readings` node's question, under its option
+`one-ruling-for-the-reading-class`.
 
 ## Account
 
@@ -284,3 +340,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/srs-introduction stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `draft`; 1 `## Disposition` entry became the ledger entry words/2026-09-02/35, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `record-overview-divergence`, `say-only-what-the-source-says`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `9de579468ecfc1b520b1284b2474951f7085a0f8` is re-computed for the encoding as `8091a9aa9d990c1ac7535cc2f1b2237f4ed34c78`; nothing it read changed. The survey's pin `9de579468ecfc1b520b1284b2474951f7085a0f8` is re-computed for the encoding as `8091a9aa9d990c1ac7535cc2f1b2237f4ed34c78`; nothing it read changed.

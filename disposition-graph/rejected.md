@@ -11,7 +11,7 @@ review:
   against: "The recommended answer has little ground left of its own once its restatements are cited away. Its membership rule is viable-options' `passed-over-options-stay` seen from this side, its account of what an option carries is dialogue's, its account of what the projections show is alignment-page's, and its rule about the rationale is prose-and-structure's — and findings 4 and 5 show the fence still carries three of those as text rather than as citations, which is what `membership-cited-not-restated` exists to fix. What is left as this node's own is a liquidation the implementation already performed at 29d285d5 and a `defines` entry carrying a bare term with no gloss, and the third claim it makes for itself, that the record keeps no second home for a rejection, is not yet true of the record: projection's own recommended text still proposes a section carrying \"the alternatives the rationale rejected\". So a ratification here spends a ruling on a decision the author will have made one node earlier, and the answer that stands, `non-chosen-viable-options`, is the author's own words already answering the question they asked. Against that: the author asked this question twice, in 2026-09-02 and 2026-09-03, and it is entitled to an answer somewhere; deferred on the authority fact would let that answer act and keep the pair on the frontier to be ruled together, which is the exit the fact's own `against` names."
   survey:
     date: 2026-09-05
-    of: c6c1837e0d4be9a0775419d0c48fd35bcdeee4da
+    of: ba0ade0fcb26a5c65a623362ea060793e5c888eb
 facts:
   - name: answer
     options:
@@ -36,6 +36,8 @@ facts:
       - name: record-rejected-dispositions
         source: author
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-03/73
       - name: non-chosen-viable-options
         source: author
         ref: "2026-09-04"
@@ -48,7 +50,6 @@ facts:
     recommends: passed-over-stays-listed
     boldness: moderate
     against: "The answer has no ground of its own if the author rules the other way one node earlier: it is `viable-options`' `passed-over-options-stay` restated for this question, so a confirmation here is a second vote on one decision, and `non-chosen-viable-options`, which stands, already answers the question the author asked while keeping their own scoping of what persists."
-    stands: non-chosen-viable-options
   - name: authority
     options:
       - name: ratified
@@ -64,18 +65,6 @@ defines:
 depends:
   - commons.systems/disposition-graph/viable-options
 ---
-## Disposition
-
-The author, 2026-09-03:
-> The under edge disposition lists 'rejected' as prose under 'rationale' - it may make sense to record rejected dispositions, but this seems too ad-hoc.
-
-## Answer
-
-As viable options not chosen, kept on the fact beside the confirmed choice. Every decision on a node is a fact with a list of viable options, as the dialogue node says, and a rejected alternative is an option the author did not choose, or that the recommendation passed over, which stays on the list with the reason it was not taken and the readings bearing on it for as long as the AI holds it viable; an option no longer viable leaves the list, the option that displaced it says why, and version control holds what left. The projections read the structure: the browser shows the confirmed choice first and, on drilling down, the recommendation, the other options, and what each tradition says of each, so what was considered is shown with what was decided rather than recovered from prose by matching a heading. The rationale keeps why the standing answer stands and may cite the options it argues against, since a rationale that argues by elimination has no argument left without them. An option is not a page: an answer that was not taken has no standing and earns no node of its own. When an option is later chosen it becomes the answer, and what it replaced stays on the list while it is still viable.
-
-## Rationale
-
-Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "any non-chosen option which is categorized as 'viable' by the AI - these are all is persisted after confirmation to mitigate regression. This gives a clear mechanical encoding for ADR style 'alternatives considered' documentation." This is `rejected-list-on-node` generalised to every fact and kept after the ruling, and the objection the author carried above, that prose under the rationale seems too ad hoc, is what the structure answers; the fact the second review established, that the projector already reads a rationale heading, no longer decides anything, since the structure exists for regression and the browser's drill-down and not for the projector alone. The options `rejected-list-on-node` and `prose-in-rationale` stay viable as the narrower answers. The review of this text is owed.
 
 ## Facts
 
@@ -146,13 +135,76 @@ the reason it was passed over.
 
 A rejected list on the node, each entry one alternative answer and why it lost, projected in the authority section, with the rationale keeping only why the standing answer stands. It is a schema change, and adopting it means rewriting the rejected prose of purpose, authority, node, instruments, readings, namespaces, projection and model before any of them is recorded. The reviews ask it to say what an entry contains, whether an entry is versioned if the alternative is later adopted, and that a rationale may cite its rejected entries. It was passed over because the fact's options are this list generalised to every decision on the node rather than to the answer alone, and because it takes from the rationale the argument by elimination that both reviews of 2026-09-03 asked it to keep. The three refinements those reviews asked for are answered in the recommended option, which says what an entry carries, that an option later chosen becomes the answer with the option it displaced staying beside it, and that a rationale may name an option in the course of its argument. What it would have cost to adopt inside the batch of 2026-09-03 is not part of the reason: cost is struck from the choosing, and in the event the migration of 2026-09-04 rewrote the prose anyway.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How are rejected alternatives recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+defines:
+  - rejected alternative
+---
+
+## Answer
+
+As a rejected list on the node, one entry for each alternative answer that was weighed and lost, each naming the alternative as it was put and the reason it lost. The projector reads the list into the authority section beside the stamp, so what was considered is shown with what was decided, rather than recovered from prose by matching a heading. The rationale keeps why the standing answer stands and may cite its rejected entries, since a rationale that argues by elimination has no argument left without them. An entry is not a page: an answer that was not taken has no standing and earns no node of its own. When an alternative is later adopted it leaves the list and becomes the answer, and version control holds what it replaced.
+```
+
 #### rejected-nodes
 
 Rejected alternatives become nodes of their own carrying a rejected class. It is the boldest of the three options and was neither recommended nor withdrawn when it was raised. It was passed over because a node is a question and an option is a candidate answer to one, as `commons.systems/disposition-graph/node` says, so an answer that was not taken earns no page; and because a rejected class would be a stamp written on the one thing whose class `commons.systems/disposition-graph/viable-options` derives from rulings, of which a rejected option has none.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How are rejected alternatives recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+defines:
+  - rejected alternative
+---
+
+## Answer
+
+Rejected alternatives become nodes of their own carrying a rejected class. It is the boldest of the three options and was neither recommended nor withdrawn when it was raised. It was passed over because a node is a question and an option is a candidate answer to one, as `commons.systems/disposition-graph/node` says, so an answer that was not taken earns no page; and because a rejected class would be a stamp written on the one thing whose class `commons.systems/disposition-graph/viable-options` derives from rulings, of which a rejected option has none.
+```
+
 #### prose-in-rationale
 
 Rejected alternatives stay prose in the rationale, as now, with the browser's heading match documented as the contract rather than left as an accident of the template. The second review of 2026-09-03 established that the projector already renders a rejected section from a rationale heading, so the projection the author asked for needs no schema change, and this node's reply of that day said the fact "materially favours the third option at zero cost". It is passed over now, and the passing overturns that reply. The fact was true at the kickback and is no longer: the match was liquidated at implementation commit 29d285d5, and the projector's tests now assert that a heading named Rejected renders as prose; and it decided nothing while it held, for two reasons. The author's objection was that the rejected section "seems too ad-hoc", and a heading convention in prose is exactly that: documenting a convention writes it down without making it checkable, which the kickback of 2026-09-03 said in its own words against itself. And what is left on this option's side once that is answered is cost, which `commons.systems/disposition-graph/evaluation` strikes from the choosing by name — what a change costs to migrate, how many files it touches, what reviews it spends, and that the incumbent already does it the other way. With the struck arguments removed nothing remains on which this option is better, which is what dominated means; it stays on the fact and the author may rule for it.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How are rejected alternatives recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+defines:
+  - rejected alternative
+---
+
+## Answer
+
+Rejected alternatives stay prose in the rationale, as now, with the browser's heading match documented as the contract rather than left as an accident of the template. The second review of 2026-09-03 established that the projector already renders a rejected section from a rationale heading, so the projection the author asked for needs no schema change, and this node's reply of that day said the fact "materially favours the third option at zero cost". It is passed over now, and the passing overturns that reply. The fact was true at the kickback and is no longer: the match was liquidated at implementation commit 29d285d5, and the projector's tests now assert that a heading named Rejected renders as prose; and it decided nothing while it held, for two reasons. The author's objection was that the rejected section "seems too ad-hoc", and a heading convention in prose is exactly that: documenting a convention writes it down without making it checkable, which the kickback of 2026-09-03 said in its own words against itself. And what is left on this option's side once that is answered is cost, which `commons.systems/disposition-graph/evaluation` strikes from the choosing by name — what a change costs to migrate, how many files it touches, what reviews it spends, and that the incumbent already does it the other way. With the struck arguments removed nothing remains on which this option is better, which is what dominated means; it stays on the fact and the author may rule for it.
+```
 
 #### authors-rejected-section-question
 
@@ -162,51 +214,94 @@ The author's own proposal of 2026-09-02, carried verbatim on `commons.systems/di
 
 As a candidate answer it says the rejected section goes and an authority section takes its place, carrying the notes on what is pending. It is adopted into the recommended option and stays viable, because the recommendation grants what it asks and grants it without a section: the facts themselves are that list, the notes on what is pending are each option's status and recommendation and ruling, and the rejected alternatives are the rows carrying the status passed. A ruling for this option as the author stated it takes the section as well. The words are the option, which is why they are quoted here; their home is `commons.systems/disposition-graph/node`, which carries them verbatim and dated in its `## Disposition`, and this node's `## Disposition` is not enlarged to hold a second copy.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How are rejected alternatives recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+defines:
+  - rejected alternative
+---
+
+## Answer
+
+The author's own proposal of 2026-09-02, carried verbatim on `commons.systems/disposition-graph/node`:
+
+> What is the rejected section a projection of. Should it be associated with the deferred authority somehow? An authority section projected into the documentation (with notes on pending ratification for deferred authority) would make more sense than a "rejected" section which seems ad-hoc.
+
+As a candidate answer it says the rejected section goes and an authority section takes its place, carrying the notes on what is pending. It is adopted into the recommended option and stays viable, because the recommendation grants what it asks and grants it without a section: the facts themselves are that list, the notes on what is pending are each option's status and recommendation and ruling, and the rejected alternatives are the rows carrying the status passed. A ruling for this option as the author stated it takes the section as well. The words are the option, which is why they are quoted here; their home is `commons.systems/disposition-graph/node`, which carries them verbatim and dated in its `## Disposition`, and this node's `## Disposition` is not enlarged to hold a second copy.
+```
+
 #### record-rejected-dispositions
 
 The author's words of 2026-09-03, which this node's own `## Disposition` carries and which were raised here from `commons.systems/disposition-graph/under`: recording rejected dispositions may make sense, and listing them as prose under the rationale is too ad hoc. As a candidate answer it says the rejections are recorded and says nothing about where, which is what the other options answer. It is adopted into the recommended option and stays viable: the recommendation grants both halves, they are recorded, on the fact, each with the reason it was not taken, and the prose goes, which is `commons.systems/disposition-graph/prose-and-structure`'s rule and not this node's. The sentence this subsection carried until 2026-09-04, that the browser's heading match materially favours keeping the prose, is struck from it: that is the case for `prose-in-rationale` and it now sits on that option, with the reason it no longer decides.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How are rejected alternatives recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+defines:
+  - rejected alternative
+---
+
+## Answer
+
+The author's words of 2026-09-03, which this node's own `## Disposition` carries and which were raised here from `commons.systems/disposition-graph/under`: recording rejected dispositions may make sense, and listing them as prose under the rationale is too ad hoc. As a candidate answer it says the rejections are recorded and says nothing about where, which is what the other options answer. It is adopted into the recommended option and stays viable: the recommendation grants both halves, they are recorded, on the fact, each with the reason it was not taken, and the prose goes, which is `commons.systems/disposition-graph/prose-and-structure`'s rule and not this node's. The sentence this subsection carried until 2026-09-04, that the browser's heading match materially favours keeping the prose, is struck from it: that is the case for `prose-in-rationale` and it now sits on that option, with the reason it no longer decides.
+```
 
 #### non-chosen-viable-options
 
 A rejected alternative is a viable option the author did not choose, kept on the fact beside the confirmed choice with the reason it was not taken and the traditions bearing on it; the projector reads the structure and the rationale cites it. It is `rejected-list-on-node` generalised to every fact, and the fact the second review established, that the projector already reads a rationale heading, no longer decides the question, since the structure exists for regression and for the browser's drill-down and not for the projector alone. The author's objection carried above, that prose under the rationale seems too ad hoc, is what the structure answers. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there. It is the answer as it stands, and the recommendation keeps it whole and adds the half it leaves out, the candidate the AI rejected before the author saw it. What a ruling for it does depends on how "viable" is read, which is `commons.systems/disposition-graph/viable-options`' question and not this one's: read as dominance, the hundred and two candidates the migration of 2026-09-04 recorded are not viable, so they leave their facts and the `status` key leaves the reader with them; read as the author used the word, a candidate the AI categorized as worth recording, which is that node's option `viable-not-chosen-as-it-stands`, they stay as options with no status and the AI's dominance judgment returns to each option's prose. That one sentence has two consequences is why the two nodes are ruled together and why this one's `depends` names that one.
 
+**AI support.** Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "any non-chosen option which is categorized as 'viable' by the AI - these are all is persisted after confirmation to mitigate regression. This gives a clear mechanical encoding for ADR style 'alternatives considered' documentation." This is `rejected-list-on-node` generalised to every fact and kept after the ruling, and the objection the author carried above, that prose under the rationale seems too ad hoc, is what the structure answers; the fact the second review established, that the projector already reads a rationale heading, no longer decides anything, since the structure exists for regression and the browser's drill-down and not for the projector alone. The options `rejected-list-on-node` and `prose-in-rationale` stay viable as the narrower answers. The review of this text is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How are rejected alternatives recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+defines:
+  - rejected alternative
+---
+
+## Answer
+
+As viable options not chosen, kept on the fact beside the confirmed choice. Every decision on a node is a fact with a list of viable options, as the dialogue node says, and a rejected alternative is an option the author did not choose, or that the recommendation passed over, which stays on the list with the reason it was not taken and the readings bearing on it for as long as the AI holds it viable; an option no longer viable leaves the list, the option that displaced it says why, and version control holds what left. The projections read the structure: the browser shows the confirmed choice first and, on drilling down, the recommendation, the other options, and what each tradition says of each, so what was considered is shown with what was decided rather than recovered from prose by matching a heading. The rationale keeps why the standing answer stands and may cite the options it argues against, since a rationale that argues by elimination has no argument left without them. An option is not a page: an answer that was not taken has no standing and earns no node of its own. When an option is later chosen it becomes the answer, and what it replaced stays on the list while it is still viable.
+```
+
 #### passed-over-stays-listed
 
 A rejected alternative is any candidate the AI considered and can name, kept on the fact with its status and the reason it was not taken, whether or not the AI still holds it viable: `status: passed` with its `reason`, as `viable-options`' option `passed-over-options-stay` encodes it. Version control holds what the record no longer carries, the full text of an answer an option displaced, and the rejected passages of the rationales migrate as options passed over; the rationale argues and does not list. Raised on commons.systems/disposition-graph/prose-and-structure, whose clean-context review of 2026-09-04 found the membership rule to be this node's and `viable-options`'. Two decisions of this node's own go with it: that the record holds no rejected list, no rejected section, and no rejected node anywhere, so the browser's match on a heading beginning `Rejected` in a `## Rationale` is liquidated with the prose it read; and that `rejected alternative` is defined here, which the kickback of 2026-09-03 said was owed and which this node's `defines` now carries. Adopted by the recommendation and set out in the fence.
 
-#### membership-cited-not-restated
+**AI support.** Recorded on the author's words of 2026-09-03, carried above, that the under edge lists rejected as prose under the rationale, that recording rejected dispositions may make sense, and that this "seems too ad-hoc"; and on their words of 2026-09-02, carried on the node node, asking "What is the rejected section a projection of" and proposing "An authority section projected into the documentation (with notes on pending ratification for deferred authority)" instead. Both objections have one cause and one fix. The cause is that the rejected section was prose with nothing behind it: the projection the author asked after had no source, and the convention that produced it could not be checked, so writing the convention down would have left it exactly as ad hoc as it was. The fix is that the candidates are data on the fact they answer, which is where the decision they lost is, so the section is not replaced but dissolved.
 
-The same answer with the membership rule cited and not restated. The
-recommended text says that none leaves the list, that an option is struck only
-by the author, and that the AI's judgment about an option is written on the
-option and never worked by removing it, and then cites the viable-options node
-as deciding exactly that; the citation is right and the three clauses before it
-are a second copy of a rule this node does not own. Under this option the
-sentence names the deciding node and stops, so an amendment there does not
-leave a stale copy standing here. The second reading of 2026-09-05 found two
-further restatements of the same kind in the recommended text, the enumeration
-of what an option carries, which is the dialogue node's, and the account of
-what the projections show per option, which is the alignment-page node's and,
-at the first level, `what-an-option-row-carries`'; both were cut to citations
-in the amendment of that date, so this option now names the practice and not
-three clauses of it, and a ruling for it is a ruling on the practice.
+What a rejected alternative is follows from what an option is, which is the viable-options node's question and is cited here rather than restated. What this node adds is that the two kinds of rejection, the AI's and the author's, are one row with a different mark on it, and that the record keeps no second home for either — which this answer decides and the record does not yet satisfy: `projection`'s recommended text still proposes a documentation section carrying "the alternatives the rationale rejected", and the option `rejected-alternative-is-an-option` is recorded there on 2026-09-05, sourced here, so that node's ruling meets this one. Amended 2026-09-04 from the answer that said this of the author's rejections alone and left the AI's outside the record: the larger half is the AI's, and the reason the author gave for persisting options at all, regression, bears on that half at least as hard, since a later session is at least as likely to re-propose a candidate that was rejected as dominated.
 
-### authority
+Traditions bearing on this answer, each a reading filed under the viable-options node and bearing on the option recommended here, each adopted: the file-drawer problem and pre-registration, which say that a candidate tried and failed leaves a record or its absence distorts the record, so the same candidate is tried again; deprecation rather than deletion, which says the mark and not the removal is the act, since the parties who would meet the removal are not in the room; and Chesterton's fence, which puts on the remover the burden of saying why the thing was there, so an option is struck only with its reason stated. Three more bear on it through the nodes whose options this answer cites: the decision-record form on the dialogue node, whose considered options are kept with the reason each lost beside the decision, which is the shape this answer takes; IBIS and the Pareto frontier on the viable-options node, the one attaching every argument to a position so a candidate with no row has nowhere for its argument to live, the other making the AI's mark a dominance judgment rather than a preference, which is why a passed-over option is still one the author may rule for. What this costs is that a fact's option list runs as long as its rationale's prose used to, at the census the viable-options node states and this one cites rather than restates; that is the consequence of putting them where they can be read and not a reason against it.
 
-Ratified. What this node decides is where every rejected candidate in the
-record lives, and under the recommended answer there is nowhere else: version
-control is not a projection, so an answer that is wrong here loses the record's
-account of everything it decided against, which is expensive and is not
-reversible by reading the record. It is capture-shaped in the small as well,
-since the party deciding what a rejected alternative is, is the party whose
-rejections most of them are. Delegated would hand the AI the rule that governs
-the visibility of the AI's own rejections. Deferred is what the record is doing
-under a bootstrap grant already, the status materialized and the author having
-ruled on none of it, but a class is the author's to confer and the AI writes
-none for itself. Moderate boldness: the escalation is the record's own rule,
-and what rests on the AI is the judgment that the loss is not reversible.
+**AI divergence.** The answer has no ground of its own if the author rules the other way one node earlier: it is `viable-options`' `passed-over-options-stay` restated for this question, so a confirmation here is a second vote on one decision, and `non-chosen-viable-options`, which stands, already answers the question the author asked while keeping their own scoping of what persists.
 
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -226,15 +321,73 @@ What an option carries is the dialogue node's enumeration and is cited here rath
 The rationale argues and does not list. It says why the standing answer stands and why the candidates it beat fell, in the argument's own sentences, and it may name an option in the course of that argument, since a rationale that argues by elimination has no argument left without them; it may not restate the option list beside the fact that holds it, which is the prose-and-structure node's rule and not this one's. An option is not a page: an answer that was not taken has no standing and earns no node of its own, a node being a question and an option a candidate answer to one.
 
 What the author asked in 2026-09-02, what the rejected section is a projection of, is answered by the same structure and the answer is the diagnosis: it was a projection of nothing, a heading in prose with no data behind it, which is why it read as ad hoc and why documenting the convention would not have cured it. The authority section proposed in its place, with its notes on what is pending, is the facts as the page now lists them, every fact with every option, each carrying its status, the recommendation among them and the ruling where one has been given; and the rejected alternatives are the rows in that list that carry the status passed.
-
-## Rationale
-
-Recorded on the author's words of 2026-09-03, carried above, that the under edge lists rejected as prose under the rationale, that recording rejected dispositions may make sense, and that this "seems too ad-hoc"; and on their words of 2026-09-02, carried on the node node, asking "What is the rejected section a projection of" and proposing "An authority section projected into the documentation (with notes on pending ratification for deferred authority)" instead. Both objections have one cause and one fix. The cause is that the rejected section was prose with nothing behind it: the projection the author asked after had no source, and the convention that produced it could not be checked, so writing the convention down would have left it exactly as ad hoc as it was. The fix is that the candidates are data on the fact they answer, which is where the decision they lost is, so the section is not replaced but dissolved.
-
-What a rejected alternative is follows from what an option is, which is the viable-options node's question and is cited here rather than restated. What this node adds is that the two kinds of rejection, the AI's and the author's, are one row with a different mark on it, and that the record keeps no second home for either — which this answer decides and the record does not yet satisfy: `projection`'s recommended text still proposes a documentation section carrying "the alternatives the rationale rejected", and the option `rejected-alternative-is-an-option` is recorded there on 2026-09-05, sourced here, so that node's ruling meets this one. Amended 2026-09-04 from the answer that said this of the author's rejections alone and left the AI's outside the record: the larger half is the AI's, and the reason the author gave for persisting options at all, regression, bears on that half at least as hard, since a later session is at least as likely to re-propose a candidate that was rejected as dominated.
-
-Traditions bearing on this answer, each a reading filed under the viable-options node and bearing on the option recommended here, each adopted: the file-drawer problem and pre-registration, which say that a candidate tried and failed leaves a record or its absence distorts the record, so the same candidate is tried again; deprecation rather than deletion, which says the mark and not the removal is the act, since the parties who would meet the removal are not in the room; and Chesterton's fence, which puts on the remover the burden of saying why the thing was there, so an option is struck only with its reason stated. Three more bear on it through the nodes whose options this answer cites: the decision-record form on the dialogue node, whose considered options are kept with the reason each lost beside the decision, which is the shape this answer takes; IBIS and the Pareto frontier on the viable-options node, the one attaching every argument to a position so a candidate with no row has nowhere for its argument to live, the other making the AI's mark a dominance judgment rather than a preference, which is why a passed-over option is still one the author may rule for. What this costs is that a fact's option list runs as long as its rationale's prose used to, at the census the viable-options node states and this one cites rather than restates; that is the consequence of putting them where they can be read and not a reason against it.
 ```
+
+#### membership-cited-not-restated
+
+The same answer with the membership rule cited and not restated. The
+recommended text says that none leaves the list, that an option is struck only
+by the author, and that the AI's judgment about an option is written on the
+option and never worked by removing it, and then cites the viable-options node
+as deciding exactly that; the citation is right and the three clauses before it
+are a second copy of a rule this node does not own. Under this option the
+sentence names the deciding node and stops, so an amendment there does not
+leave a stale copy standing here. The second reading of 2026-09-05 found two
+further restatements of the same kind in the recommended text, the enumeration
+of what an option carries, which is the dialogue node's, and the account of
+what the projections show per option, which is the alignment-page node's and,
+at the first level, `what-an-option-row-carries`'; both were cut to citations
+in the amendment of that date, so this option now names the practice and not
+three clauses of it, and a ruling for it is a ruling on the practice.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How are rejected alternatives recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/node
+defines:
+  - rejected alternative
+---
+
+## Answer
+
+The same answer with the membership rule cited and not restated. The
+recommended text says that none leaves the list, that an option is struck only
+by the author, and that the AI's judgment about an option is written on the
+option and never worked by removing it, and then cites the viable-options node
+as deciding exactly that; the citation is right and the three clauses before it
+are a second copy of a rule this node does not own. Under this option the
+sentence names the deciding node and stops, so an amendment there does not
+leave a stale copy standing here. The second reading of 2026-09-05 found two
+further restatements of the same kind in the recommended text, the enumeration
+of what an option carries, which is the dialogue node's, and the account of
+what the projections show per option, which is the alignment-page node's and,
+at the first level, `what-an-option-row-carries`'; both were cut to citations
+in the amendment of that date, so this option now names the practice and not
+three clauses of it, and a ruling for it is a ruling on the practice.
+```
+
+### authority
+
+Ratified. What this node decides is where every rejected candidate in the
+record lives, and under the recommended answer there is nowhere else: version
+control is not a projection, so an answer that is wrong here loses the record's
+account of everything it decided against, which is expensive and is not
+reversible by reading the record. It is capture-shaped in the small as well,
+since the party deciding what a rejected alternative is, is the party whose
+rejections most of them are. Delegated would hand the AI the rule that governs
+the visibility of the AI's own rejections. Deferred is what the record is doing
+under a bootstrap grant already, the status materialized and the author having
+ruled on none of it, but a class is the author's to confer and the AI writes
+none for itself. Moderate boldness: the escalation is the record's own rule,
+and what rests on the AI is the judgment that the loss is not reversible.
 
 ## Account
 
@@ -630,3 +783,7 @@ The independence test of `commons.systems/disposition-graph/probe-or-node`, run 
 Also named: commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/second-stop.
 
 Proposed: Record the independence test as the reason on each existence fact's `prune` option, on `hexis` and on `audience`, and let the author rule the prune at each node's own row, which is what `probe-or-node`'s answer prescribes for a node already standing. Before `audience` is pruned, its surviving content is named: the sentence itself is already in `purpose`, and the enumeration of onboarding surfaces — README, browser opening pages, repository description, discovery tags — belongs to `projection` or `self-documentation` and moves there rather than being deleted with the node. `hexis` needs no survivor: `purpose` already carries its content as the option `knowledge-store-first`.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/rejected stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `non-chosen-viable-options`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `passed-over-stays-listed`; 1 `## Disposition` entry became the ledger entry words/2026-09-03/73, referenced by 1 option the entry's own date names; and `stands` left the answer fact. The content of `rejected-list-on-node (at db23d5b1)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `rejected-nodes`, `prose-in-rationale`, `authors-rejected-section-question`, `record-rejected-dispositions`, `membership-cited-not-restated`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `509706a8e5bfddceca2a4ea1ef5b372b709f6e32` was already past the recommendation and is left as it stood. The survey's pin `c6c1837e0d4be9a0775419d0c48fd35bcdeee4da` is re-computed for the encoding as `ba0ade0fcb26a5c65a623362ea060793e5c888eb`; nothing it read changed.

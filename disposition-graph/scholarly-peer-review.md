@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -33,6 +32,47 @@ bears:
     option: the-smaller-model-on-a-re-reading
     relation: diverged
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of the referee system the survey
+produced. A second account, that the tradition bears on `conditional-by-boldness`
+as a divergence as well, is named in the answer and is not recorded as an
+option, since it is a further relation of this same reading rather than a
+different reading of the sources.
+
+#### standing
+
+Supports one standard of reader across both readings.
+
+**AI support.** Read in the tradition survey of the review sitting of 2026-09-04, and named in `review-model`'s account among the six that its pass with reference to tradition owes: "scholarly peer review, from the Royal Society's Committee on Papers of 1752 and Baldwin's history of 2018, adopted on `fable-for-both-readings`, for one standard of reader across both readings, the peer of the main thread being the main thread's model". The survey also read the same tradition against the conditional half of the rule the record carried, as a two-tier venue; the account gives one relation, which is what is written, and the second is named in the answer as owed rather than recorded as a relation the account does not give.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does scholarly peer review say about the standing of the reader, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/review-model
+source: The referee system of the learned journal, in the Philosophical Transactions of the Royal Society under Oldenburg from 1665, in the Society's Committee on Papers of 1752, which put a paper before members of the Society before it was printed, and Melinda Baldwin, "Scientific Autonomy, Public Accountability, and the Rise of 'Peer Review' in the Cold War United States", Isis 109(3) (2018), for how the modern practice and its name were made. Locus to be checked, the 1665 and 1752 loci, which are conventionally cited rather than read here, and whether "a peer, of comparable standing and not superior" is the tradition's own formulation or this reading's characterization of it.
+bears:
+  - fact: answer
+    option: fable-for-both-readings
+    relation: adopted
+  - node: commons.systems/disposition-graph/recording
+    fact: answer
+    option: per-fact-after-two-readings
+    relation: adopted
+  - fact: answer
+    option: the-smaller-model-on-a-re-reading
+    relation: diverged
+---
+
 ## Answer
 
 Supports one standard of reader across both readings. The referee is a peer: of comparable standing to the author, not a superior, and the venue's standard of reader is one standard applied to every submission it accepts. Blinding, where the practice uses it, removes the author's identity so that the argument is judged on its merits and not on who made it. Grading the referee's stature to the perceived importance of a submission is the mark of a tiered system of venues, not of the practice inside one.
@@ -44,20 +84,7 @@ The tradition reads the record's abandoned floor charitably and cuts against the
 Where the analogy is thin, the reading says so. A referee is a person with a career, a rival's paper in the same field, and reasons of their own to be careful, and blinding exists to neutralize a status that a model does not have. What survives the transposition is the standard of the reader and not the sociology that enforced it, so the tradition supplies a rule for how a reader is chosen and nothing that makes the choice stick.
 
 Diverged on `the-smaller-model-on-a-re-reading`. The clause grades the reader by the reading's object -- an answer judged whole against an amendment checked against a stated diff -- and a graded reader is a second standard inside one venue, which this tradition refuses. The divergence is narrower than the one this reading refuses in `conditional-by-boldness`, since the grading is not by anything the reviewed party writes, and it is a divergence all the same.
-
-## Rationale
-
-Read in the tradition survey of the review sitting of 2026-09-04, and named in `review-model`'s account among the six that its pass with reference to tradition owes: "scholarly peer review, from the Royal Society's Committee on Papers of 1752 and Baldwin's history of 2018, adopted on `fable-for-both-readings`, for one standard of reader across both readings, the peer of the main thread being the main thread's model". The survey also read the same tradition against the conditional half of the rule the record carried, as a two-tier venue; the account gives one relation, which is what is written, and the second is named in the answer as owed rather than recorded as a relation the account does not give.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of the referee system the survey
-produced. A second account, that the tradition bears on `conditional-by-boldness`
-as a divergence as well, is named in the answer and is not recorded as an
-option, since it is a further relation of this same reading rather than a
-different reading of the sources.
+```
 
 ### authority
 
@@ -93,3 +120,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/scholarly-peer-review stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

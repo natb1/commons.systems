@@ -120,6 +120,21 @@ facts:
         ref: "2026-09-04"
         status: passed
         reason: "it answers the what-an-option-row-carries node's question, where it is recorded as case-against-to-the-details"
+        supports:
+          - words/2026-09-04/1
+          - words/2026-09-04/2
+          - words/2026-09-04/3
+          - words/2026-09-04/4
+          - words/2026-09-04/5
+          - words/2026-09-04/6
+          - words/2026-09-04/7
+          - words/2026-09-04/8
+          - words/2026-09-04/9
+          - words/2026-09-04/10
+          - words/2026-09-04/11
+          - words/2026-09-04/12
+          - words/2026-09-04/13
+          - words/2026-09-04/14
       - name: case-against-after-the-review-only
         source: ai
         ref: "2026-09-04"
@@ -139,6 +154,10 @@ facts:
       - name: page-collects-only-the-confirmation
         source: author
         ref: "2026-09-06"
+        supports:
+          - words/2026-09-06/1
+          - words/2026-09-06/2
+          - words/2026-09-06/3
       - name: standing-named-in-the-pane
         source: commons.systems/disposition-graph/where-the-unconfirmed-indication-goes
         ref: "2026-09-06"
@@ -164,12 +183,39 @@ facts:
       - name: copy-control-beside-the-launch-link
         source: author
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-04/1
+          - words/2026-09-04/2
+          - words/2026-09-04/3
+          - words/2026-09-04/4
+          - words/2026-09-04/5
+          - words/2026-09-04/6
+          - words/2026-09-04/7
+          - words/2026-09-04/8
+          - words/2026-09-04/9
+          - words/2026-09-04/10
+          - words/2026-09-04/11
+          - words/2026-09-04/12
+          - words/2026-09-04/13
+          - words/2026-09-04/14
       - name: clauses-cited-not-restated
         source: review
         ref: "2026-09-07"
       - name: the-context-pane-previews-the-selected-option
         source: author
         ref: "2026-09-07"
+        supports:
+          - words/2026-09-03/16
+          - words/2026-09-03/17
+          - words/2026-09-03/18
+          - words/2026-09-03/19
+          - words/2026-09-03/20
+          - words/2026-09-03/21
+          - words/2026-09-03/22
+          - words/2026-09-07/1
+          - words/2026-09-07/2
+          - words/2026-09-07/3
+          - words/2026-09-07/4
     recommends: the-context-pane-previews-the-selected-option
     boldness: moderate
     against: "The delta encoding still puts five independent decisions in one radio group, the metric set, where each metric links, the division of the two content columns, the eyebrow's contents, and where the indication that a text is unconfirmed sits, so a combined ruling needs a confirmation with edits; the children the earlier review proposed would give each its own text, reading and pane."
@@ -192,7 +238,7 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 57589470c9e634aa20420adc80b317c74079cc23
+  of: 184c3341ed274c0a5ae84adef73d9df9363e2de8
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "The rewritten closing sentence for `every-fact-every-option` adopts the previous reading's own suggested wording almost verbatim, including the claim that the fence is extended by exactly \"one sentence\"; the fence's middle-column paragraph (unchanged by this diff, and outside this delta's scope since it predates the pinned commit) arguably carries more than one new clause/sentence describing the re-rendering behaviour, so the amendment's self-description may slightly overstate its own precision. This is inherited from the previous reading's suggested text rather than introduced independently by this repair, and it does not touch anything the previous reading or the survey's three findings actually raised, so it does not block forwarding."
   survey:
@@ -216,149 +262,6 @@ depends:
 under:
   - commons.systems/disposition-graph/projection
 ---
-## Disposition
-
-The author, 2026-09-03:
-> is the unanswered question for the alignment page (requiring a ruling) recorded?
-
-The author, 2026-09-03, on being told it was not:
-> record it
-
-The author, 2026-09-03, opening this sitting on the alignment page:
-
-> new dispositions for the alignment artifact. dispositions may have cascading effects on disposition for unanswered data model. progress the dialogue but stop before the alignment-review. do not execute.
->
-> - move the metrics to the top of the left navigation bar (justify with disposition). remove the rest of the pagehead (drop the lede) - it liquidates without disposition.
-> - show only one disposition at a time selected from the left nav (with indicator on left nav for the selection)
-> - give each disposition better layout that focuses on the confirmation and progressive disclosure. I want a list A of the things I need to confirm about the recommended disposition. Eg. authority and permanence are on list A if confirmation is required. Each is a sublist B of summarized options with the AI recommendation, and confidence in the recommendation (previously called boldness, now called confidence). Author quotes, full text, etc. are drill down items for rows in list B. Confirmation is recorded or edited with simple input for each list B item. The final option on list B is always reject all choices with feedback text input.
-> - Not all aspects of the disposition need to be confirmed individually. After the list A of confirmation requests is the full disposition detail. It dynamically reflects choices made in the confirmation request list. Very high confidence or default disposition elements can just be included in the final render. After the final render is an option to reject final render with text input for feedback.
-> - nodes (eg. commons.systems/disposition-graph/purpose) still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed. This appears to be bootstrap encoding artifact. purpose node is a confirmation ruling for a node that does not yet exist on the reconciliation frontier (only on the alignment frontier). After drafting recommendation for this item, and/or identifying issue with bootstrap reconciliation of disposition for unanswered data structure, launch an ad-hoc fable subagent to validate just this recommendation/reconciliation issue (not a full alignment review).
-
-The author, 2026-09-03, amending the fourth disposition above:
-
-> change to the original disposition: full disposition detail renders in a right aligned context pane rather than rendering below the confirmation requests.
-
-The author, 2026-09-03, answering the periagogic probe on the unit of a ruling:
-
-> the revised record is to carry a decision per aspect. each aspect of a disposition may have choices that require confirmation. each aspect has a recommendation with confidence. after analysis of cascading effects on the alignment frontier and esp. the data model have a fable subagent validate the analysis and the data model.
-
-The author, 2026-09-03, on the two vocabulary questions put with the probe:
-
-> I said permanence but I meant persistence. stick with boldness then, I want to know how much rests on the AI's own knowledge against the record.
-
-The author, 2026-09-03, on how the recommendation is to be evaluated:
-
-> Make recommendation based on best greenfield design - not brownfield cost savings. Nothing is doctrine yet, barely anything is materialized. Does the recommendatino survive?
-
-The author, 2026-09-04, on what list A holds under `aspects-are-nodes`:
-
-> > list A is the node's asking facts plus its unanswered children
->
-> We already have multiple pages for working through trees in alignment order. Evaluate whether list A needs to/should include unanswered children? It sounds like list A is a list of facts per node. Maybe the child questions are indicated in the right aligned context pane under the node preview (so that the navigation pane can remain alignment order sorted).
-
-The author, 2026-09-04, closing the sitting before compaction:
-
-> record the current state of all dispositions from this session to prepare for compaction. Including this disposition which is a revision to a prior one: AI recommendations can be recorded at any time during the dialog (not just after the first meiutic). Ensure your recommendations so far are recorded. After compaction we will progress the alignment page nodes through meiutic and stop before review. Before review you will be granted bootstrap authourity to reconcile those nodes (including cascading effects on graph encoding/re-encoding of nodes/align/align-review/alignment page).
-
-The author, 2026-09-04, granting bootstrap authority for this sitting's reconciliation:
-
-> Bootstrap authority granted to reconcile the alignment-page sitting
-
-The author, 2026-09-04, refining the answer after reading the page:
-
-> refinement to the alignment artifact disposition:
->
-> - the right aligned context is ONLY the rendered disposition. everything else goes in the center "what it asks" area. This include "What a ruling here makes decidable (3)" and "Your ruling on the whole" which supercedes prior disposition.
-> - I'm looking at "commons.systems/public/agency". It's not clear what question is being asked and what the options are. It only says "what this ruling asks" and then lists what appear to be ids of some kind, and then "standing (the node as it stands)". I don't understand what "standing" would even refer to. This node has not yet been answered, there is no ground to confirm as standing. Is this a result of sparse alignment state written before current disposition for unanswered nodes? Or, does this suggest more structural issues?
-
-The author, 2026-09-04, granting bootstrap authority for the reconciliation of this refinement:
-
-> granted, reconcile it
-
-The author, 2026-09-04, on the submit controls and on ruling ahead of the stage:
-
-> new refinements to alignment artifact dispositon:
->
-> - What is "Submit 1 response"? Is that initializing a claude.ai/code session? If so that is good, but a) can this be done with a plain hyperlink (vs javascript) to make to external action clear b) move the "copy all responses" next to this button and make sure it is copying the same instruction that would be used to initialize the cloud session.
-> - Confirmed responses for nodes that are not at the confirmation stage of dialogue are invalid. Show the facts with pending confirmation, and recommendations, but disable to input. Add a button next to the dialogue phase lable (eg. "periagogic") to launch alignment dialog / copy instruction to initialize alignment dialog for that node (probably always `/align <node_id>`). Ideally, the visual presentation is a chip with two icon buttons embedded in it - the launch button is ideally an href.
-
-The author, 2026-09-04, granting bootstrap authority for that reconciliation:
-
-> You have bootstrap authority to reconcile these dispositions.
-
-The author, 2026-09-04, opening this sitting on the layout of the questions:
-
-> Before progressing commons.systems/public/agency through confirmation, we will refine disposition for the alignment artifact (and possibly cascading effects on encoding, etc.) which I am using to review the commons.systems/public/agency question. This will help distinguish between systemic issues in disposition/reconciliation, vs. unfinished dialogue and residue of agency node encoding before encoding disposition was settled. It's been through multiple migrations. Progress dialogue through meiutic and stop before adversarial review. Then prepare for compaction. After compaction, you will be granted bootstrap authority to reconcile nodes in this sitting.
->
-> - the graph name does not need to be listed in the eyebrow - is is already part of the node id. This does not require disposition, it can fall out as unjustified liquidation.
-> - the list of facts that require confirmation is unclear from what's presented. Now that the data model has been simplified and the list of facts in each disposition is bound and consistent, we can record revised disposition for the layout of the questions. List each fact without exceptions. For each fact, list all options. Last option is always "kick back" because none of the options are acceptable - this is not recorded as confirmation, but a kick back to mieutic. For each option (other than kick back) provide short text summary of option and/or rationale, indicate status of AI recommendation and (if applicable) status of tradition support or divergence. Radio input enables selection of option for confirmation or kickback (disabled if not at the confirmation phase). Each option has a drill down (details accordion?) for all other supporting details - full text of the fact, author quotes, AI explanations for recommended or rejection, explanation of tradition support/divergence and href to tradition node, etc. Drill down also includes optional input from author on rationale for confirm/reject.
-> - Everything under "The review" can be merged into the above (or let me know if it can't be)
-> - Structured data from the above must not be re-encoded into the prose (eg. "rejected" options). This is probably residue of the prose being written before the data model recorded rejected options.
-> - "Your ruling on the whole" can be liquidated as unjustified now that all facts are enumerated as standard.
-> - "What a ruling here makes decidable (3)" can remain where it is.
-
-The author, 2026-09-04, after compaction, granting the reconciliation of this
-sitting, which the `## Account` names below:
-
-> You have bootstrap reconciliation authority including migrating nodes to new encodings.
-
-And, the same turn, on the review:
-
-> launch align-review using the fable model
-
-The author, 2026-09-04, while the wave-one readings were being applied, naming the sitting's final task and granting it:
-
-> the final task for this sitting will be to reconcile the aligment/review/survey skills and alignment artifact against all reviewed (but not yet confirmed) recommendations in the graph. Do not liquidate existing functionality unless it is contradicted by recommended disposition. you have bootstrap authority for this.
-
-The author, 2026-09-04, during the sitting on author-questions, queuing the sitting on this page's observations:
-> queue this alignment for after the sweep. I'm turning on autocompact so always be prepared for compaction.
-
-The author, 2026-09-04, opening that sitting, whose nine observations the nodes under this one carry one question each, the first of them carried here because it yields no question:
-> /align observations of the alignment artifact which potentially have cascading effects to other dispositions
-> - next settles metric in the left nav prints a node id, but I suspect it's supposed to work like the other metrics as a link to that node in the browser. probably not a disposition, just a reconciliation error
-
-The author, 2026-09-06, in the periagogic movement of the sitting on `input-for-an-unfinished-movement`, answering the probe on whether the maieutic control goes with the periagogic one:
-
-> The scope of alignment artifact is limited to final confirmation and previews/read only indicators of other phases of the dialogue. All other information from the author is done via the `/align` session interview.
-
-The author, 2026-09-04, on the alignment page, transferred here on 2026-09-06 from `input-for-an-unfinished-movement` before its prune:
-> - Do not take text input for the unfinished periagoge - that is for the periagoge session to collect. Whatever response is provided in periagoge it does not need to be played back in the alignment artifact expect as quotes supporting or refuting fact options.
-
-The author, 2026-09-04, on the alignment page, transferred here on 2026-09-06 from `the-account-on-the-page` before its prune:
-> - I do not undertand what "The AI's account" is meant to be recording. If it is justified to support alignment dialogue and review then keep it, but it does not need to be presented in the UI.
-
-The author, 2026-09-06, answering the probe `stands-as-a-draft-no-one-has-confirmed`, raised on this node 2026-09-04:
-
-> What "stands" could represent is the prior confirmed disposition (if any). There are no confirmed dispositions currently, so we would expect to see no indication of that.
-
-The author, 2026-09-06, on where the warning goes that a node's text is an unconfirmed draft, once the `stands` chip stops carrying it:
-
-> A single indication per node to indicate that node is not yet confirmed is fine.
-
-The author, 2026-09-07, on the sitting on their observations of 2026-09-04, whose node `alignment-page-observations` was pruned into this node and its children on 2026-09-05, said while the session was progressing the review-cost dispositions:
-
-> before stopping for confirmation, and ensure alignment-page-observations is progressed up to confirmation and included in the list of reconciliation for alignment/review/survey/artifact
-
-The author, 2026-09-07, after the session described the recommended accumulation strategy, refining the disposition on what an option carries and what an unconfirmed node keeps: carried here because this node's question is one the refinement reaches,
-
-> record this refinement to disposition and ensure the accumulation strategy supports it:
-> - each option for each fact is recorded with its actual fact content so that when the author selects an option via the alignment artifact the context pane is dynamically updated to preview the node that is being confirmed.
-> - "standing" is just a label that can be applied to an option (similar to an AI recommendation) to indicate that it was the last confirmed option for that fact on that node.
-> - the expanded details of an option (before and also after confirmation) shows a) the history of author quotes that both support and/or contradict the option (implies that one quote may be reference by multiple options) b) the accumulated/current AI support and/or rejection rationale for that option (independent of ultimate recommendation)
->
-> Anything else that doesn't support the alignment dialogue/artifact disposition is subject to accumulation/removal.
-
-The author, 2026-09-07, in the next turn, granting the reconciliation of the refinement above:
-
-> reconciliation of that disposition in included in the bootstrap reconciliation authority for this sitting
-
-The author, 2026-09-07, answering the three calls the session put before them on the revised accumulation strategy: carried here because this node's question is one the answer reaches,
-
-> 1. named-change form legibility tradeoff is acceptable as long as the exact node preview can be mechanically derived (eg. via patch syntax)
-> 2. previously confirmed and standing are just one and the same thing (we can probably just remove reference to "standing" and replace it with "confirmed"
-> 3. All of AI and author rationale and references to tradition are recorded as support and/or divergence for each option. AI response is accumulated, reference to tradition is accumulated, author response is concatenated quotation. AI support and divergence can be recorded for any option. The AI recommendation is the judgement that weighs AI support/divergence for each option.
->
-> This implies guidance for which quotes from the author need to be retained and which options need to be recorded. We don't need to retain author quotes that neither support or diverge from an option. If a quote from an author expresses support or divergence from an option then that option must be recorded. Any option with support or divergence in tradition must be recorded. If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded.
 
 ## Facts
 
@@ -370,47 +273,319 @@ The author's words of 2026-09-04 on the layout of the questions settle the shape
 
 #### three-column-ruling-screen
 
-The answer as it stood on 2026-09-04 before the author's refinement of the layout of the questions: the same rail, metrics, columns, gate, naming rule, widths, chip and staging, with a decision asked only when its boldness was anything but low and folded unasked into the rendered disposition when it was low, a ruling on the whole beneath the decisions carrying its own caption, the review as a section of drill-downs, and the eyebrow unnamed. `every-fact-every-option` is this answer with the fold struck and its consequences drawn. Against it, in the author's words of 2026-09-04, that each fact is listed without exception, and what the fold measured: twelve nodes on the page as built showed the author no decision at all, nine because every fact on them folded, two of those global-tier rules, and three because they carried no facts and printed the same sentence where it was false.
+The answer as it stood on 2026-09-04 before the author's refinement of the layout of the questions: the same rail, metrics, columns, gate, naming rule, widths, chip and staging, with a decision asked only when its boldness was anything but low and folded unasked into the rendered disposition when it was low, a ruling on the whole beneath the decisions carrying its own caption, the review as a section of drill-downs, and the eyebrow unnamed. `every-fact-every-option` is this answer with the fold struck and its consequences drawn.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it, in the author's words of 2026-09-04, that each fact is listed without exception, and what the fold measured: twelve nodes on the page as built showed the author no decision at all, nine because every fact on them folded, two of those global-tier rules, and three because they carried no facts and printed the same sentence where it was false.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+One node at a time, on a three-column screen, in the ruling order.
+
+The rail, on the left, carries the metrics at its top and then every unanswered node in the ruling order, flat, each row showing the node's question, its graph, its stage, its settling count, and a mark when a response is staged on it. The selected row is marked as selected, and selecting a row is what changes the other two columns. Once one node is shown at a time the rail is the only place the whole frontier is visible, which is why the metrics sit there, why it lists every node, and why it filters and pages nothing.
+
+A metric on this page is a signal, an instrument, or a criterion of a recorded disposition and never a count for its own sake; each names the disposition it instruments and links to that node in the browser, which addresses every node by its id where this page has no route to one. Four meet that standard. Open, the size of the outstanding dialogue, for the unanswered node, under which every node is unanswered until the author confirms it, so the count is the author's outstanding authority. Ruleable, the nodes whose clean-context review is behind them, for the clean-context-review node, which is what stands between a draft and the author, so the count is what can be ruled now. Next settles, what a ruling on the first node in the order would make decidable, for the alignment-order node, whose answer is that the ruling settling the most comes first, so the count is what one ruling buys. Stale, the nodes whose review pin or recommendation pin no longer matches the text it read, for the frontier-consistency node, whose validations catch it, so the count is how much of what looks ruleable rests on a reading of text that has since moved. The stage counts, the per-graph lines, and the lede go: a stage count instruments no disposition, and a graph is a label on a row rather than a division of the order.
+
+The middle column holds everything the ruling asks, and the right-hand column holds nothing but the disposition itself. The stage is what the column says first, because the stage names the movement owed and so what the column is for: at the periagogic stage the ask is the author's own account of the ground and the free-text control for it leads; at the maieutic stage it is the author's intention. Only the ruling stage takes a response. A confirmation recorded on a node that has not reached that stage is invalid, as the author ruled on 2026-09-04, so at every earlier stage the decisions, their choices and the recommendation are all rendered and every input among them is disabled: the author sees exactly what will be asked and cannot yet answer it. This supersedes the same day's earlier clause, that the controls run ahead of the dialogue marked rather than withheld on the argument that the author may rule at any stage. They may, and the way they do it is to move the node's stage in the dialogue; a live control on a periagogic node does not offer that, it offers an act the record will not honour. Where the stage asks for the author's words and the node carries none, the column says that in as many words rather than rendering an empty space, because "nothing of yours is recorded here, and what the answer says the AI drafted" is the fact those stages exist to change, and a blank says it to no one.
+
+Then the decisions. They are the node's own answer, where alternatives are pending on it, and its asking facts: the authority class a confirmation would confer, the node's existence, and its persistence where the recommendation would change the node's shape. Each is labelled with the question it asks, in the words of the node or of the fact, because under `aspects-are-nodes` every decision is a question and a decision labelled with a category tells the author nothing about what is being asked. Under each are its choices, and a choice row leads with what that choice would answer, in the sentence the record holds for it, carrying its name beside that as the handle the record files it under. A row that shows only the name shows the author a list of identifiers: the name is how a ruling is stored and the sentence is the decision. A fact's choices are vocabulary rather than slugs, but the rule is the same and they carry the same sentence: what confirming that choice would mean, in the words the node defining the fact uses for it. The authority class is the most repeated decision on the page and rendered as the two bare words `ratified` and `delegated` it told the author nothing they did not already have to know. The recommendation among the choices is marked, its boldness shown, the rest of the row's text beneath it as drill-down, one simple input records or edits the choice, and a last row rejects every choice on that decision with feedback.
+
+A choice that keeps the text already in the record is named for the authority that text has and never for more. Where the answer is ratified, the choice is the answer as ratified and a confirmation keeps it. Where it carries a deferred stamp or none it is a draft no one has confirmed, since a deferred answer is unanswered until the author rules, so the choice says that confirming ratifies the AI's draft. Naming it "the node as it stands" claims a standing the text does not have, and it reads as the safe and ordinary choice when on an AI-drafted node written in the author's own voice it is the least safe one available. Where no answer stands at all the choice is not offered, because there is nothing to keep.
+
+A decision is asked whenever its boldness is anything but low, and folds unasked into the rendered disposition when its boldness is low; nothing else folds, and a session that folds against that rule records the override and its reason in the account. Because boldness measures how much rests on the AI's own knowledge against the record, high boldness is low confidence: reading the author's words, that very high confidence can just be included in the final render, straight off the stored field and without that inversion would ask about everything the AI is surest of and fold everything it is least sure of.
+
+Beneath the decisions, the ruling on the whole, with the caption that says what a confirmation would do sitting on the control itself and not across the screen from it, so that it cannot say nothing else is proposed while the decisions above it propose something. Beneath that, what a ruling here makes decidable: the node's unanswered children and the open questions that name it, what each asks, and that a ruling here is what makes them decidable. They are indications and never rows. Every decision that is a question is a node, and a node is ruled from the rail in its own turn in the one order, so a screen offering its children as confirmable rows would impose a second order on nodes the one order has already placed. Last, as drill-downs, the review's reading of the node, the author's words, and the AI's account -- except at the two stages that ask for the author's words, where what they have already said on this node comes up beside the control asking for more, open, rather than staying folded three sections below the question it answers.
+
+The right-hand column is the disposition and nothing else: the node as it would stand under the choices made so far, re-rendered as each choice changes, with the folded decisions simply present in it and never asked about. Where an answer stands it leads with the edit this ruling would make, and where none stands it shows the whole. The edit says what it is an edit against, because a diff implies a ground and the ground here is usually a draft: against the ratified answer where there is one, and against a draft no one has confirmed where there is not. That is the author's finding of 2026-09-03 on `commons.systems/disposition-graph/purpose`, that a node "still indicates that it is an edit to a confirmed disposition ... even though no node is yet confirmed". The diff is not what was wrong and it stays; what was wrong was letting it imply a standing its base does not have. Nothing that is about the ruling shares the column with it -- no control, no caption, no indication, no drill-down -- because the column's one job is to show the author the thing they are ruling on, and every sentence of apparatus in it is a sentence they must read past to see it. Where there is no disposition to show, because the node has neither an answer nor a recommended text, the column is not held open: the item is one column and the line saying so follows the ask, since half a screen of white reserved for a sentence is the same fault as apparatus in the column, spending the reader's attention on something that is not the node.
+
+The rail is fixed and narrow. The middle and the right share what is left, near enough evenly, and the disposition can take the whole screen on demand. Before the refinement the right-hand column was the widest, on the argument that the node is the thing in view while the decisions are worked; that argument survives, but the middle column now carries the stage's ask, the decisions, the ruling on the whole, the indications and three drill-downs, and a working column starved to a third is a worse failure than a reading column at a half. Neither is the author's ruling: the author moved the material and said nothing about width, and this is the consequence drawn from it.
+
+What an earlier stage offers instead is the dialogue itself. The stage is a chip, and the chip carries two controls: one opens an alignment session on this node, as a plain link so that leaving the page reads as leaving the page, and one copies the instruction that starts it, `/align <the node's id>`. The two are the same instruction by two routes, one for a reader who can follow the link and one for a reader who is somewhere else. The page's own two controls at the top are the same pair at the scale of the whole sitting: one records every staged response where a session reads them back, and one copies the instruction that carries them into a session by hand, and they say which is which rather than leaving the author to infer it from a verb.
+
+A response is one of the three the unanswered node opens and this page adds none: choosing the recommendation's choice on every asked decision and confirming the whole is a confirmation; choosing any other and confirming is a confirmation with edits; a rejection row, on one decision or on the whole, is a denial with feedback. Responses stage and submit together across nodes, so selecting another node never discards one, and the rail marks every node that carries a staged response.
+```
 
 #### stage-counts-kept
 
-The four stage counts stay among the metrics, on the argument that the author needs to see what is coming, how much sits at the periagogic stage and how much at review, and not only how much can be ruled now. Against it: a stage count instruments no disposition, which is the standard the author set for a metric, and what is coming is already carried by the open count and by the order itself.
+The four stage counts stay among the metrics, on the argument that the author needs to see what is coming, how much sits at the periagogic stage and how much at review, and not only how much can be ruled now.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: a stage count instruments no disposition, which is the standard the author set for a metric, and what is coming is already carried by the open count and by the order itself.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The four stage counts stay among the metrics, on the argument that the author needs to see what is coming, how much sits at the periagogic stage and how much at review, and not only how much can be ruled now.
+```
 
 #### metrics-link-into-the-page
 
-Each metric links to the first node on this page that it counts, keeping the author inside the page, rather than out to the disposition it instruments in the browser. Against it: the author's standard is that the metric hyperlinks to the disposition, and a disposition leaves this page the moment it is answered, so all five links would break on the rulings that make them true, on four rulings, since Ruleable and Survey owed both name the clean-context-review node.
+Each metric links to the first node on this page that it counts, keeping the author inside the page, rather than out to the disposition it instruments in the browser.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: the author's standard is that the metric hyperlinks to the disposition, and a disposition leaves this page the moment it is answered, so all five links would break on the rulings that make them true, on four rulings, since Ruleable and Survey owed both name the clean-context-review node.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+Each metric links to the first node on this page that it counts, keeping the author inside the page, rather than out to the disposition it instruments in the browser.
+```
 
 #### decisions-are-the-widest-column
 
-The decisions take the widest column and the node as it would stand sits in a narrow pane beside them, which is the plainer reading of the author's own phrase, "right aligned context pane". Against it: the reason the sitting read into the author's move, that the result should be in view while the list is worked, which the author's words do not give, and a whole node's text in a narrow pane is not in view. The answer takes that reading over the noun and lets the pane expand to the whole screen on demand; a ruling for this alternative takes the noun.
+The decisions take the widest column and the node as it would stand sits in a narrow pane beside them, which is the plainer reading of the author's own phrase, "right aligned context pane".
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: the reason the sitting read into the author's move, that the result should be in view while the list is worked, which the author's words do not give, and a whole node's text in a narrow pane is not in view. The answer takes that reading over the noun and lets the pane expand to the whole screen on demand; a ruling for this alternative takes the noun.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The decisions take the widest column and the node as it would stand sits in a narrow pane beside them, which is the plainer reading of the author's own phrase, "right aligned context pane".
+```
 
 #### every-fact-every-option
 
 Every fact the node carries is listed and none folds, and boldness stays shown on the recommendation and acts on nothing; each option's row leads with its sentence, carries its status as the record holds it and what each reading bearing on it says, and the recommended option's row carries beneath its sentence the strongest case against it, in one line, written by the AI and replaced by the clean-context review's counter-argument when the review returns one; everything else on an option is one step down, with a text control for the author's reason and any edits; the last row on every fact is the kick-back, set apart, captioned with what it does to the node, its feedback opening with it, typed to the maieutic movement; the review keeps no section, its readiness going to the stage chip and its counter-argument to the row it argues against; the ruling on the whole goes, the confirmation with edits riding on the option's text instead; the sentence for a reserved fact's choice is projected from the node that defines the fact and the standing option's row leads with the answer's own first sentences beside the standing the text has; and the eyebrow says what placed the node in the order and nothing else. The page renders the structure and never reads prose for what it holds, so its completeness is the facts' completeness, which is the prose-and-structure node's question. The author's words of 2026-09-04 fix every fact listed, every option with its summary, the status of the recommendation and of tradition on each, the radio disabled off the ruling stage, the drill-down with the author's reason, the kick-back last and typed to the maieutic movement, the review merged, the ruling on the whole liquidated and the graph gone from the eyebrow; the AI's are the case against on the row, which amends the author's placement of its explanations, its timing, the kick-back's marking and the place of its feedback, the eyebrow's remaining contents, the standing option's sentence, the metric set and the fifth metric, the columns' division, and the edit-led draft. Recommended from 2026-09-04 to 2026-09-07, when `the-context-pane-previews-the-selected-option` superseded it, keeping its text as the base the fence extends by one sentence.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: the-context-pane-previews-the-selected-option
+
+```diff
+@@ -17,7 +17,7 @@
+ 
+ A metric on this page is a signal, an instrument, or a criterion of a recorded disposition and never a count for its own sake; each names the disposition it instruments and links to that node in the browser, which addresses every node by its id where this page has no route to one, and a node the browser does not render, one with no answer yet, is named by its id and not linked, the metric saying so. Five meet that standard; a sixth, kick-backs per node and per sitting, is on this fact as an option raised by the not-proven-third-verdict reading. Open, the size of the outstanding dialogue, for the unanswered node, under which every node is unanswered until the author confirms it, so the count is the author's outstanding authority. Ruleable, the nodes with both readings behind them, a forward review pinned to the recommendation as it stands and a survey pin on the same, for the clean-context-review node, whose recommended option `per-draft-and-survey` is what stands between a draft and the author, so the count is what can be ruled now. Next settles, what a ruling on the first node in the order would make decidable, for the alignment-order node, whose recommended answer is that the ruling settling the most comes first, so the count is what one ruling buys. Stale, the nodes on which either reading's pin, or a ruling's, no longer matches the text it read, for the frontier-consistency node, whose validations catch it, so the count is how much of what looks ruleable rests on a reading of text that has since moved. Survey owed, the nodes at the review or ruling stage that no survey has pinned or whose survey pin is stale, for that same option of the clean-context-review node, so the count is what the survey must read before any of it can be ruled. The stage counts, the per-graph lines, and the lede go: a stage count instruments no disposition, and a graph is a label on a row rather than a division of the order.
+ 
+-The middle column holds everything the ruling asks, and the right-hand column holds nothing but the disposition itself: the node as it would stand under the option selected in the middle column, resolved from that option's content and re-rendered as the selection moves, so that the author reads what they are about to confirm and not what stands beside it. With nothing selected it holds the node as it stands, which is the content of the option last confirmed, and where none has been it says so rather than rendering a draft in that place. The column is headed by the node's question and its id, and beneath them one line saying what put the node where it is: its settling count, which is what placed it in the order; the options pending on it, which the alignment-order node shows beside that count as what a sitting will cost; and the nodes it stands under, whose grant a ruling here would fall within and whose rulings made this one decidable. Nothing else is in that line. The graph is already in the id above it; the rank breaks ties in an order the rail already shows; and the class is read off the rulings on the facts, which the column renders one by one directly beneath, so a word summarising them there is the facts said twice. The line is named here because a line no answer names collects what no answer justifies, which is what had happened to it. The stage is the first thing the column says of the ruling, because the stage names the movement owed and so what the column is for: at the periagogic and the maieutic stages what is owed is the author's own words, which the alignment session collects and this page does not, so the column names the movement owed and offers the chip's two controls, which are the route to it. Only the ruling stage takes anything from the author, and what it takes is the confirmation: the page's scope is the final confirmation and, of every other movement, a preview and a read-only indicator, as the author's rule of 2026-09-06 fixes it, all other information from the author being given in the `/align` interview. That is this page's side of the three surfaces that bound what reaches the author, which `commons.systems/disposition-graph/turn-form` states whole and which is cited here rather than restated, since one surface's side is not the rule. A confirmation recorded on a node that has not reached that stage is invalid, as the author's words of 2026-09-04 direct, so at every earlier stage the facts, their options and the recommendation are all rendered and every input among them is disabled: the author sees exactly what will be asked and cannot yet answer it. This supersedes the same day's earlier clause, that the controls run ahead of the dialogue marked rather than withheld on the argument that the author may rule at any stage. They may, and the way they do it is to move the node's stage in the dialogue; a live control on a periagogic node does not offer that, it offers an act the record will not honour.
++The middle column holds everything the ruling asks, and the right-hand column holds nothing but the disposition itself. The column is headed by the node's question and its id, and beneath them one line saying what put the node where it is: its settling count, which is what placed it in the order; the options pending on it, which the alignment-order node shows beside that count as what a sitting will cost; and the nodes it stands under, whose grant a ruling here would fall within and whose rulings made this one decidable. Nothing else is in that line. The graph is already in the id above it; the rank breaks ties in an order the rail already shows; and the class is read off the rulings on the facts, which the column renders one by one directly beneath, so a word summarising them there is the facts said twice. The line is named here because a line no answer names collects what no answer justifies, which is what had happened to it. The stage is the first thing the column says of the ruling, because the stage names the movement owed and so what the column is for: at the periagogic and the maieutic stages what is owed is the author's own words, which the alignment session collects and this page does not, so the column names the movement owed and offers the chip's two controls, which are the route to it. Only the ruling stage takes anything from the author, and what it takes is the confirmation: the page's scope is the final confirmation and, of every other movement, a preview and a read-only indicator, as the author's rule of 2026-09-06 fixes it, all other information from the author being given in the `/align` interview. That is this page's side of the three surfaces that bound what reaches the author, which `commons.systems/disposition-graph/turn-form` states whole and which is cited here rather than restated, since one surface's side is not the rule. A confirmation recorded on a node that has not reached that stage is invalid, as the author's words of 2026-09-04 direct, so at every earlier stage the facts, their options and the recommendation are all rendered and every input among them is disabled: the author sees exactly what will be asked and cannot yet answer it. This supersedes the same day's earlier clause, that the controls run ahead of the dialogue marked rather than withheld on the argument that the author may rule at any stage. They may, and the way they do it is to move the node's stage in the dialogue; a live control on a periagogic node does not offer that, it offers an act the record will not honour.
+ 
+ Then the facts, every one the node carries and none folded: its answer, whose options are the candidate answers to its question, the one that stands among them where one stands; the authority class a confirmation would confer; its existence; and its persistence where the recommendation would change its shape. Which facts the page lists on a node is the `which-facts-are-listed` node's question, and what this answer says of it stands only until that node rules. How a fact is headed is the `how-a-fact-is-headed` node's question, on the author's words of 2026-09-04, and what this answer says of it stands only until that node rules: the record's own reasoning headed each fact with the question it asks, in the words of the node or of the fact, because under `aspects-are-nodes` every decision is a question and a decision labelled with a category tells the author nothing about what is being asked; the author's words direct the shorter form, the name of what the fact decides, linked to the node that defines it. The list the page shows is the list the ruling asks, in full, as the author's words of 2026-09-04 direct, and the reason is what the fold cost: a page that folds a decision away has taken it, and the rationale carries the measure of it. Boldness stays, is shown on every recommendation, and acts on nothing: it is how much of the recommendation rests on the AI's own knowledge against the record and the author's words, so that high boldness is low confidence, and it is what the author reads to know how far to trust the mark beside an option, never what the page reads to decide whether to show one. A fact with no recommendation on it says so and marks no row, rather than rendering an unmarked list that reads as a recommendation withheld. A node that carries no facts offers nothing invented: such a node is at the periagogic or the maieutic stage, where no candidate answer exists and no decision is owed yet, so the column says which movement is owed, says that nothing is proposed yet, and carries the chip's two controls and no other. Everything the column shows of a fact it reads from the fact, its options, their sentences, their status, their readings and their rulings, and it never recovers from a node's prose what the structure is meant to hold; so the page is complete exactly as far as the facts are complete, and whether a fact's options are the whole of what was considered is the question of the prose-and-structure node, which this page papers over in neither direction.
+ 
+```
+
 #### independent-decisions-as-children
 
 The decisions the answer takes beyond the author's words, which metrics the rail carries and where each links, how the two content columns divide, where the case against the recommended option sits and when it is written, where the kick-back's feedback sits, what the eyebrow keeps, and how the standing option gets its sentence, are minted as questions under this node, each with its own options, and the answer fact keeps the shape the author's words fix. Under `dialogue`'s rule a decision the author would rule on separately is a question and a question is a node, and the delta options on this fact are pairwise compatible, so a ruling for one rules on a whole text that takes the others the AI's way. Proposed by the clean-context review of 2026-09-04; a split is the author's to make, and the session records it and never makes it.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The decisions the answer takes beyond the author's words, which metrics the rail carries and where each links, how the two content columns divide, where the case against the recommended option sits and when it is written, where the kick-back's feedback sits, what the eyebrow keeps, and how the standing option gets its sentence, are minted as questions under this node, each with its own options, and the answer fact keeps the shape the author's words fix. Under `dialogue`'s rule a decision the author would rule on separately is a question and a question is a node, and the delta options on this fact are pairwise compatible, so a ruling for one rules on a whole text that takes the others the AI's way. Proposed by the clean-context review of 2026-09-04; a split is the author's to make, and the session records it and never makes it.
+```
 
 #### case-against-in-the-drill-down
 
 The recommended answer with one clause changed: the AI's case for and against each option sits one step down with the rest of its explanation, as the author's words of 2026-09-04 place it, "AI explanations for recommended or rejection" in the drill-down, and the row carries the sentence, the status and the tradition's bearing only. This is the author's placement, and the recommended option's amendment of it, the case against on the row, is the AI's; a ruling for this option keeps the rest of the recommended text. Passed over on 2026-09-07 after the reading of that day: by its own words it answers the `what-an-option-row-carries` node's question, where the author's same words of 2026-09-04 are recorded as the option `case-against-to-the-details`, and what the row carries at the first level follows whichever that node rules.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The recommended answer with one clause changed: the AI's case for and against each option sits one step down with the rest of its explanation, as the author's words of 2026-09-04 place it, "AI explanations for recommended or rejection" in the drill-down, and the row carries the sentence, the status and the tradition's bearing only. This is the author's placement, and the recommended option's amendment of it, the case against on the row, is the AI's; a ruling for this option keeps the rest of the recommended text. Passed over on 2026-09-07 after the reading of that day: by its own words it answers the `what-an-option-row-carries` node's question, where the author's same words of 2026-09-04 are recorded as the option `case-against-to-the-details`, and what the row carries at the first level follows whichever that node rules.
+```
+
 #### case-against-after-the-review-only
 
-The recommended answer with one clause changed: the recommended option's row carries no case against until the clean-context review has returned one, so that what the author reads there is always the reader's and never the drafter's. Against it, the recording node has the session review its own output adversarially before the review runs, and a row that is empty until then is a row on which the recommendation stands unopposed through the maieutic and review movements. Passed over on 2026-09-07 after the reading of that day: by its own words it answers the `what-an-option-row-carries` node's question, where it is recorded as `ai-line-until-a-reading-returns` and passed over, and when the line on the row is written follows whichever that node rules.
+The recommended answer with one clause changed: the recommended option's row carries no case against until the clean-context review has returned one, so that what the author reads there is always the reader's and never the drafter's.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it, the recording node has the session review its own output adversarially before the review runs, and a row that is empty until then is a row on which the recommendation stands unopposed through the maieutic and review movements. Passed over on 2026-09-07 after the reading of that day: by its own words it answers the `what-an-option-row-carries` node's question, where it is recorded as `ai-line-until-a-reading-returns` and passed over, and when the line on the row is written follows whichever that node rules.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The recommended answer with one clause changed: the recommended option's row carries no case against until the clean-context review has returned one, so that what the author reads there is always the reader's and never the drafter's.
+```
 
 #### kick-back-feedback-one-step-down
 
-The recommended answer with one clause changed: the kick-back's feedback control sits in a drill-down beneath its row, like the reason box on an option, so that every row has the same two levels. Against it, the words are what a kick-back consists of and what the dialogue resumes from, where on an option they are optional because the ruling's content is the option. Passed over on 2026-09-07 after the reading of that day: by its own words it answers the `when-the-kickback-feedback-shows` node's question, where it is recorded under this same name with this node as its source and passed over, and where the feedback control sits follows whichever that node rules.
+The recommended answer with one clause changed: the kick-back's feedback control sits in a drill-down beneath its row, like the reason box on an option, so that every row has the same two levels.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it, the words are what a kick-back consists of and what the dialogue resumes from, where on an option they are optional because the ruling's content is the option. Passed over on 2026-09-07 after the reading of that day: by its own words it answers the `when-the-kickback-feedback-shows` node's question, where it is recorded under this same name with this node as its source and passed over, and where the feedback control sits follows whichever that node rules.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The recommended answer with one clause changed: the kick-back's feedback control sits in a drill-down beneath its row, like the reason box on an option, so that every row has the same two levels.
+```
 
 #### eyebrow-settles-and-pending-only
 
-The recommended answer with one clause changed: the line beneath the question carries the settling count and the options pending, which `alignment-order` names, and not the nodes this one stands under, which no answer names. Against it, the nodes it stands under are whose grant a ruling here falls within and whose rulings made this one decidable, and the line is where the author reads why the node is where it is.
+The recommended answer with one clause changed: the line beneath the question carries the settling count and the options pending, which `alignment-order` names, and not the nodes this one stands under, which no answer names.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it, the nodes it stands under are whose grant a ruling here falls within and whose rulings made this one decidable, and the line is where the author reads why the node is where it is.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The recommended answer with one clause changed: the line beneath the question carries the settling count and the options pending, which `alignment-order` names, and not the nodes this one stands under, which no answer names.
+```
 
 #### open-probe-count-on-the-chip
 
 Everything the recommendation says, with the stage chip carrying the number of probes open on the node beside the readiness it already renders, and the page carrying nothing of a probe's text, its `why` or its `discharges`. Raised by the `author-questions` sitting of 2026-09-04, whose answer requires it: the author's words exclude the list from this page, and the two readings under this node hold that the recommender does not decide what the decider sees, which is the reasoning this record used to kill the boldness fold here. The count reconciles them so far as they can be reconciled, and the divergence that remains, the probe's text, is recorded on that node rather than argued away. Adopted into the recommended text on 2026-09-04 after the reading of that day, with the citation of author-questions. Its work is at the maieutic stage, where this page asks the author for their intention and an author writing into that control with probes open and no sign of them is answering questions they cannot see; by the ruling stage no node with an open probe arrives at all.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+Everything the recommendation says, with the stage chip carrying the number of probes open on the node beside the readiness it already renders, and the page carrying nothing of a probe's text, its `why` or its `discharges`. Raised by the `author-questions` sitting of 2026-09-04, whose answer requires it: the author's words exclude the list from this page, and the two readings under this node hold that the recommender does not decide what the decider sees, which is the reasoning this record used to kill the boldness fold here. The count reconciles them so far as they can be reconciled, and the divergence that remains, the probe's text, is recorded on that node rather than argued away. Adopted into the recommended text on 2026-09-04 after the reading of that day, with the citation of author-questions. Its work is at the maieutic stage, where this page asks the author for their intention and an author writing into that control with probes open and no sign of them is answering questions they cannot see; by the ruling stage no node with an open probe arrives at all.
+```
 
 #### page-collects-only-the-confirmation
 
@@ -441,6 +616,53 @@ terms in the paragraph on what the ruling stage takes, and which cites
 `commons.systems/disposition-graph/turn-form` for the three surfaces this rule
 is the page's side of.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The author's rule of 2026-09-06, which is a scope on this whole answer and not a
+clause of it: the page collects the final confirmation and nothing else, shows
+every other movement as a preview or a read-only indicator, and sends every other
+thing the author has to say to the `/align` interview.
+
+It strikes the free-text control at the periagogic and the maieutic stages, and
+the caption written for the case where the node carries no words. It leaves
+standing everything the page renders read-only at those stages, which is the
+whole of the middle column with its inputs disabled, since a preview is what the
+author asked those stages to be. It leaves standing the ruling stage's own
+controls, the option rows, the option's text control and the kick-back's, because
+those are the confirmation, which is the one thing this rule says the page is
+for. What it does not itself settle is which of the ruling stage's controls count
+as part of the confirmation and which are a change request the interview should
+take, which is `where-a-change-request-goes`' question, nor whether the author's
+recorded words may be shown back as a read-only preview, which is
+`authors-words-on-the-page`', nor whether the AI's account may be, which is the
+option `account-not-on-the-page` on this fact, the survivor of
+`the-account-on-the-page` after that node was pruned on 2026-09-06.
+
+Recommending it is not this subsection's act: the rule is the author's and is
+recorded here the turn it was said. Adopted into the recommended text on
+2026-09-06 after the maieutic movement of that day, which states the rule in
+terms in the paragraph on what the ruling stage takes, and which cites
+`commons.systems/disposition-graph/turn-form` for the three surfaces this rule
+is the page's side of.
+```
 
 #### standing-named-in-the-pane
 
@@ -475,17 +697,140 @@ widening the reserve.
 Recorded and not applied. The child's stage is the frontier's to show and is not
 restated here; a ruling here is what would move these two clauses; the reading of 2026-09-06 on that node found that the child
 had amended them itself, which is authority widening on the way down.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+Two clauses of this answer change if
+`commons.systems/disposition-graph/where-the-unconfirmed-indication-goes` rules
+for `the-line-that-names-what-the-pane-shows`, the standing text there under
+which the indication goes in the right-hand column's heading, and which that
+node no longer recommends; the two clauses are this node's and not that one's,
+which is why they are an option here rather than an amendment there.
+
+What the child recommends now is `line-only-where-the-act-is-live`, the
+indication above the answer fact's options at the ruling stage alone, which leaves the right-hand column's heading unqualified
+and takes the standing off the row without putting it in the pane; so a ruling
+there for the recommendation moves the first of these two clauses and not the
+second, and the naming paragraph is marked above as standing only until that
+node rules. This option is what a return to the child's standing text would
+move, and it is kept for that case.
+
+The naming paragraph says the row tells the author that confirming ratifies the
+AI's draft. Under that child's answer the row says nothing of the kind, since the
+sibling `what-an-option-row-carries` takes the standing mark off the row and the
+indication moves to the column that holds the disposition; the paragraph's
+argument survives whole and its locus changes. And the account of the right-hand
+column says that column carries "no control, no caption, no indication, no
+drill-down", which the child's answer contradicts in one word: a qualified
+heading is an indication. The reserve's reason is that every sentence of
+apparatus there is a sentence the author must read past to see the disposition,
+and one qualification of a heading that already exists is the smallest
+exception that reason admits, which is the case for making it rather than
+widening the reserve.
+
+Recorded and not applied. The child's stage is the frontier's to show and is not
+restated here; a ruling here is what would move these two clauses; the reading of 2026-09-06 on that node found that the child
+had amended them itself, which is authority widening on the way down.
+```
+
 #### standing-sentence-stored
 
-The recommended answer with one clause changed: the option that stands carries a `####` subsection of its own, a stored sentence, rather than the answer's first sentences read from `## Answer`; the data-side resolution of the seam between `viable-options`, which has every option carry its sentence, and `dialogue`, which exempts the one that stands. Against it, a stored sentence beside the answer is the answer's first sentences said twice, and drifts. Passed over on 2026-09-04 after the reading of that day: by its own words it answers the dialogue node's question, where it is recorded as `standing-option-carries-a-subsection` with this node as its source, and the row's sentence follows whichever that node rules.
+The recommended answer with one clause changed: the option that stands carries a `####` subsection of its own, a stored sentence, rather than the answer's first sentences read from `## Answer`; the data-side resolution of the seam between `viable-options`, which has every option carry its sentence, and `dialogue`, which exempts the one that stands.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it, a stored sentence beside the answer is the answer's first sentences said twice, and drifts. Passed over on 2026-09-04 after the reading of that day: by its own words it answers the dialogue node's question, where it is recorded as `standing-option-carries-a-subsection` with this node as its source, and the row's sentence follows whichever that node rules.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The recommended answer with one clause changed: the option that stands carries a `####` subsection of its own, a stored sentence, rather than the answer's first sentences read from `## Answer`; the data-side resolution of the seam between `viable-options`, which has every option carry its sentence, and `dialogue`, which exempts the one that stands.
+```
 
 #### kickback-count-metric
 
 A sixth metric, kick-backs per node and per sitting, for the recording node, whose kick-back row is what it counts, so that the effect the not-proven-third-verdict reading predicts is watched rather than argued. Raised by that reading on 2026-09-04 and recorded here after the clean-context reading of the same day found it on no fact. Viable and not adopted: nothing counts a kick-back until the record stores one, and the recording node writes a kick-back as the author's words and a stage, not as a countable field.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+A sixth metric, kick-backs per node and per sitting, for the recording node, whose kick-back row is what it counts, so that the effect the not-proven-third-verdict reading predicts is watched rather than argued. Raised by that reading on 2026-09-04 and recorded here after the clean-context reading of the same day found it on no fact. Viable and not adopted: nothing counts a kick-back until the record stores one, and the recording node writes a kick-back as the author's words and a stage, not as a countable field.
+```
+
 #### live-re-render-per-choice
 
 The right-hand column re-renders the node as each choice is made, which the recommended text promised until the reading of 2026-09-04. Passed because the encoding this node depends on gives text only to the option a fact recommends, so a choice of a delta option has no text to render, and because the artifact renders the column once from the fence and the standing text and never did otherwise.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The right-hand column re-renders the node as each choice is made, which the recommended text promised until the reading of 2026-09-04. Passed because the encoding this node depends on gives text only to the option a fact recommends, so a choice of a delta option has no text to render, and because the artifact renders the column once from the fence and the standing text and never did otherwise.
+```
 
 #### progressive-disclosure-diverges-on-the-fold
 
@@ -508,6 +853,45 @@ contradicts. It supersedes the suggested edit this node's own reading of
 `discloses-detail-not-decisions`: that option was passed over the same day, for
 saying the record diverges from the tradition nowhere.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The drill-down clause keeps its two levels and strikes the words "that tradition
+never asked for a decision to be removed from the ask", putting in their place
+that the tradition would defer the rarely used options by frequency and
+importance of use, that the author's words of 2026-09-04 put every fact and
+every option at the first level, and that the split within a row is this page's
+own criterion and not the tradition's. The divergence is the author's, which the
+evaluation node's rule says a tradition cannot overrule, and it is recorded on
+`commons.systems/disposition-graph/progressive-disclosure`'s recommended text as
+one `bears` entry carrying `diverged` on the option `every-fact-every-option`;
+that node's live frontmatter carries `adopted` on the same option and stands
+`adopted` until it rules, which is what the chip on this option's row says
+meanwhile. Raised by the second
+clean-context reading of that node on 2026-09-05, which found that an account
+note on the reading binds nothing and shows nowhere beside the clause it
+contradicts. It supersedes the suggested edit this node's own reading of
+2026-09-05 gave for the same clause, to move the reading's recommendation to
+`discloses-detail-not-decisions`: that option was passed over the same day, for
+saying the record diverges from the tradition nowhere.
+```
 
 #### account-not-on-the-page
 
@@ -540,6 +924,56 @@ reader who cannot see it cannot judge the case against on the row against the
 reasoning behind it. The recommendation on this fact has not moved and this
 option acts on nothing.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The AI's account is not shown on this page. The clause "Last, as drill-downs, the
+author's words and the AI's account" keeps the first and drops the second, so the
+column carries the facts, their options, the recommendation with the case against
+it, and the author's own words, and the account is read in the browser by anyone
+who wants it.
+
+The option is the survivor of `the-account-on-the-page`, the child minted for the
+author's observation of 2026-09-04, "I do not undertand what 'The AI's account'
+is meant to be recording. If it is justified to support alignment dialogue and
+review then keep it, but it does not need to be presented in the UI." That node
+was pruned on 2026-09-06 under the author's delegation, on the independence test:
+its only possible answer was a reading of this clause, its facts would have been
+this fact, and it would have been pruned the moment this recommendation moved.
+The substantive half of the author's observation, what `## Account` is for and
+whether it is justified at all, is not this option's and is not lost with the
+node: it stands as the probe `what-the-account-records` on
+`commons.systems/disposition-graph/dialogue`, sourced to the author and raised
+2026-09-04, whose own text already says that "the-account-on-the-page decides
+only the presentation".
+
+The contrary reading is on the list and is why this option is not the
+recommendation by default: the author's rule of 2026-09-06 permits a preview and
+a read-only indicator of every movement the page is not running, and the account
+folded into a drill-down is exactly that. What the author asked was what the
+account records, and their condition was that it be kept if it is justified; a
+reader who cannot see it cannot judge the case against on the row against the
+reasoning behind it. The recommendation on this fact has not moved and this
+option acts on nothing.
+```
+
 #### copy-control-beside-the-launch-link
 
 The page's copy control sits beside the session-launch link, both at the scale of
@@ -557,6 +991,43 @@ Adopted into the recommended text on 2026-09-07 after the reading of that day.
 What each of the three controls does stays `ruling-transport`'s, and where the
 three sit as a group is still named nowhere; this option settles the one
 adjacency the author's words fix and no more.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The page's copy control sits beside the session-launch link, both at the scale of
+the whole sitting, so that the two routes to one instruction are read together
+and the author can see that they are two routes and not two acts. The author
+directed it in as many words on 2026-09-04, in the disposition quoted above:
+"move the "copy all responses" next to this button and make sure it is copying
+the same instruction that would be used to initialize the cloud session." The
+answer took the second half of that sentence, that the two emit one canonical
+instruction, and declined the first, saying it named no placement; the clean-context
+reading of 2026-09-07 found that the placement was then settled by no node,
+`ruling-transport`'s recommended text saying nothing of where the three controls
+sit either, and that the shim's `for:` line noticed the gap without curing it.
+Adopted into the recommended text on 2026-09-07 after the reading of that day.
+What each of the three controls does stays `ruling-transport`'s, and where the
+three sit as a group is still named nowhere; this option settles the one
+adjacency the author's words fix and no more.
+```
 
 #### clauses-cited-not-restated
 
@@ -579,31 +1050,65 @@ ruling against its children while the whole description stays in one place. The
 option is the stronger one the day a child rules, and it is on the fact for the
 author to take.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability as the optional buffer the ruling-transport node describes, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's recommended answer, the open dialogue as the author rules on it; eight of that answer's clauses are in play on the children under it and no reconciliation has reached them, and the page's own controls sit in its footer, a placement this answer does not name, though it now places the copy control beside the session-launch link; its session-launch link is the stub the ruling-transport node's shim declares
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+The answer keeps only the clauses no child owns, the three columns, what the rail
+carries, what the page takes from the author and how a ruling is transported, and
+for every decision a child owns it cites that child by id in one clause instead
+of restating what the child decides. The page would then be described in one
+place per decision, a child's ruling would change only that child's text, and the
+parent could not go stale against its own children, which is the failure the
+reading of 2026-09-07 found four times in the two days since the children were
+minted.
+
+Raised by that reading as the viable option it found missing. Viable and not
+adopted: the author reads one page and this answer is the only text that
+describes it whole, so a parent reduced to citations gives the author less to
+rule on than the page they are ruling about, and pushes the page's coherence into
+eight separate sittings; and the markers, which the same reading's first four
+findings ask for and which this amendment writes, are what keep the parent from
+ruling against its children while the whole description stays in one place. The
+option is the stronger one the day a child rules, and it is on the fact for the
+author to take.
+```
+
 #### the-context-pane-previews-the-selected-option
 
 The right-hand column holds the node as it would stand under the option selected in the middle column, resolved from that option's content and re-rendered as the selection moves; with nothing selected it holds the content of the option last confirmed, and where none has been it says so rather than rendering a draft in that place.
 
 **AI support.** The author's refinement of 2026-09-07: "when the author selects an option via the alignment artifact the context pane is dynamically updated to preview the node that is being confirmed." The column already held the disposition alone, and this answer says which disposition: the one about to be confirmed. Nothing is added to the middle column and the ruling stays per fact.
 
+Recorded on the author's dispositions of 2026-09-03 and 2026-09-04, which the `## Disposition` section carries and keeps as the quotes node decides. On 2026-09-03 the author opened this question with the words "full disposition detail renders in a right aligned context pane rather than rendering below the confirmation requests", and on 2026-09-04 they refined the layout of the questions: "List each fact without exceptions. For each fact, list all options. Last option is always 'kick back' because none of the options are acceptable - this is not recorded as confirmation, but a kick back to mieutic." The division between the two columns is the author's refinement of 2026-09-04, made on reading the published page: the right-hand column is the rendered disposition and nothing else, and everything that is about the ruling is in the middle. Four defects the author found on `commons.systems/public/agency` the same day are answered in the answer rather than left to the implementation, because each of them was a design fault and not a coding one. The question is the page's own and it was minted because the page was described only inside other rulings, a shim on the growth node, one clause of projection, one sentence of growth's answer, and the three responses on unanswered, so it would have been ratified incidentally and never asked as a question of its own. The shim naming the artifact moves here with the answer, and growth carries the alternative that says so.
+
+The standard the five metrics meet is the one the author set for the browser's graph headings on the frontier-metrics node, that a metric is a signal, an instrument, or a criterion of some disposition and hyperlinks to it. That node's question is the browser's headings and this one's is this page, so the standard is cited rather than adopted and the five metrics are this node's own choice; and because that node is unanswered and grounds no work, the standard is restated in this answer rather than leaned on.
+
+Amended 2026-09-04 on the author's refinement of the layout of the questions, quoted above, which struck the fold rule, liquidated the ruling on the whole and the eyebrow's graph, and asked for the review to be merged where it could be. What the answer adds on its own is the case against the recommended option on its row, the kick-back's marking, the readiness on the stage chip, and the eyebrow's contents, and the account says why each. The rationale no longer restates the options on the answer fact, since the page renders them from the fact. Amended again 2026-09-06 on the author's rule that the scope of the page is the final confirmation and, of every other movement, a preview and a read-only indicator, all other information from the author being given in the `/align` interview: the free-text control at the periagogic and the maieutic stages goes, with the caption written for a node carrying no words and the playback that opened beside it, and what an earlier stage offers is the chip's two controls and the preview.
+
+Measured at graph commit 4102fd4b, before the reconciliation of 2026-09-04, so that the answer carries the rule and this carries the numbers: twelve of seventy-five nodes showed the author no decision at all, nine because every fact on them folded, two of those global-tier rules, and three because they carried no facts and printed the same sentence where it was false; 168 of 407 options carried no sentence, 114 on the authority fact, 38 the option that stands, 12 on existence and 4 on persistence; and the tradition indicator was blank on 393 of 407.
+
 **AI divergence.** A pane that re-renders on every selection shows the author a node that changes under their reading, and where two facts' selections would each move the answer the pane can show only one composition, which this answer leaves to the answer fact; and the empty state, which is every node in the record today, is a column that mostly says nothing is confirmed.
 
-### authority
+The delta encoding still puts five independent decisions in one radio group, the metric set, where each metric links, the division of the two content columns, the eyebrow's contents, and where the indication that a text is unconfirmed sits, so a combined ruling needs a confirmation with edits; the children the earlier review proposed would give each its own text, reading and pane.
 
-Ratified, because this page is the surface every ruling passes through: a row that mis-states what a confirmation does, as the caption naming a draft "the node as it stands" did on `commons.systems/public/agency`, records a ruling the author did not give, and that is capture-shaped whatever the fold does; the fold's removal took the page's one mechanism for deciding what the author sees and left this one, which is about what the author is told they are deciding. Deferred is on the fact because the record's classes are three and the reader admits it; delegated would let the recommendation act on the layout, which is reversible, but also on what a confirmation is said to mean, which is not. Moderate boldness: the ground is the record's own on `agency` and this page's own history, and what rests on the AI is the reading that a caption is a ruling.
-
-### persistence
-
-The recommendation declares a shim on this node that the node does not carry today: the alignment page itself, moved here from `growth` with its declaration date of 2026-09-03 intact and its liquidation condition unchanged, its artifact clause amended to name the buffer as the ruling-transport node describes it, and its `for:` line rewritten to name this node's answer. Confirming it makes this node the shim's home; denying it leaves the shim on `growth`, where it describes a page that no node's ruling settles. The two nodes rule together, and `growth` carries the matching decision.
-
-#### with the page's shim
-
-This node carries the alignment page's shim: the artifact clause amended to name the buffer as the ruling-transport node describes it, the declaration date of 2026-09-03 and the liquidation condition moving here from `growth` unchanged, with the `for:` line naming this node's answer, so that the page is described where its question is asked.
-
-#### without it
-
-This node carries no shim and the page's declaration stays on `growth`, where it describes a page whose question that node does not ask; the two persistence facts then disagree, since `growth`'s recommendation moves the shim out.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -673,17 +1178,31 @@ marked; four of the marks were written on 2026-09-07, the reading of that day
 having found this sentence false for exactly those four. The clauses that
 remain are this node's own, the three columns, what the rail carries, what the
 page takes from the author, and how a ruling is transported.
-
-## Rationale
-
-Recorded on the author's dispositions of 2026-09-03 and 2026-09-04, which the `## Disposition` section carries and keeps as the quotes node decides. On 2026-09-03 the author opened this question with the words "full disposition detail renders in a right aligned context pane rather than rendering below the confirmation requests", and on 2026-09-04 they refined the layout of the questions: "List each fact without exceptions. For each fact, list all options. Last option is always 'kick back' because none of the options are acceptable - this is not recorded as confirmation, but a kick back to mieutic." The division between the two columns is the author's refinement of 2026-09-04, made on reading the published page: the right-hand column is the rendered disposition and nothing else, and everything that is about the ruling is in the middle. Four defects the author found on `commons.systems/public/agency` the same day are answered in the answer rather than left to the implementation, because each of them was a design fault and not a coding one. The question is the page's own and it was minted because the page was described only inside other rulings, a shim on the growth node, one clause of projection, one sentence of growth's answer, and the three responses on unanswered, so it would have been ratified incidentally and never asked as a question of its own. The shim naming the artifact moves here with the answer, and growth carries the alternative that says so.
-
-The standard the five metrics meet is the one the author set for the browser's graph headings on the frontier-metrics node, that a metric is a signal, an instrument, or a criterion of some disposition and hyperlinks to it. That node's question is the browser's headings and this one's is this page, so the standard is cited rather than adopted and the five metrics are this node's own choice; and because that node is unanswered and grounds no work, the standard is restated in this answer rather than leaned on.
-
-Amended 2026-09-04 on the author's refinement of the layout of the questions, quoted above, which struck the fold rule, liquidated the ruling on the whole and the eyebrow's graph, and asked for the review to be merged where it could be. What the answer adds on its own is the case against the recommended option on its row, the kick-back's marking, the readiness on the stage chip, and the eyebrow's contents, and the account says why each. The rationale no longer restates the options on the answer fact, since the page renders them from the fact. Amended again 2026-09-06 on the author's rule that the scope of the page is the final confirmation and, of every other movement, a preview and a read-only indicator, all other information from the author being given in the `/align` interview: the free-text control at the periagogic and the maieutic stages goes, with the caption written for a node carrying no words and the playback that opened beside it, and what an earlier stage offers is the chip's two controls and the preview.
-
-Measured at graph commit 4102fd4b, before the reconciliation of 2026-09-04, so that the answer carries the rule and this carries the numbers: twelve of seventy-five nodes showed the author no decision at all, nine because every fact on them folded, two of those global-tier rules, and three because they carried no facts and printed the same sentence where it was false; 168 of 407 options carried no sentence, 114 on the authority fact, 38 the option that stands, 12 on existence and 4 on persistence; and the tradition indicator was blank on 393 of 407.
 ```
+
+### authority
+
+Ratified, because this page is the surface every ruling passes through: a row that mis-states what a confirmation does, as the caption naming a draft "the node as it stands" did on `commons.systems/public/agency`, records a ruling the author did not give, and that is capture-shaped whatever the fold does; the fold's removal took the page's one mechanism for deciding what the author sees and left this one, which is about what the author is told they are deciding. Deferred is on the fact because the record's classes are three and the reader admits it; delegated would let the recommendation act on the layout, which is reversible, but also on what a confirmation is said to mean, which is not. Moderate boldness: the ground is the record's own on `agency` and this page's own history, and what rests on the AI is the reading that a caption is a ruling.
+
+### persistence
+
+The recommendation declares a shim on this node that the node does not carry today: the alignment page itself, moved here from `growth` with its declaration date of 2026-09-03 intact and its liquidation condition unchanged, its artifact clause amended to name the buffer as the ruling-transport node describes it, and its `for:` line rewritten to name this node's answer. Confirming it makes this node the shim's home; denying it leaves the shim on `growth`, where it describes a page that no node's ruling settles. The two nodes rule together, and `growth` carries the matching decision.
+
+#### with the page's shim
+
+This node carries the alignment page's shim: the artifact clause amended to name the buffer as the ruling-transport node describes it, the declaration date of 2026-09-03 and the liquidation condition moving here from `growth` unchanged, with the `for:` line naming this node's answer, so that the page is described where its question is asked.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+#### without it
+
+This node carries no shim and the page's declaration stays on `growth`, where it describes a page whose question that node does not ask; the two persistence facts then disagree, since `growth`'s recommendation moves the shim out.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 ## Account
 
@@ -2917,3 +3436,7 @@ On the viability of the options: The diff adds, removes, or re-marks no option's
 Strongest counter-argument (weak): The rewritten closing sentence for `every-fact-every-option` adopts the previous reading's own suggested wording almost verbatim, including the claim that the fence is extended by exactly "one sentence"; the fence's middle-column paragraph (unchanged by this diff, and outside this delta's scope since it predates the pinned commit) arguably carries more than one new clause/sentence describing the re-rendering behaviour, so the amendment's self-description may slightly overstate its own precision. This is inherited from the previous reading's suggested text rather than introduced independently by this repair, and it does not touch anything the previous reading or the survey's three findings actually raised, so it does not block forwarding.
 
 The session's reply: The sentence describes the fence as it stands: the option's text and the fence differ by that one sentence, which the reading's scope excluded and this session checked.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/alignment-page stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `the-context-pane-previews-the-selected-option`; 28 `## Disposition` entries became the ledger entries words/2026-09-03/16, words/2026-09-03/17, words/2026-09-03/18, words/2026-09-03/19, words/2026-09-03/20, words/2026-09-03/21, words/2026-09-03/22, words/2026-09-04/1, words/2026-09-04/2, words/2026-09-04/3, words/2026-09-04/4, words/2026-09-04/5, words/2026-09-04/6, words/2026-09-04/7, words/2026-09-04/8, words/2026-09-04/9, words/2026-09-04/10, words/2026-09-04/11, words/2026-09-04/12, words/2026-09-06/1, words/2026-09-04/13, words/2026-09-04/14, words/2026-09-06/2, words/2026-09-06/3, words/2026-09-07/1, words/2026-09-07/2, words/2026-09-07/3, words/2026-09-07/4, referenced by 35 options the entry's own date names and by the recommended option for 7 the date named none. The content of `three-column-ruling-screen (at 2e6c3838)`, `every-fact-every-option (at 6c4d89c2)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `stage-counts-kept`, `metrics-link-into-the-page`, `decisions-are-the-widest-column`, `independent-decisions-as-children`, `case-against-in-the-drill-down`, `case-against-after-the-review-only`, `kick-back-feedback-one-step-down`, `eyebrow-settles-and-pending-only`, `open-probe-count-on-the-chip`, `page-collects-only-the-confirmation`, `standing-named-in-the-pane`, `standing-sentence-stored`, `kickback-count-metric`, `live-re-render-per-choice`, `progressive-disclosure-diverges-on-the-fold`, `account-not-on-the-page`, `copy-control-beside-the-launch-link`, `clauses-cited-not-restated`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `57589470c9e634aa20420adc80b317c74079cc23` is re-computed for the encoding as `184c3341ed274c0a5ae84adef73d9df9363e2de8`; nothing it read changed. The survey's pin `94465d401a161fed15196ead1c0e71bd5950de58` was already past the recommendation and is left as it stood.

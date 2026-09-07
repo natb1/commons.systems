@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -29,6 +28,41 @@ bears:
     option: fable-for-both-readings
     relation: diverged
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of the practice the survey produced,
+and no second account of what the record takes from it is on the table. The
+disanalogy the answer records is part of the reading and not a rival to it.
+
+#### standing
+
+Supports grading the bench to the question, which is the rule the record carried and not the one it takes.
+
+**AI support.** Read in the tradition survey of the review sitting of 2026-09-04, and named in `review-model`'s account among the six that its pass with reference to tradition owes: "appellate review by a heavier bench, from the en banc rehearing on a question of exceptional importance, adopted on `conditional-by-boldness`, which is that rule in its purest form, and diverged from on `fable-for-both-readings`, since it grades the bench by the question's importance and every ruling here is the irreversible step". This is the one tradition the survey found that grades a reviewer by rank at all, and it grades by the question and not by the author, which is why the adoption lands on an option the record passed over.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does appellate review by a heavier bench say about grading the reviewer to the question, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/review-model
+source: How a reviewing body is constituted in appellate practice. In the United States, a panel of three circuit judges reviews one district judge, rehearing en banc by the full court is reserved for a question of exceptional importance under Federal Rule of Appellate Procedure 35, and a Supreme Court of nine sits above the circuits; in the United Kingdom, the Supreme Court sits in panels of five, enlarged to seven or nine for cases of constitutional importance. Locus to be checked, the wording of Rule 35.
+bears:
+  - fact: answer
+    option: conditional-by-boldness
+    relation: adopted
+  - fact: answer
+    option: fable-for-both-readings
+    relation: diverged
+---
+
 ## Answer
 
 Supports grading the bench to the question, which is the rule the record carried and not the one it takes. The practice is that the reviewing body is constituted differently and more heavily than the body reviewed, and that the enlargement is an exception the ordinary panel makes room for: three judges over one, the full court only on a question of exceptional importance, nine above the circuits. The trigger is the importance of the question, and it is not applied to every case, because a bench enlarged by default is not an enlargement.
@@ -38,18 +72,7 @@ Supports grading the bench to the question, which is the rule the record carried
 The divergence is on the flat rule. `fable-for-both-readings` seats the heaviest bench on every reading, which is the one thing the practice declines to do; the answer's ground for it is that every ruling in this record is the irreversible step and every node in a bootstrap record clears the exceptional-importance bar, and the tradition does not concede that. It is recorded here as the tradition's standing objection to the answer rather than as an objection the answer has met: if the premise is right the tradition is simply inapplicable, and if it is wrong the record is running en banc on traffic tickets.
 
 One disanalogy cuts at both relations and belongs in the reading. An appellate court reviews for error on a narrower question and does not re-find facts; the reading here re-reads the whole neighbourhood on its own checklist and reaches its own verdict, which is nearer a trial de novo than an appeal. The heavier bench is a warrant for correcting a narrower question, and it is a weaker warrant for reading the whole thing again — so this tradition supports the conditional shape less strongly than its purity suggests, and its objection to the flat rule is correspondingly weaker too.
-
-## Rationale
-
-Read in the tradition survey of the review sitting of 2026-09-04, and named in `review-model`'s account among the six that its pass with reference to tradition owes: "appellate review by a heavier bench, from the en banc rehearing on a question of exceptional importance, adopted on `conditional-by-boldness`, which is that rule in its purest form, and diverged from on `fable-for-both-readings`, since it grades the bench by the question's importance and every ruling here is the irreversible step". This is the one tradition the survey found that grades a reviewer by rank at all, and it grades by the question and not by the author, which is why the adoption lands on an option the record passed over.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of the practice the survey produced,
-and no second account of what the record takes from it is on the table. The
-disanalogy the answer records is part of the reading and not a rival to it.
+```
 
 ### authority
 
@@ -74,3 +97,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/appellate-review-en-banc stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

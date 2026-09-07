@@ -9,7 +9,7 @@ review:
   against: "The amendment gives the loop a licence to write into the very record it reconciles to, and the controls the author conditioned that licence on do not exist in checkable form. 'Within the node's scope' is defined by no node; the review and the frontier read no reconciliation graph write; and on a delegated node the move acts and the author never sees it, so the only thing between a licensed option and a rewritten desired state is the judgment of the session making the move. The record's own two readings say as much and are the strongest witnesses against the draft: `level-triggered-reconciliation` concedes that 'the tradition's clean line is not kept', and `ocap-attenuation` says that here 'the attenuation is a written disposition that a session follows ... the same rule with a weaker guarantee', with 'the harness's permissions ... the only part of it that is actually a mechanism' — neither of which this node's answer records. Joined to an eleven-clause shim no projection reads and a second direction nothing derives, ratifying this ratifies the loop's self-licence together with the absence of its guard, on the one node whose failure mode is the record ceasing to be the author's. What answers it, and what the author should weigh against it, is that the licence is narrow by its terms (never a ruling, never a ruling's edit, never the author's words), that every move is visible in the graph's history the moment it lands, and that the author's own words of 2026-09-04 grant exactly this."
   survey:
     date: 2026-09-05
-    of: a8d6969e4da06ba3c03063a8af12b7ebc68acd9a
+    of: 36e0bcccf9760e47ac0e7c54c7edae85c64854c6
 facts:
   - name: answer
     options:
@@ -28,6 +28,15 @@ facts:
       - name: reconciliation-writes-options
         source: author
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-03/36
+          - words/2026-09-03/90
+          - words/2026-09-03/91
+          - words/2026-09-03/92
+          - words/2026-09-03/93
+          - words/2026-09-03/94
+          - words/2026-09-03/95
+          - words/2026-09-04/25
       - name: a-stored-bite-list
         source: ai
         ref: "8938e2b7"
@@ -50,7 +59,6 @@ facts:
     recommends: reconciliation-writes-options
     boldness: moderate
     against: "On a delegated or deferred node the reconciliation session may move the recommendation and the moved recommendation acts, so the loop writes the desired state it then reconciles to, which the level-triggered reading concedes breaks the controller's clean line; the guard, within the node's scope, is judged by the session that makes the move, and on a delegated node the author never sees it."
-    stands: reconciliation-writes-options
   - name: authority
     options:
       - name: ratified
@@ -77,49 +85,6 @@ shims:
 depends:
   - commons.systems/disposition-graph/viable-options
 ---
-## Disposition
-
-The author, 2026-09-03, on the reconciliation shim they were about to launch:
-> I will check out the greenfield ref at repo root and launch a new session to act as the reconciliation shim. Ideally, the reconciliation shim instructions are well defined enough to run with sonnet, but recommend the model this shim must run as. Does any work need to be done to prepare for this - for example to prepare the shim to be run as sonnet. Encode the shim as a skill with the recommended model so that I can initialize a session to act as the reconciliation shim by invoking that skill. The shim will iteratively bite work from the frontier in rank order for reconciliation. i.e. purpose/browser artifact (browser artifact may need new high ranking disposition) -> alignment skill -> the rest of the context management for the harness (CLAUDE.md, rules, CLAUDE.local.md per worktree) -> the non-shim reconciliation harness (codified reconciliation orchestrator, skills for each bite type). Non-shim bites will progress materialized artifacts (code, skills, rules etc.) through implementation, functional validation, non-functional validation, merge and qa on main (implicitly using reconciliation of signals/instruments/criteria, not with explicit phases of the incumbent dispatcher). Shim-reconciliation will skip functional and non-function and qa on main validation and batch all validation as bootstrap/shim exit criteria.
-
-The author, 2026-09-03, the same exchange, on where alignment continues:
-> Alignment will continue in a new session(s) on the greenfield checkout via `/align` and pasting of output from alignment artifact.
-
-The author, 2026-09-03, in the evening, on the transition to new bootstrap operations:
-> Prepare for compaction. After compaction we will confirm the steps to be ready to transition to new bootstrap operations (described before compaction). The expectation is that after checking out the greenfield ref and launching new claude sessions from there:
-> - I can use the alignment skill and alignment artifact to begin marking dispositions as answered
-> - In the meantime the shim reconciliation skill (only a skill during bootstrap) would exist with no work because there are no nodes with authority (they are all unanswered)
-> - Once the answered frontier exists, the reconciliation will begin taking bites of the frontier. The skill will execute one iteration to select and reconcile a bite.
-> - The reconciliation shim will prioritize bites in rank order.
-> - Summarize the other requirements I gave for the reconciliation shim.
-
-The author, 2026-09-03, after that evening's compaction, on the first item of the summary the session gave, that bite work resolves in both directions:
-> "Resolves in both directions" this is required for bootstrap exit, but not transition. Disposition must me answered before this is shimmed or materialized . Only resolved from graph to implementation
-
-The author, 2026-09-03, the same exchange, on the second item of that summary, that all legacy tactic nodes are drained during bootstrap:
-> "All legacy tactic nodes are drained during bootstrap" also required for exit but not transition
-
-The author, 2026-09-03, the same exchange, on the summary's item that the author owns the graph and subagents work from it:
-> "You own the graph" - correct that implementation is delegated, each bite type gets a skill with "appropriate " recursive subagents ("appropriate" is open question) but reconsiliation does not edit the graph. That is alignment only.
-
-The author, 2026-09-03, the same exchange, on what follows from that:
-> Since reconciliation does not edit the graph it may need to persist some other metadata to track reconciliation state
-
-The author, 2026-09-04, on the viable-options node, amending the ruling above:
-
-> Under this model the prior statement that "reconciliation never edits the graph" is incomplete. Whatever persistent state reconciliation requires for reconciliation operations (if any) is stored outside the graph - true. But, AI has the authority record untracked but viable alternative options and to change its recommendation during either reconciliation or rsi. If the recommendation is on ratified node then that triggers the alignment frontier projection described above. Subject to attenuation/breakout controls - if the change of recommendation is on delegated or deffered node then it changes the shape of the reconciliation frontier.
-
-## Answer
-
-By reconciliation in both directions, the second begun only at exit. The frontier is derived, never stored: every node whose acting option's instrument fails is on it, ranked by the node's rank. In the first direction a session claims a frontier item, takes a bite, materializes what the disposition requires, records evidence, and the instrument reads the result. In the second direction any materialized artifact with no supporting disposition, code, a skill, a rule, the README, or a node of the legacy record, is itself a frontier item: the reconciler proposes a disposition that would support it, citing the artifact as evidence, or proposes pruning it, and the author rules at review. Coverage ranks that direction: an artifact no disposition cites or instruments is a prune-by-default proposal. A bite on materialized implementation passes through implementation, functional validation, non-functional validation, landing on the main branch, and validation in use there, each a reconciliation of the criteria the node carries and never a phase of a dispatcher: the frontier re-derives after every landing, and what the instruments still fail is the next bite. Sessions divide by ref: an alignment session writes the graph and holds its dialogue, and only the author rules on it; a reconciliation session writes the implementation ref, and writes the graph only as this node bounds it, which the delegation node cites: its main thread may record a viable option on a fact and move a fact's recommendation, within the scope a delegation confers and, on a node carrying none, within the question the node asks, and may never rule, edit a ruling, or edit the author's words, since operational state stays outside the graph and decision state goes in, as the author amended their ruling on 2026-09-04. Such a write lands on the disposition ref one node at a time by compare-and-swap, as the persistence node prescribes, and never over another session's landing. A divergence that needs the author is recorded as an option on the node it conflicts with by the session that found it; what the move does follows the node's class, as the evaluation node says: on a ratified node it returns the node to the author with the confirmed choice's authority intact; on a delegated or deferred node the moved recommendation acts and the reconciliation frontier changes with it. The attenuation the author's words condition this on is that scope, a move within the question the node asks and within any delegation's, and the breakout control is that a move which would leave the scope is not the session's to make and returns the node to the author with its class intact, as the authority node says. A shim whose condition reconciliation has met keeps its declaration until alignment removes it. Un-aligned dispositions are alignment's work, never reconciliation's. Whether reconciliation keeps state of its own between invocations is open; the recommendation is that what outlives an operation lives on the implementation ref as committed files a disposition justifies, never in the graph, so that the frontier derives from the graph, the implementation, and that state together, while what is in flight within an operation, the bite claimed and the step it stands at, is the operation's own scaffolding and is disposed of with it, as the transience node says.
-
-## Rationale
-
-The author's words of 2026-09-03 above, that reconciliation resolves in both directions, that the second direction is required for bootstrap exit and not for the transition, and that a reconciliation session writes the implementation and not the graph. The second direction subsumes transcription of the legacy record and its drain: legacy nodes are pulled in when a question needs them and pruned in bulk otherwise. It is not derived yet: `renderFrontier` reads the graph alone and walks no implementation ref, so until that derivation exists the coverage node's survey is the list of unsupported artifacts, and the swap of the implementation ref with the main branch waits on the coverage ruling, as materialization's shim says. The reading `level-triggered-reconciliation`, under the viable-options node, bears on this node's recommended option, diverged: the controller writes status and never spec, and the loop here records options and moves recommendations, which is wider than status and narrower than spec. The reading `ocap-attenuation` bears on it too: what reconciliation may write is an attenuation of what alignment may write, and the divergence there is the one to keep in view, that the attenuation here is a written rule a session follows, checked by review and by what the record shows afterwards, and not a mechanism that makes exceeding it impossible. One-piece flow is owed as a reading.
-
-The words above set the shape the shim takes: a skill invoked to act as the reconciliation shim, iterating one bite of the frontier per invocation in rank order, in the order the author gave, the purpose and the browser artifact, then the alignment skill, then the rest of the harness's context management, then the non-shim reconciliation harness; non-shim bites carrying a materialized artifact through implementation, functional validation, non-functional validation, and merge and validation in use on the main branch, each a reconciliation of signals, instruments and criteria and never a dispatcher's phase; and shim-reconciliation skipping the last three and batching all validation as the bootstrap exit criteria. What model the shim runs on is the delegation node's question, and the skill's own frontmatter carries the answer.
-
-Amended 2026-09-04 under the author's bootstrap grant of that day, from the author's words quoted above amending their ruling of 2026-09-03. The line falls between operational state, which stays outside the graph, and decision state, an option found viable and a recommendation moved, which goes in: a divergence held on a derived frontier until an alignment session transcribes it is a decision outside the record, and as an option it is in the record at once, changes nothing the author confirmed, and returns a ratified node to the author by the same projection that returns any moved recommendation. The attenuation is the class: what a move does is read from it, and a subagent never writes a node. The answer as it stood is kept as the option `never-writes-the-graph`, and the review of this text is owed.
 
 ## Facts
 
@@ -131,17 +96,185 @@ Amended 2026-09-04 under the author's bootstrap grant of that day, from the auth
 
 The answer as it stood from 2026-09-03, under the author's ruling of that day quoted above: a reconciliation session writes the implementation ref and never the graph, and a divergence that needs the author is reported by the session that found it and stays on the derived frontier until the alignment dialogue records it. Viable if the author prefers the graph written by alignment alone.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does work happen?
+form: rule
+boost: 3
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - term: frontier
+    gloss: "Every node whose acting option's instrument fails, folded out of the record and the implementation at each invocation and never stored."
+  - term: bite
+    gloss: "One claim on one frontier item, taken and finished within a single invocation, leaving nothing to resume."
+  - term: reconcile
+    gloss: "To close the difference between what the record says and what stands, in either direction: materializing what a disposition requires, or proposing a disposition for an artifact that stands unsupported, or pruning it."
+shims:
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations this node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch, and lands its writes to the graph by hand, fetch, reapply, and push, until the persistence node's landing instrument exists"
+    for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
+    liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
+    declared: 2026-09-03
+---
+
+## Answer
+
+The answer as it stood from 2026-09-03, under the author's ruling of that day quoted above: a reconciliation session writes the implementation ref and never the graph, and a divergence that needs the author is reported by the session that found it and stays on the derived frontier until the alignment dialogue records it. Viable if the author prefers the graph written by alignment alone.
+```
+
 #### split-the-shim
 
 The reconciliation shim's single liquidation condition, now eleven clauses covering all batched validation together with the bootstrap exit criteria, is split into separate shims, or reduced to the clauses the frontier can actually derive. Two clean-context reviews raised it and the session decided neither way, replying that the split is put to the author. The node as it stands keeps one declaration whose met clauses no projection reads, which is the case transience's shim exemption is being tested by.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does work happen?
+form: rule
+boost: 3
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - term: frontier
+    gloss: "Every node whose acting option's instrument fails, folded out of the record and the implementation at each invocation and never stored."
+  - term: bite
+    gloss: "One claim on one frontier item, taken and finished within a single invocation, leaving nothing to resume."
+  - term: reconcile
+    gloss: "To close the difference between what the record says and what stands, in either direction: materializing what a disposition requires, or proposing a disposition for an artifact that stands unsupported, or pruning it."
+shims:
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations this node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch, and lands its writes to the graph by hand, fetch, reapply, and push, until the persistence node's landing instrument exists"
+    for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
+    liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
+    declared: 2026-09-03
+---
+
+## Answer
+
+The reconciliation shim's single liquidation condition, now eleven clauses covering all batched validation together with the bootstrap exit criteria, is split into separate shims, or reduced to the clauses the frontier can actually derive. Two clean-context reviews raised it and the session decided neither way, replying that the split is put to the author. The node as it stands keeps one declaration whose met clauses no projection reads, which is the case transience's shim exemption is being tested by.
+```
 
 #### no-persisted-state
 
 Reconciliation persists nothing of its own between invocations and re-derives the frontier from the graph and the implementation each time, which is what the shim does today. The answer's own recommendation is the opposite, that such state lives on the implementation ref as committed files a disposition justifies, and the answer names the question as open after the author observed that a session which cannot write the graph may need other metadata. The rationale's rejection of a stored bite list under transience is the argument for this alternative.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does work happen?
+form: rule
+boost: 3
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - term: frontier
+    gloss: "Every node whose acting option's instrument fails, folded out of the record and the implementation at each invocation and never stored."
+  - term: bite
+    gloss: "One claim on one frontier item, taken and finished within a single invocation, leaving nothing to resume."
+  - term: reconcile
+    gloss: "To close the difference between what the record says and what stands, in either direction: materializing what a disposition requires, or proposing a disposition for an artifact that stands unsupported, or pruning it."
+shims:
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations this node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch, and lands its writes to the graph by hand, fetch, reapply, and push, until the persistence node's landing instrument exists"
+    for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
+    liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
+    declared: 2026-09-03
+---
+
+## Answer
+
+Reconciliation persists nothing of its own between invocations and re-derives the frontier from the graph and the implementation each time, which is what the shim does today. The answer's own recommendation is the opposite, that such state lives on the implementation ref as committed files a disposition justifies, and the answer names the question as open after the author observed that a session which cannot write the graph may need other metadata. The rationale's rejection of a stored bite list under transience is the argument for this alternative.
+```
+
 #### say-instrument-not-criterion
 
 The answer's phrase, each stage a reconciliation of the criteria the node carries, says instrument instead, the term the instruments node actually defines, or discloses that the term arrives with instruments until instruments is ruled. The vocabulary finding of 2026-09-03 verified that criterion is defined by no node outside instruments' own draft and is not a schema key, while four ruling-stage answers depend on the word. Raised on commons.systems/disposition-graph/instruments.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does work happen?
+form: rule
+boost: 3
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - term: frontier
+    gloss: "Every node whose acting option's instrument fails, folded out of the record and the implementation at each invocation and never stored."
+  - term: bite
+    gloss: "One claim on one frontier item, taken and finished within a single invocation, leaving nothing to resume."
+  - term: reconcile
+    gloss: "To close the difference between what the record says and what stands, in either direction: materializing what a disposition requires, or proposing a disposition for an artifact that stands unsupported, or pruning it."
+shims:
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations this node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch, and lands its writes to the graph by hand, fetch, reapply, and push, until the persistence node's landing instrument exists"
+    for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
+    liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
+    declared: 2026-09-03
+---
+
+## Answer
+
+The answer's phrase, each stage a reconciliation of the criteria the node carries, says instrument instead, the term the instruments node actually defines, or discloses that the term arrives with instruments until instruments is ruled. The vocabulary finding of 2026-09-03 verified that criterion is defined by no node outside instruments' own draft and is not a schema key, while four ruling-stage answers depend on the word. Raised on commons.systems/disposition-graph/instruments.
+```
+
+#### reconciliation-writes-options
+
+By reconciliation in both directions, the second begun only at exit.
+
+**AI support.** The author's words of 2026-09-03 above, that reconciliation resolves in both directions, that the second direction is required for bootstrap exit and not for the transition, and that a reconciliation session writes the implementation and not the graph. The second direction subsumes transcription of the legacy record and its drain: legacy nodes are pulled in when a question needs them and pruned in bulk otherwise. It is not derived yet: `renderFrontier` reads the graph alone and walks no implementation ref, so until that derivation exists the coverage node's survey is the list of unsupported artifacts, and the swap of the implementation ref with the main branch waits on the coverage ruling, as materialization's shim says. The reading `level-triggered-reconciliation`, under the viable-options node, bears on this node's recommended option, diverged: the controller writes status and never spec, and the loop here records options and moves recommendations, which is wider than status and narrower than spec. The reading `ocap-attenuation` bears on it too: what reconciliation may write is an attenuation of what alignment may write, and the divergence there is the one to keep in view, that the attenuation here is a written rule a session follows, checked by review and by what the record shows afterwards, and not a mechanism that makes exceeding it impossible. One-piece flow is owed as a reading.
+
+The words above set the shape the shim takes: a skill invoked to act as the reconciliation shim, iterating one bite of the frontier per invocation in rank order, in the order the author gave, the purpose and the browser artifact, then the alignment skill, then the rest of the harness's context management, then the non-shim reconciliation harness; non-shim bites carrying a materialized artifact through implementation, functional validation, non-functional validation, and merge and validation in use on the main branch, each a reconciliation of signals, instruments and criteria and never a dispatcher's phase; and shim-reconciliation skipping the last three and batching all validation as the bootstrap exit criteria. What model the shim runs on is the delegation node's question, and the skill's own frontmatter carries the answer.
+
+Amended 2026-09-04 under the author's bootstrap grant of that day, from the author's words quoted above amending their ruling of 2026-09-03. The line falls between operational state, which stays outside the graph, and decision state, an option found viable and a recommendation moved, which goes in: a divergence held on a derived frontier until an alignment session transcribes it is a decision outside the record, and as an option it is in the record at once, changes nothing the author confirmed, and returns a ratified node to the author by the same projection that returns any moved recommendation. The attenuation is the class: what a move does is read from it, and a subagent never writes a node. The answer as it stood is kept as the option `never-writes-the-graph`, and the review of this text is owed.
+
+**AI divergence.** On a delegated or deferred node the reconciliation session may move the recommendation and the moved recommendation acts, so the loop writes the desired state it then reconciles to, which the level-triggered reading concedes breaks the controller's clean line; the guard, within the node's scope, is judged by the session that makes the move, and on a delegated node the author never sees it.
+
+**Content.**
+
+```markdown
+---
+question: How does work happen?
+form: rule
+boost: 3
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - term: frontier
+    gloss: "Every node whose acting option's instrument fails, folded out of the record and the implementation at each invocation and never stored."
+  - term: bite
+    gloss: "One claim on one frontier item, taken and finished within a single invocation, leaving nothing to resume."
+  - term: reconcile
+    gloss: "To close the difference between what the record says and what stands, in either direction: materializing what a disposition requires, or proposing a disposition for an artifact that stands unsupported, or pruning it."
+shims:
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations this node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch, and lands its writes to the graph by hand, fetch, reapply, and push, until the persistence node's landing instrument exists"
+    for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
+    liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
+    declared: 2026-09-03
+---
+
+## Answer
+
+By reconciliation in both directions, the second begun only at exit. The frontier is derived, never stored: every node whose acting option's instrument fails is on it, ranked by the node's rank. In the first direction a session claims a frontier item, takes a bite, materializes what the disposition requires, records evidence, and the instrument reads the result. In the second direction any materialized artifact with no supporting disposition, code, a skill, a rule, the README, or a node of the legacy record, is itself a frontier item: the reconciler proposes a disposition that would support it, citing the artifact as evidence, or proposes pruning it, and the author rules at review. Coverage ranks that direction: an artifact no disposition cites or instruments is a prune-by-default proposal. A bite on materialized implementation passes through implementation, functional validation, non-functional validation, landing on the main branch, and validation in use there, each a reconciliation of the criteria the node carries and never a phase of a dispatcher: the frontier re-derives after every landing, and what the instruments still fail is the next bite. Sessions divide by ref: an alignment session writes the graph and holds its dialogue, and only the author rules on it; a reconciliation session writes the implementation ref, and writes the graph only as this node bounds it, which the delegation node cites: its main thread may record a viable option on a fact and move a fact's recommendation, within the scope a delegation confers and, on a node carrying none, within the question the node asks, and may never rule, edit a ruling, or edit the author's words, since operational state stays outside the graph and decision state goes in, as the author amended their ruling on 2026-09-04. Such a write lands on the disposition ref one node at a time by compare-and-swap, as the persistence node prescribes, and never over another session's landing. A divergence that needs the author is recorded as an option on the node it conflicts with by the session that found it; what the move does follows the node's class, as the evaluation node says: on a ratified node it returns the node to the author with the confirmed choice's authority intact; on a delegated or deferred node the moved recommendation acts and the reconciliation frontier changes with it. The attenuation the author's words condition this on is that scope, a move within the question the node asks and within any delegation's, and the breakout control is that a move which would leave the scope is not the session's to make and returns the node to the author with its class intact, as the authority node says. A shim whose condition reconciliation has met keeps its declaration until alignment removes it. Un-aligned dispositions are alignment's work, never reconciliation's. Whether reconciliation keeps state of its own between invocations is open; the recommendation is that what outlives an operation lives on the implementation ref as committed files a disposition justifies, never in the graph, so that the frontier derives from the graph, the implementation, and that state together, while what is in flight within an operation, the bite claimed and the step it stands at, is the operation's own scaffolding and is disposed of with it, as the transience node says.
+```
 
 #### a-stored-bite-list
 
@@ -151,11 +284,81 @@ operational state in the graph. What a disposition justifies and what outlives
 the operation may be committed to the implementation ref, as the answer's last
 sentence says; a bite in flight is not that, and goes with the operation.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does work happen?
+form: rule
+boost: 3
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - term: frontier
+    gloss: "Every node whose acting option's instrument fails, folded out of the record and the implementation at each invocation and never stored."
+  - term: bite
+    gloss: "One claim on one frontier item, taken and finished within a single invocation, leaving nothing to resume."
+  - term: reconcile
+    gloss: "To close the difference between what the record says and what stands, in either direction: materializing what a disposition requires, or proposing a disposition for an artifact that stands unsupported, or pruning it."
+shims:
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations this node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch, and lands its writes to the graph by hand, fetch, reapply, and push, until the persistence node's landing instrument exists"
+    for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
+    liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
+    declared: 2026-09-03
+---
+
+## Answer
+
+The reconciliation shim keeps a stored list of bites, or a plan, between
+invocations. It was passed over because the transience node forbids storing
+operational state in the graph. What a disposition justifies and what outlives
+the operation may be committed to the implementation ref, as the answer's last
+sentence says; a bite in flight is not that, and goes with the operation.
+```
+
 #### a-worktree-of-the-shims-own
 
 The reconciliation session works in a worktree of its own. It was passed over
 because its landings go straight to the ref, so a worktree would only add a
 merge.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does work happen?
+form: rule
+boost: 3
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - term: frontier
+    gloss: "Every node whose acting option's instrument fails, folded out of the record and the implementation at each invocation and never stored."
+  - term: bite
+    gloss: "One claim on one frontier item, taken and finished within a single invocation, leaving nothing to resume."
+  - term: reconcile
+    gloss: "To close the difference between what the record says and what stands, in either direction: materializing what a disposition requires, or proposing a disposition for an artifact that stands unsupported, or pruning it."
+shims:
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations this node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch, and lands its writes to the graph by hand, fetch, reapply, and push, until the persistence node's landing instrument exists"
+    for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
+    liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
+    declared: 2026-09-03
+---
+
+## Answer
+
+The reconciliation session works in a worktree of its own. It was passed over
+because its landings go straight to the ref, so a worktree would only add a
+merge.
+```
 
 #### reconciliation-passes-an-option-over
 
@@ -168,6 +371,46 @@ in the loop on itself, and this answer's enumeration is short by one the moment
 that is ruled. Recorded here rather than written in, because the bound on a
 reconciliation session is this node's to set and the other node's answer is not
 yet ruled.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does work happen?
+form: rule
+boost: 3
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - term: frontier
+    gloss: "Every node whose acting option's instrument fails, folded out of the record and the implementation at each invocation and never stored."
+  - term: bite
+    gloss: "One claim on one frontier item, taken and finished within a single invocation, leaving nothing to resume."
+  - term: reconcile
+    gloss: "To close the difference between what the record says and what stands, in either direction: materializing what a disposition requires, or proposing a disposition for an artifact that stands unsupported, or pruning it."
+shims:
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations this node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch, and lands its writes to the graph by hand, fetch, reapply, and push, until the persistence node's landing instrument exists"
+    for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
+    liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
+    declared: 2026-09-03
+---
+
+## Answer
+
+The licence this answer gives a reconciliation session's main thread named as
+three acts and not two: recording an option on a fact, passing an option over
+and lifting a status the AI wrote, and moving a fact's recommendation within
+the node's scope. The viable-options node's recommended answer of 2026-09-05
+gives the AI all three wherever it acts, in alignment, in reconciliation, and
+in the loop on itself, and this answer's enumeration is short by one the moment
+that is ruled. Recorded here rather than written in, because the bound on a
+reconciliation session is this node's to set and the other node's answer is not
+yet ruled.
+```
 
 #### exit-conditions-cited-not-carried
 
@@ -194,6 +437,59 @@ implementation ref is swapped with the main branch is discharged after the swap,
 and `materialization` puts the swap at bootstrap exit, so it is this shim's own
 liquidation condition and never a condition of exit.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does work happen?
+form: rule
+boost: 3
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - term: frontier
+    gloss: "Every node whose acting option's instrument fails, folded out of the record and the implementation at each invocation and never stored."
+  - term: bite
+    gloss: "One claim on one frontier item, taken and finished within a single invocation, leaving nothing to resume."
+  - term: reconcile
+    gloss: "To close the difference between what the record says and what stands, in either direction: materializing what a disposition requires, or proposing a disposition for an artifact that stands unsupported, or pruning it."
+shims:
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations this node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch, and lands its writes to the graph by hand, fetch, reapply, and push, until the persistence node's landing instrument exists"
+    for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
+    liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
+    declared: 2026-09-03
+---
+
+## Answer
+
+The bootstrap exit clauses of the reconciliation shim's liquidation condition
+move to the node that gathers the conditions of bootstrap exit, and the shim's
+condition cites that node instead of restating them; what stays on the shim is
+the one limb that cannot move, validation in use after the implementation ref is
+swapped with the main branch, which the last paragraph of this option names. Raised by the
+clean-context review of `what-acts-during-bootstrap` on 2026-09-05, under
+validation 15: the question of what the conditions of bootstrap exit are is
+today carried inside this node's shim declaration, and the node that defines the
+term restates them or contradicts them. Repointed on 2026-09-05, when the second
+reading of that node minted
+`commons.systems/disposition-graph/bootstrap-exit-conditions` for the same
+question: the destination is that node and no longer the node that defines the
+term, and the choice this option puts to the author is whether the clauses move
+there or stay here and are cited from there, which is the option
+`left-where-they-stand` seen from this side. The `split-the-shim` option is the
+other end of the same finding.
+
+One clause of this shim's liquidation cannot move under any reading, and the
+reading that minted the child found it: validation in use after the
+implementation ref is swapped with the main branch is discharged after the swap,
+and `materialization` puts the swap at bootstrap exit, so it is this shim's own
+liquidation condition and never a condition of exit.
+```
+
 #### second-direction-begins-when-its-disposition-is-answered
 
 The second direction is begun when the dispositions that state it are answered,
@@ -208,6 +504,49 @@ Raised by the clean-context reading of `what-acts-during-bootstrap` on
 2026-09-05, whose own answer cited this node for the clause and has been redrawn
 to cite the shim instead. `exit-conditions-cited-not-carried` asks a different
 question, where the shim's exit clauses live, and is not displaced by this.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How does work happen?
+form: rule
+boost: 3
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - term: frontier
+    gloss: "Every node whose acting option's instrument fails, folded out of the record and the implementation at each invocation and never stored."
+  - term: bite
+    gloss: "One claim on one frontier item, taken and finished within a single invocation, leaving nothing to resume."
+  - term: reconcile
+    gloss: "To close the difference between what the record says and what stands, in either direction: materializing what a disposition requires, or proposing a disposition for an artifact that stands unsupported, or pruning it."
+shims:
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations this node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch, and lands its writes to the graph by hand, fetch, reapply, and push, until the persistence node's landing instrument exists"
+    for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
+    liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
+    declared: 2026-09-03
+---
+
+## Answer
+
+The second direction is begun when the dispositions that state it are answered,
+as the shim declared on this node already says -- "neither begun before the
+disposition that states them is answered" -- and it is required complete for
+bootstrap exit, as the author's words of 2026-09-03 say. The answer's opening
+clause, that it is begun only at exit, makes a completion the exit conditions
+require into work that cannot start until the moment it gates:
+`bootstrap-exit-conditions` lists that completion as a condition of exit, so the
+two sentences together put the work after the moment it is a condition of.
+Raised by the clean-context reading of `what-acts-during-bootstrap` on
+2026-09-05, whose own answer cited this node for the clause and has been redrawn
+to cite the shim instead. `exit-conditions-cited-not-carried` asks a different
+question, where the shim's exit clauses live, and is not displaced by this.
+```
 
 ### authority
 
@@ -464,3 +803,7 @@ is ruled, rather than letting "only" cover it. The act is kept: `viable-options`
 recommended answer and the projected `authority` rule both grant it generally,
 and dropping it would lose what the loop has found. Landed on `greenfield` at
 `87e4b24e` under the author's grant of 2026-09-04.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/work-loop stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `reconciliation-writes-options`; the `## Rationale` its `**AI support.**`; 8 `## Disposition` entries became the ledger entries words/2026-09-03/90, words/2026-09-03/91, words/2026-09-03/92, words/2026-09-03/93, words/2026-09-03/94, words/2026-09-03/36, words/2026-09-03/95, words/2026-09-04/25, referenced by 1 option the entry's own date names and by the recommended option for 7 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `never-writes-the-graph`, `split-the-shim`, `no-persisted-state`, `say-instrument-not-criterion`, `a-stored-bite-list`, `a-worktree-of-the-shims-own`, `reconciliation-passes-an-option-over`, `exit-conditions-cited-not-carried`, `second-direction-begins-when-its-disposition-is-answered`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `495e788047084ff6922db65745e215bb6c11f508` was already past the recommendation and is left as it stood. The survey's pin `a8d6969e4da06ba3c03063a8af12b7ebc68acd9a` is re-computed for the encoding as `36e0bcccf9760e47ac0e7c54c7edae85c64854c6`; nothing it read changed.

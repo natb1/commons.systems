@@ -13,6 +13,9 @@ facts:
       - name: standing
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-02/37
+          - words/2026-09-03/78
       - name: cite-unanswered-for-the-browser-rule
         source: review
         ref: "2026-09-03"
@@ -64,7 +67,6 @@ facts:
         ref: "2026-09-07"
     recommends: standing
     boldness: high
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -86,13 +88,46 @@ instrument:
   ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
   note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
 ---
-## Disposition
 
-The author, 2026-09-02:
-> "How does this graph come into being?" dispositions must resist decay. They are persistent records, they don't track operational or transient state (like the current bootstrap process).
+## Facts
 
-The author, 2026-09-03:
-> Do not adopt incumbent disposition without scrutiny, but do evaluate the scope of requirements for recording transient disposition under the constraint of resisting drift and inconsistency. Do not reinvent "tactic nodes" which were a persistent pain point and superceded by the reconciliation model. Record as deferred the recommended disposition for recording transient disposition and avoiding tactic-shaped drift.
+### answer
+
+#### standing
+
+Never as a disposition.
+
+**AI support.** Drift is a recorded text that no longer matches what it describes, with nothing flagging the mismatch; inconsistency is two texts with apparent authority that contradict. Both come from storing as fact what should be derived. Each shape above passes one test: what is stored is what re-derivation cannot reconstruct, the author's decisions, the criteria, and the declared liquidation conditions; everything else is projection.
+
+The author, 2026-09-02, on the bootstrap node: "dispositions must resist decay. They are persistent records, they don't track operational or transient state (like the current bootstrap process)." The author, 2026-09-02, in the legacy bootstrap attempt: "An additional class(es) of transient disposition is fine, but there must not be a 'catch all prose' transient disposition. Evaluate using greenfield-evaluation criteria (nothing is sacred, interview to override doctrine, evaluate from the perspective of greenfield judgement and also reference to tradition). Use the existing corpus of transient disposition (tactics) to form the model. What falls out as 'prone to decay and therefore no longer recorded at all' vs. 'recorded as transient guidance but would be better described as persistent criteria' vs. 'shim'. Consider what kind of output an /align session might produce which doesn't fit any of those categories." The outputs of a sitting each land in one shape: answers, rulings with their rejected alternatives, and boosts are standing; the surveys and measurements a sitting cites are evidence; declared shims are shims; pending items are alternatives in the dialogue state of the node they would answer, proposals when they arose outside alignment; surfaced readings and vocabulary are frontier items derived from the rationale that names them; dispositions the author states during a sitting are un-aligned dispositions; the account the AI holds back during the periagogic stage is not recorded, since it is re-derived from the page at each sitting. No further shape was needed.
+
+The legacy tactic was a completable unit removed on completion, its body the plan, and the legacy record measured its cost: durable content stranded on a node about to vanish unless moved by hand; edges to a completed node left dangling; provenance and position conflated into false defects on 62 of 780 nodes; migration step lists stale by the time they were drained; and, in its own words, "the measured pain of standing tactic nodes (drift, deduplication, constant re-evaluation) is the cost of blending the three lifecycles in one hand-authored object". Its successor doctrine of 2026-09-01 abolished standing decomposition into tactics for a derived frontier and claim-time bites. This node reaches the same conclusion from the evaluation, not from the legacy authority.
+
+Traditions, owed as readings: Aristotle on hexis and kinesis, Nicomachean Ethics X.4 1174a13 to 1174b14 and Metaphysics Θ.6 1048b18 to 35, a state complete at every moment of its holding against a process complete only at its end, which is why a disposition cannot be transient; declarative desired state with a reconciliation loop, Kubernetes controllers and owned objects that nobody edits; feature-toggle lifecycle with owners and expiry (Hodgson, 2017); expand, migrate, contract (Sato, 2014), the contract phase mandatory; the strangler fig (Fowler, 2004), whose named failure is the half-strangled system that lives forever; deprecation as a process with ratcheted prevention of new uses (Winters, Manshreck, and Wright, Software Engineering at Google, 2020, chapter 15); mission command, the record carrying intent, end state, and constraints and never the scheme of manoeuvre (Auftragstaktik; ADP 6-0, 2019).
+
+The author, 2026-09-03, on the un-aligned shape: "Let's go ahead and also record a deferred disposition which use the \"unanswered\" primitives to record \"un-aligned\" dispositions. Consider the unanswered encoding from this perspective - it must encode things like (but not limited to) where in the dialog flow are we on this point, has it survived periogoge, maieutic? Reduce all functions of the unanswered primitive to this - persistence of un-aligned dispositions from the user. eg. the currently labeled \"What does this repository contain, and what does it leave out?\" sounds more like a proposal - \"this evidence contradicts the purpose disposition and so requires author clarification.\" Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact)." Evaluated: a stored stage is the exception to the rule above that a step is derived, made by this ruling and justified because the author's words in a dialogue have no other home; it is bounded, since a stage exists only while a dialogue is open, and the validator refuses a stage with no dialogue text and dialogue text with no stage. The author, 2026-09-03, on shims: "Yes, you can record bootstrap as a shim for reconciliation process if it helps you manage context, or in bootstrap operations (delegating to subagents, etc.) Just make sure there are not redundancies between the function/content of any shims, bootstrap operations document, session memories, and ledger." Evidence: `bootstrap/transient-disposition-graph-survey.md` and `bootstrap/transient-disposition-transcript-survey.md` on the implementation ref, the surveys this answer was drawn from; `bootstrap/ledger-migration-survey-2026-09-03.md`, the redundancy check the second ruling asks for.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
 
 ## Answer
 
@@ -111,42 +146,172 @@ Evidence, when the thing is an observation: a dated assessment reading, a measur
 Not recorded: operational and session state. What is claimed, what is in flight, at which step a bite stands, and what a session holds back until the author has committed are derived when needed from the record and the implementation, or kept in the operation's own scaffolding and disposed of with it. The record holds no expectation about work in progress. The one position it does hold is that of an open dialogue, above, because only the record can carry the author's words across sessions.
 
 One shape is forbidden by name: a node that records a unit of work, a plan, a task, or a step list, whatever it is called. A shim's liquidation condition and the survey in an account are not that shape: neither can be claimed and neither has a phase; the one is a condition the frontier derives from, the other evidence. Work is the derived difference between disposition and implementation; a bite is planned when it is claimed and exists only for the claim. A node whose achievement would delete it is not a disposition and is not written.
-
-## Rationale
-
-Drift is a recorded text that no longer matches what it describes, with nothing flagging the mismatch; inconsistency is two texts with apparent authority that contradict. Both come from storing as fact what should be derived. Each shape above passes one test: what is stored is what re-derivation cannot reconstruct, the author's decisions, the criteria, and the declared liquidation conditions; everything else is projection.
-
-The author, 2026-09-02, on the bootstrap node: "dispositions must resist decay. They are persistent records, they don't track operational or transient state (like the current bootstrap process)." The author, 2026-09-02, in the legacy bootstrap attempt: "An additional class(es) of transient disposition is fine, but there must not be a 'catch all prose' transient disposition. Evaluate using greenfield-evaluation criteria (nothing is sacred, interview to override doctrine, evaluate from the perspective of greenfield judgement and also reference to tradition). Use the existing corpus of transient disposition (tactics) to form the model. What falls out as 'prone to decay and therefore no longer recorded at all' vs. 'recorded as transient guidance but would be better described as persistent criteria' vs. 'shim'. Consider what kind of output an /align session might produce which doesn't fit any of those categories." The outputs of a sitting each land in one shape: answers, rulings with their rejected alternatives, and boosts are standing; the surveys and measurements a sitting cites are evidence; declared shims are shims; pending items are alternatives in the dialogue state of the node they would answer, proposals when they arose outside alignment; surfaced readings and vocabulary are frontier items derived from the rationale that names them; dispositions the author states during a sitting are un-aligned dispositions; the account the AI holds back during the periagogic stage is not recorded, since it is re-derived from the page at each sitting. No further shape was needed.
-
-The legacy tactic was a completable unit removed on completion, its body the plan, and the legacy record measured its cost: durable content stranded on a node about to vanish unless moved by hand; edges to a completed node left dangling; provenance and position conflated into false defects on 62 of 780 nodes; migration step lists stale by the time they were drained; and, in its own words, "the measured pain of standing tactic nodes (drift, deduplication, constant re-evaluation) is the cost of blending the three lifecycles in one hand-authored object". Its successor doctrine of 2026-09-01 abolished standing decomposition into tactics for a derived frontier and claim-time bites. This node reaches the same conclusion from the evaluation, not from the legacy authority.
-
-Traditions, owed as readings: Aristotle on hexis and kinesis, Nicomachean Ethics X.4 1174a13 to 1174b14 and Metaphysics Θ.6 1048b18 to 35, a state complete at every moment of its holding against a process complete only at its end, which is why a disposition cannot be transient; declarative desired state with a reconciliation loop, Kubernetes controllers and owned objects that nobody edits; feature-toggle lifecycle with owners and expiry (Hodgson, 2017); expand, migrate, contract (Sato, 2014), the contract phase mandatory; the strangler fig (Fowler, 2004), whose named failure is the half-strangled system that lives forever; deprecation as a process with ratcheted prevention of new uses (Winters, Manshreck, and Wright, Software Engineering at Google, 2020, chapter 15); mission command, the record carrying intent, end state, and constraints and never the scheme of manoeuvre (Auftragstaktik; ADP 6-0, 2019).
-
-The author, 2026-09-03, on the un-aligned shape: "Let's go ahead and also record a deferred disposition which use the \"unanswered\" primitives to record \"un-aligned\" dispositions. Consider the unanswered encoding from this perspective - it must encode things like (but not limited to) where in the dialog flow are we on this point, has it survived periogoge, maieutic? Reduce all functions of the unanswered primitive to this - persistence of un-aligned dispositions from the user. eg. the currently labeled \"What does this repository contain, and what does it leave out?\" sounds more like a proposal - \"this evidence contradicts the purpose disposition and so requires author clarification.\" Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact)." Evaluated: a stored stage is the exception to the rule above that a step is derived, made by this ruling and justified because the author's words in a dialogue have no other home; it is bounded, since a stage exists only while a dialogue is open, and the validator refuses a stage with no dialogue text and dialogue text with no stage. The author, 2026-09-03, on shims: "Yes, you can record bootstrap as a shim for reconciliation process if it helps you manage context, or in bootstrap operations (delegating to subagents, etc.) Just make sure there are not redundancies between the function/content of any shims, bootstrap operations document, session memories, and ledger." Evidence: `bootstrap/transient-disposition-graph-survey.md` and `bootstrap/transient-disposition-transcript-survey.md` on the implementation ref, the surveys this answer was drawn from; `bootstrap/ledger-migration-survey-2026-09-03.md`, the redundancy check the second ruling asks for.
-
-## Facts
-
-### answer
+```
 
 #### cite-unanswered-for-the-browser-rule
 
 The supersession finding proposes that the un-aligned paragraph drop its own restatement of the rule that unanswered nodes are hidden from the browser and listed by the alignment page, and cite unanswered for the status and projection for what the browser shows. The author's earlier words that node carries were narrowed later the same day by the classification of every disposition as unanswered, which applied literally would empty the browser. The node still states the earlier rule as its own with no note of the narrowing.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+The supersession finding proposes that the un-aligned paragraph drop its own restatement of the rule that unanswered nodes are hidden from the browser and listed by the alignment page, and cite unanswered for the status and projection for what the browser shows. The author's earlier words that node carries were narrowed later the same day by the classification of every disposition as unanswered, which applied literally would empty the browser. The node still states the earlier rule as its own with no note of the narrowing.
+```
+
 #### name-the-reduction-divergence
 
 The amendment review found that the sentence 'Every function of the un-aligned disposition reduces to this' narrows the author's own words, which reduced the functions of the unanswered primitive, not of the un-aligned disposition, and that the primitive acquired a second function the same day when answered nodes began carrying a dialogue. This alternative records the narrowing as a divergence forced by the later ruling and puts the pair to the author rather than leaving the author's reduction binding on nothing. The session accepted it for the sitting and has not written it.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+The amendment review found that the sentence 'Every function of the un-aligned disposition reduces to this' narrows the author's own words, which reduced the functions of the unanswered primitive, not of the un-aligned disposition, and that the primitive acquired a second function the same day when answered nodes began carrying a dialogue. This alternative records the narrowing as a divergence forced by the later ruling and puts the pair to the author rather than leaving the author's reduction binding on nothing. The session accepted it for the sitting and has not written it.
+```
 
 #### instrument-note-as-a-declared-shim
 
 Two reviews and the shim coverage finding hold that the frontmatter instrument note, which records that the flagging of a met shim condition is not yet materialized, is by this node's own rule a shim rather than a note: a stand-in for a materialization not yet made needs an artifact and a liquidation condition the frontier can read, and this node's own rule makes a shim whose condition is met and which still exists a frontier item. This alternative replaces the note with a declared shim. The session accepted it for the sitting. Raised on commons.systems/disposition-graph/session-context.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+Two reviews and the shim coverage finding hold that the frontmatter instrument note, which records that the flagging of a met shim condition is not yet materialized, is by this node's own rule a shim rather than a note: a stand-in for a materialization not yet made needs an artifact and a liquidation condition the frontier can read, and this node's own rule makes a shim whose condition is met and which still exists a frontier item. This alternative replaces the note with a declared shim. The session accepted it for the sitting. Raised on commons.systems/disposition-graph/session-context.
+```
+
 #### say-instrument-not-criterion
 
 The vocabulary finding holds that criterion is carried by no node's defines and exists only inside instruments' draft, while this node's answer opens its first shape with 'A criterion, when the temporary thing is really a standing obligation'. Until instruments is ruled the word here becomes instrument, the term instruments actually defines, or the answer discloses that the term arrives with instruments.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+The vocabulary finding holds that criterion is carried by no node's defines and exists only inside instruments' draft, while this node's answer opens its first shape with 'A criterion, when the temporary thing is really a standing obligation'. Until instruments is ruled the word here becomes instrument, the term instruments actually defines, or the answer discloses that the term arrives with instruments.
+```
+
 #### reduce-un-aligned-paragraph
 
 The frontier survey's decomposition finding proposes cutting the un-aligned paragraph down to two sentences: that an un-aligned disposition is a node with a question and no answer, and that it carries the dialogue as the dialogue node defines it. The enumeration of the dialogue's parts would go to dialogue and the status rule to unanswered, which already carry them, since three nodes now carry one list and drift between them is invisible until they are read together. The five-shape taxonomy, which is what this node is for, is untouched. Transience's own session reply accepts the reduction and defers it to its sitting, so it is owed and the text still carries the full enumeration. Raised on commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/unanswered.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+The frontier survey's decomposition finding proposes cutting the un-aligned paragraph down to two sentences: that an un-aligned disposition is a node with a question and no answer, and that it carries the dialogue as the dialogue node defines it. The enumeration of the dialogue's parts would go to dialogue and the status rule to unanswered, which already carry them, since three nodes now carry one list and drift between them is invisible until they are read together. The five-shape taxonomy, which is what this node is for, is untouched. Transience's own session reply accepts the reduction and defers it to its sitting, so it is owed and the text still carries the full enumeration. Raised on commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/unanswered.
+```
 
 #### a-transient-kind-of-node
 
@@ -157,11 +322,76 @@ vanishing node, edges left dangling, provenance and position conflated into
 false defects on 62 of 780 nodes, and migration lists stale by the time they
 were drained.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+Transient disposition is recorded as a transient kind of node, a completable
+unit removed on completion, which is what the legacy tactic was. It was passed
+over on the legacy record's own measurement: durable content stranded on a
+vanishing node, edges left dangling, provenance and position conflated into
+false defects on 62 of 780 nodes, and migration lists stale by the time they
+were drained.
+```
+
 #### a-stored-self-liquidating-class
 
 A node carries a stored class that expires on a date or an event. It was
 passed over because expiry stored on a node is exactly the state that drifts,
 and the legacy record found none needed.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+A node carries a stored class that expires on a date or an event. It was
+passed over because expiry stored on a node is exactly the state that drifts,
+and the legacy record found none needed.
+```
 
 #### shims-declared-in-the-artifact-alone
 
@@ -169,10 +399,71 @@ A shim is declared in the artifact it stands in for rather than on a node. It
 was passed over because a notice the frontier cannot read is a permanent in
 disguise.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+A shim is declared in the artifact it stands in for rather than on a node. It
+was passed over because a notice the frontier cannot read is a permanent in
+disguise.
+```
+
 #### a-stored-transcript-of-the-dialogue
 
 The whole dialogue is stored as a transcript on the node. It was passed over
 because the AI's side is re-derived from the record and the author's words.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+The whole dialogue is stored as a transcript on the node. It was passed over
+because the AI's side is re-derived from the record and the author's words.
+```
 
 #### a-queue-kept-outside-the-graph
 
@@ -180,17 +471,135 @@ The queue of un-aligned dispositions is kept in a list outside the graph. It
 was passed over because a list beside the record is the ledger the author
 asked to sunset.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+The queue of un-aligned dispositions is kept in a list outside the graph. It
+was passed over because a list beside the record is the ledger the author
+asked to sunset.
+```
+
 #### proposal-as-a-state-of-a-ratified-node
 
 The standing answer defines a proposal as the alternative that arose outside alignment, "as the authority node defines it", and cites a definition that node no longer gives: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. This option amends the sentence to say so and to cite the authority node for the state. Recorded from the clean-context reading of the authority node on 2026-09-05.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+The standing answer defines a proposal as the alternative that arose outside alignment, "as the authority node defines it", and cites a definition that node no longer gives: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. This option amends the sentence to say so and to cite the authority node for the state. Recorded from the clean-context reading of the authority node on 2026-09-05.
+```
 
 #### rejected-alternative-is-an-option
 
 The standing answer's sentence "it has no authority and dies at the ruling, into the answer, into the rationale as a rejected alternative, or into nothing." places a rejected alternative in the rationale, and under the rejected node's recommended text that is the wrong place: a rejected alternative is an option on the fact it answers, with its status and the reason it was not taken, and the rationale argues and may name it but does not hold it. Raised by the rejected node from its reading of 2026-09-05; the amendment is the one clause, and it acts on nothing until the author rules.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+The standing answer's sentence "it has no authority and dies at the ruling, into the answer, into the rationale as a rejected alternative, or into nothing." places a rejected alternative in the rationale, and under the rejected node's recommended text that is the wrong place: a rejected alternative is an option on the fact it answers, with its status and the reason it was not taken, and the rationale argues and may name it but does not hold it. Raised by the rejected node from its reading of 2026-09-05; the amendment is the one clause, and it acts on nothing until the author rules.
+```
+
 #### persistence-gloss-released-to-dialogue
 
 Everything the recommendation says, with this node's bare `defines` entry for `persistence` released, so that the term is defined once, on `dialogue`, the node that reserves the four fact names and would carry the gloss. It is on the table because how-a-fact-is-headed's recommended answer requires the release by name, on the ground that two entries for one term resolve by the order the nodes are read in, "which is a decision nobody made"; a ruling there writes on this node's `defines` list, and this is where the author rules on that. It acts on nothing until that node is ruled.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is transient disposition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - persistence
+  - standing
+  - shim
+  - liquidation
+  - un-aligned disposition
+instrument:
+  kind: check
+  ref: the validator and the frontier projection on the implementation ref; the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized
+  note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
+---
+
+## Answer
+
+Everything the recommendation says, with this node's bare `defines` entry for `persistence` released, so that the term is defined once, on `dialogue`, the node that reserves the four fact names and would carry the gloss. It is on the table because how-a-fact-is-headed's recommended answer requires the release by name, on the ground that two entries for one term resolve by the order the nodes are read in, "which is a decision nobody made"; a ruling there writes on this node's `defines` list, and this is where the author rules on that. It acts on nothing until that node is ruled.
+```
 
 ## Account
 
@@ -417,3 +826,7 @@ Proposed: node and transience are where the release is missing. The release of e
 Recorded as an option on commons.systems/disposition-graph/node's answer fact: `answer-gloss-released-to-dialogue` (source review, 2026-09-07).
 
 Recorded as an option on this node's answer fact: `persistence-gloss-released-to-dialogue` (source review, 2026-09-07).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/transience stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 2 `## Disposition` entries became the ledger entries words/2026-09-02/37, words/2026-09-03/78, referenced by 0 options the entry's own date names and by the recommended option for 2 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `cite-unanswered-for-the-browser-rule`, `name-the-reduction-divergence`, `instrument-note-as-a-declared-shim`, `say-instrument-not-criterion`, `reduce-un-aligned-paragraph`, `a-transient-kind-of-node`, `a-stored-self-liquidating-class`, `shims-declared-in-the-artifact-alone`, `a-stored-transcript-of-the-dialogue`, `a-queue-kept-outside-the-graph`, `proposal-as-a-state-of-a-ratified-node`, `rejected-alternative-is-an-option`, `persistence-gloss-released-to-dialogue`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `5146c975ea09a8483495b379e9faca8819ce3e11` was already past the recommendation and is left as it stood.

@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -34,6 +33,48 @@ bears:
     option: confirmed-is-a-derived-label-and-every-option-carries-its-content
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of this parable the record has
+produced for this question, and no second account of what it takes from it is
+on the table. The relation `commons.systems/disposition-graph/evaluation`
+records for its own question is a different reading and is named in the
+answer, not recorded here.
+
+#### standing
+
+Supports keeping the candidate until the reason for its removal is stated, and the record's version of it is stricter in one respect and weaker in another.
+
+**AI support.** Named among the nine traditions of `commons.systems/disposition-graph/viable-options`' rationale of 2026-09-04 and identified by that node's maieutic movement of the same day as the one of the nine that became no reading, and so owed as a reading under that node. `commons.systems/disposition-graph/rejected`'s movement of the same day records the three traditions owed there as owed for the pair, which is why this reading carries a second entry on that node's recommended option. It bears on `passed-over-options-stay` and on `passed-over-stays-listed` because both are the rule that a candidate is marked rather than removed, which is the parable's burden put on the record's own remover.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does Chesterton's fence say about removing what stands, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/viable-options
+source: G. K. Chesterton, The Thing (1929), in the chapter "The Drift from Domesticity", where the reformer who finds a fence across a road and cannot say why it is there is told to go away and think until he can, and only then may be allowed to destroy it; the point being that the burden lies on the remover and that ignorance of a reason is a reason to wait rather than a licence to act. Locus to be checked, the page of the passage in the 1929 edition.
+bears:
+  - fact: answer
+    option: passed-over-options-stay
+    relation: adopted
+  - node: commons.systems/disposition-graph/rejected
+    fact: answer
+    option: passed-over-stays-listed
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: confirmed-is-a-derived-label-and-every-option-carries-its-content
+    relation: adopted
+---
+
 ## Answer
 
 Supports keeping the candidate until the reason for its removal is stated, and the record's version of it is stricter in one respect and weaker in another. The parable puts the burden on the remover and makes the burden a positive one. It is not enough that removal looks like an improvement; the remover must be able to say why the thing was there, and the inability to say it is the argument for leaving it alone. What the passage protects is not the fence. It is the knowledge the fence stands for, which is invisible precisely because the fence has been doing its work.
@@ -45,20 +86,7 @@ Where the record is stricter. The parable lets the reformer destroy the fence on
 Where it is weaker, and this is the counter. The burden the record actually imposes is the reason for passing the candidate over, not the reason it was recorded in the first place, which is the burden the parable names. An option written by an earlier session for a reason nobody wrote down can be marked passed today on a fresh dominance judgment that has never met the original reason, and the record will show a fence removed by a reformer who supplied a reason of his own rather than recovering the one that was there. `commons.systems/disposition-graph/viable-options`' answer already requires an option's own subsection to say what it would answer and why it is on the table, which narrows the gap and does not close it, since the subsection is prose and the status is a field.
 
 `commons.systems/disposition-graph/evaluation` reads the same tradition for its own question and diverges from it in part, holding that here the record and not the fence carries the reason, so that a fence with no recorded reason is a prune-by-default proposal. That divergence is consistent with this adoption and is not the same relation: on that node the tradition is read for what may be pruned from the implementation, and on this one for what may leave a fact's option list. A `bears` entry on that node's answer fact is owed when its options are settled, as `commons.systems/disposition-graph/pareto-frontier` records of the same pairing, and it is not written here.
-
-## Rationale
-
-Named among the nine traditions of `commons.systems/disposition-graph/viable-options`' rationale of 2026-09-04 and identified by that node's maieutic movement of the same day as the one of the nine that became no reading, and so owed as a reading under that node. `commons.systems/disposition-graph/rejected`'s movement of the same day records the three traditions owed there as owed for the pair, which is why this reading carries a second entry on that node's recommended option. It bears on `passed-over-options-stay` and on `passed-over-stays-listed` because both are the rule that a candidate is marked rather than removed, which is the parable's burden put on the record's own remover.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of this parable the record has
-produced for this question, and no second account of what it takes from it is
-on the table. The relation `commons.systems/disposition-graph/evaluation`
-records for its own question is a different reading and is named in the
-answer, not recorded here.
+```
 
 ### authority
 
@@ -83,3 +111,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/chestertons-fence stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

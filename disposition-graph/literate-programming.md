@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -26,6 +25,37 @@ bears:
     option: two-skills-one-package
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of these sources the survey produced,
+and no second account of what the record takes from them is on the table.
+
+#### standing
+
+Supports the shape the record is already in, and names the part of the recommended option that is not yet built.
+
+**AI support.** Read in the tradition survey of the review sitting of 2026-09-04, which marked it shelved by a pre-agent constraint, and named in `review-skills`' account among the readings its pass with reference to tradition owes: "Literate programming, Knuth, 1984, with the DITA content reference, adopted for the fragments and shelved until now by a pre-agent constraint, since a tangler that is a script inverts the cost that retired it." The `evaluation` node's rule that the second pass looks for traditions shelved under constraints that no longer hold is what puts it on the record.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does literate programming say about one source tangled into several artifacts, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/review-skills
+source: Donald E. Knuth, "Literate Programming", The Computer Journal 27(2) (1984), the WEB system, whose one authored source, ordered for the argument a human reads, is mechanically tangled into the program and woven into the document, so that the artifacts are outputs and never where an author works; Norman Ramsey, "Literate programming simplified", IEEE Software 11(5) (1994), for noweb; and the content reference, `conref`, of OASIS DITA's topic-based authoring, by which one paragraph appears in several documents by reference and never by copy. Locus to be checked, the DITA version at which `conref` is read here, taken as 1.0 (2005).
+bears:
+  - fact: answer
+    option: two-skills-one-package
+    relation: adopted
+---
+
 ## Answer
 
 Supports the shape the record is already in, and names the part of the recommended option that is not yet built. There is one authored source, ordered for the argument rather than for the machine, and the artifacts each consumer needs are tangled out of it mechanically; an author never works in an artifact. DITA adds the documentation case directly: a paragraph belonging in several manuals is transcluded into each by reference, so that the paragraph has one place it is written and many places it appears.
@@ -35,17 +65,7 @@ This is the record's own architecture stated by an older name. The node is the w
 The adoption on `two-skills-one-package` is for the fragments, which are the content reference standing in where the tangler is not ready: the text the two briefs share is authored once and appears in both by reference rather than by copy, which is what DITA prescribes for a paragraph belonging to several documents. That is `conref` and not WEB, and the reading marks the difference. Knuth's point is the tangler, and a transclusion is the fallback the tradition itself offers when there is no generator yet; the record has that fallback for the briefs and has neither for the skills.
 
 Shelved once by a constraint that has gone. Literate programming lost because maintaining a woven source cost a human author more than it saved when the readers were humans on a deadline and the tools were the author's own to build. When the tangler is a script and the reader is an agent that loads the whole file anyway, both halves of the objection invert, which is why the tradition is read here rather than remembered.
-
-## Rationale
-
-Read in the tradition survey of the review sitting of 2026-09-04, which marked it shelved by a pre-agent constraint, and named in `review-skills`' account among the readings its pass with reference to tradition owes: "Literate programming, Knuth, 1984, with the DITA content reference, adopted for the fragments and shelved until now by a pre-agent constraint, since a tangler that is a script inverts the cost that retired it." The `evaluation` node's rule that the second pass looks for traditions shelved under constraints that no longer hold is what puts it on the record.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of these sources the survey produced,
-and no second account of what the record takes from them is on the table.
+```
 
 ### authority
 
@@ -70,3 +90,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/literate-programming stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

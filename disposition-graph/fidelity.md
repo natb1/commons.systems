@@ -30,10 +30,6 @@ facts:
 under:
   - commons.systems/disposition-graph/growth
 ---
-## Disposition
-
-The author, 2026-09-03:
-> we also require (unanswered) disposition about how the dialogue phases avoid the loss of author intention prior to confirmation. Confirmation is a gate that prevents misclassified authority of disposition, but what preserves the signal of author intention while the dialogue is rationalizing the unanswered frontier (like in this session).
 
 ## Facts
 
@@ -43,25 +39,49 @@ The author, 2026-09-03:
 
 A fidelity check in the clean-context review, separate from coverage: the reviewer reads the author's verbatim words and the draft, and nothing else, and judges whether the draft is what the author meant. The clean-context review already runs a fresh context; this asks it a different question with a narrower brief, and would add a validation to the frontier-consistency list.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### periagoge-across-sittings
 
 The periagogic conduct extended across sittings rather than within one: on re-entry to a node the author is turned back to their own prior words before the AI's accumulated account, so the frame is re-grounded at every return. This amends growth's conduct rather than adding a check.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 #### signal-measure-on-frontier
 
 A signal measure on the frontier, whatever the right one is, surfaced beside rank, so that a node whose author-signal has thinned is visible without being read in full. The byte ratio measured here, 6.2 per cent across the graph and falling to about 4 per cent from the second review round on, is offered as a symptom rather than as the measure; naming the right measure is part of what this question asks, and the measure would join attention's rank.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### compacted-account
 
 Compaction of the account: superseded review sections collapse at each recording, so that the node's account does not grow without bound while the author's words stay fixed. This bounds the dilution at its source rather than measuring or checking it, and would change what a node carries, which is dialogue's question.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 #### the-probe-list
 
 What preserves the author's intention is the list of probes each node carries: the questions the AI needs the author to answer before it can recommend, recorded on the node, collected at every movement, and asked in the maieutic session. It answers this question from the other side. Every other candidate on this fact protects an intention already stated, by checking it, by returning to it, by measuring drift from it or by compacting what has accumulated around it; the probe list is the only mechanism in the record that makes the author's contribution grow, because it records where the dialogue's rationalization has outrun what the author actually said and asks rather than fills the gap. Raised by the `author-questions` sitting of 2026-09-04, which ran the merge of that node into this one and rejected it: that node answers what a node carries and where a probe is asked, which is its own parent's question narrowed to one part of the dialogue's state, so the two are not one node and the relation is recorded here as a candidate instead.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### no-mechanism
 
 Nothing, on the argument that the author's verbatim words are always present in the node and the author always rules on the whole node, so no further mechanism is owed. The node's own evidence against it is that two of the three losses it records were caught only because the author was reading closely, which is the attention the record exists to conserve.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 ## Account
 
@@ -133,3 +153,7 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `fidelity-check-in-review` (ai); `periagoge-across-sittings` (ai); `signal-measure-on-frontier` (ai); `compacted-account` (ai); `no-mechanism` (ai).
 Merge analysis of the author's words: 2026-09-03, own-question: An unanswered disposition is owed about how the dialogue's phases avoid the loss of author intention before confirmation, since confirmation gates misclassified authority but not the preservation of the author's signal while the frontier is being rationalized.
 The census unit's note: The five entries are the node's own list of candidates, offered as alternatives and not as an answer, with no recommendation and no Answer section, so adopts is null and the list transcribes them. The four mechanisms the account describes, growth's periagogic conduct, dialogue and checkpoint, frontier-consistency's coverage, and quotes and recording, are evidence of what is already protected and are not alternatives. I minted no elsewhere entries: the section naming what this sitting would amend, growth, clean-context-review, frontier-consistency, dialogue and attention, is conditional on a ruling that has not been given, so nothing there proposes a change to a target yet.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/fidelity stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 1 `## Disposition` entry became the ledger entry words/2026-09-03/52, referenced by 0 options the entry's own date names. No content is recorded for `fidelity-check-in-review`, `periagoge-across-sittings`, `signal-measure-on-frontier`, `compacted-account`, `the-probe-list`, `no-mechanism`: the record never wrote one and the migration invents none.

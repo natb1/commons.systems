@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -33,6 +32,44 @@ bears:
     option: per-fact-after-two-readings
     relation: diverged
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of this rule the pass produced, and no
+second account of what the record takes from it is on the table.
+
+#### standing
+
+Against this option, and the divergence is the case the recommendation has to beat.
+
+**AI support.** Surfaced by the second evaluation of `commons.systems/disposition-graph/dialogue`'s maieutic movement of 2026-09-04 and named in the fence's rationale among the readings owed under that node: "the single-subject rule, which diverges from this answer and is the case against composing five clauses into one option". It bears on `every-part-in-the-record` because that is the composed option, and the relation is `diverged` because the account gives it as the case against and `commons.systems/disposition-graph/evaluation` requires a divergence to be recorded rather than argued away. The same tension is named from the other side in `commons.systems/disposition-graph/special-verdict-form` under this node, which is cited for dividing a decision into the questions the judgment needs.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does the single-subject rule say about composing several decisions into one, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/dialogue
+source: The single-subject rule of legislative drafting, by which a bill embraces one subject, expressed in its title, so that a legislator votes on one thing at a time and a measure cannot pass by riding on another. Carried in most United States state constitutions, among them Article IV of the Illinois Constitution of 1970 and Article IV of the California Constitution, and enforced by courts that strike down logrolled acts; with the germaneness requirement, which is the same principle applied to amendments, and the line-item veto, which is the executive's remedy where the rule failed. The federal Congress has no such rule, which is why the practice it exists against, logrolling, is named from federal experience. Locus to be checked, the section numbers of the two constitutional provisions and a leading case on the rule's enforcement.
+bears:
+  - fact: answer
+    option: every-part-in-the-record
+    relation: diverged
+  - fact: answer
+    option: the-survey-block-carries-what-the-next-survey-selects-on
+    relation: diverged
+  - node: commons.systems/disposition-graph/recording
+    fact: answer
+    option: per-fact-after-two-readings
+    relation: diverged
+---
+
 ## Answer
 
 Against this option, and the divergence is the case the recommendation has to beat. The rule's claim is about consent, not tidiness. A decider presented with several decisions in one vote gives one answer that cannot be taken apart afterwards, and the party that drafted the bundle chose which decisions travelled with which. What the decider consented to is then unrecoverable, and the drafter has taken with the popular clause what would not have passed alone. The remedy the tradition reaches for is structural rather than procedural, one subject per instrument, because a warning in the preamble does not undo the arithmetic of a single vote.
@@ -42,17 +79,7 @@ Against this option, and the divergence is the case the recommendation has to be
 What the record offers against it, recorded here as the reply and not as a resolution. The five clauses keep their own rows on the answer fact, each saying what a ruling for it alone would adopt, so the author may rule on one instead of the bundle; and the argument for composing is that an option is what a ruling is stored as, so an option must name the whole of what a ruling for it would take, and five clause-deltas ruled separately would leave no text that says the encoding whole. The tradition's answer to both is available and is not weak. Keeping the parts visible beside the bundle is what a committee report does, and the rule exists because that was found not to be enough; and if the encoding cannot be stated except whole, the tradition would say the subject is one subject and the title should say so, which is a claim about this node's question and not about the vote.
 
 The divergence stands recorded and is not resolved in the reading's favour. Whether the composition is one subject or six is the question the author answers by ruling, and the tradition's contribution is that the question is theirs and not the drafter's.
-
-## Rationale
-
-Surfaced by the second evaluation of `commons.systems/disposition-graph/dialogue`'s maieutic movement of 2026-09-04 and named in the fence's rationale among the readings owed under that node: "the single-subject rule, which diverges from this answer and is the case against composing five clauses into one option". It bears on `every-part-in-the-record` because that is the composed option, and the relation is `diverged` because the account gives it as the case against and `commons.systems/disposition-graph/evaluation` requires a divergence to be recorded rather than argued away. The same tension is named from the other side in `commons.systems/disposition-graph/special-verdict-form` under this node, which is cited for dividing a decision into the questions the judgment needs.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of this rule the pass produced, and no
-second account of what the record takes from it is on the table.
+```
 
 ### authority
 
@@ -85,3 +112,7 @@ Recorded as an option on commons.systems/disposition-graph/authority's answer fa
 ### Bears entry added, 2026-09-07
 
 The re-reading of `dialogue` of 2026-09-07 found its rationale naming this tradition as the case against the option that fact now recommends, `the-survey-block-carries-what-the-next-survey-selects-on`, while this node's `bears` named only the option it was first read against, `every-part-in-the-record`, which that recommendation absorbed. The divergence is the same and falls on what absorbed the option, so a second entry names the recommended option and the first stays, since the reading was made against it and the record keeps what it was made against.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/single-subject-rule stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

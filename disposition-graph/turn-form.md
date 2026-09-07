@@ -8,6 +8,9 @@ facts:
       - name: four-forms
         source: author
         ref: "2026-09-07"
+        supports:
+          - words/2026-09-07/18
+          - words/2026-09-07/19
       - name: expected-not-required
         source: ai
         ref: "2026-09-07"
@@ -24,13 +27,14 @@ facts:
       - name: a-turn-that-reports-an-impediment
         source: review
         ref: "2026-09-07"
+        supports:
+          - words/2026-09-06/5
       - name: a-turn-that-reports-a-prune
         source: review
         ref: "2026-09-07"
     recommends: a-turn-that-reports-an-impediment
     boldness: moderate
     against: "The rule is drawn from a single turn the author disliked, and their own words in that message call the four forms what a prompt is expected to take rather than what every turn must be; the hardening into a bound is the AI's, and its cost is paid where it cannot be seen, in the turns a future session does not make. The impediment turn answers only the sitting that cannot continue: a session that has found something the author would want to know, and that is neither probe nor direction nor acknowledgement, is still told to write it to the record and let the projections carry it, and surviving in a record this size is not the same as reaching the author when it matters."
-    stands: four-forms
   - name: authority
     options:
       - name: ratified
@@ -42,85 +46,57 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-07
-  of: 387386abd5048685a94a39df8346873c76a4cc04
+  of: 7443e62c32e1349585432dbfeb53c047785ead32
   commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
   against: "The rule is still drawn from a single turn the author disliked, and their own words call the four forms what a prompt is 'expected to take' rather than a bound; the impediment turn only covers the sitting that cannot continue, so a session that finds something true and interesting but not of the four forms (or the impediment) still has no way to say so and must trust the record's projections to carry it to the author in time."
   survey:
     date: 2026-09-07
-    of: 387386abd5048685a94a39df8346873c76a4cc04
+    of: 7443e62c32e1349585432dbfeb53c047785ead32
 under:
   - commons.systems/disposition-graph/growth
 ---
-## Disposition
 
-The author, 2026-09-06, on what the alignment dialogue is for and what it is not
-for, carried here from `commons.systems/disposition-graph/growth` at this node's
-minting:
+## Facts
 
-> Record the disposition that alignment dialogue must focus on establishing common grounding (peraigogic) and clarifying ambiguities is author intent (meiutic). use the alignment artifact for confirmation of disposition fact, and otherwise minimize noise about mechanical/encoding concerns.
+### answer
 
-The author, 2026-09-07, on the form a turn addressed to them takes, after the
-session closed a draft by reporting a measurement, a bookkeeping repair and a
-marking rule to them:
+Recommended because the four forms are the author's own enumeration, given in the
+turn that named the breach, and because the record's two conducts already run that
+way: the periagogic conduct holds the AI's account back until the author has
+committed, and the maieutic conduct draws one thing out at a time, so a turn that
+is neither probe nor direction nor acknowledgement is the AI's account put before
+the author's. `a-turn-that-reports-an-impediment` and not `four-forms`, because
+the rule as first drafted left a sitting that cannot continue no form in which to
+say so and then told it that a turn of none of the four means it has nothing to
+stop for: the clean-context reading of 2026-09-07 found it, and the exemption it
+asks for is of the same kind as the two the answer already carried, a turn that is
+not the AI's account put before the author's.
 
-> To the point of the disposition recorded just priot, this kind of response includes a lot of "noise" and it's hard for the author to know what to do with this. Dialogue prompts for the author are expected to take the form of periagogic interview, meiutic interview, direct the author to the alignment artifact for confirmation, or a simple ackowledgement of confirmation. Reconciliation outputs may diverge from the alignment output disposition. Record and you have bootstrap authority to reconcile alignment dialogue/review/survey/artifact. Before beginning reconciliation list the AI recommendation dispositions that are queued for reconciliation.
+Boldness moderate. The enumeration is the author's: the three surfaces are their
+words of 2026-09-06 and the four forms their words of 2026-09-07, close to as
+they stand. What is the AI's is the hardening of them into a bound — the author
+wrote that dialogue prompts are expected to take the four forms, and this answer
+writes that a turn takes one of four forms and no fifth — and that is not an edge
+but the whole operative force of the answer, since it is what makes a turn of a
+fifth kind a breach rather than a departure. The three exemptions are the AI's
+too, the third of them this reading's. `expected-not-required` is the option that
+carries the softer reading, and it and the fact's case against are what argue with
+the bound.
 
-The author, 2026-09-07, on `commons.systems/disposition-graph/probe-or-node`, on
-where a persistent intent of theirs is recorded, which is the sentence that mints
-this node:
+#### four-forms
 
-> If author's intent is a peristent disposition, then it may require a new node to be reconciled into the alignment skill.
+The author's four forms with two things outside the rule and no third: everything
+the recommended option says, without the turn that reports an impediment. Its text
+is the `## Answer` above, as first recorded. Under it a session that cannot
+continue has no form in which to say so, and the sentence that a session with none
+of the four to give has nothing to stop for tells it to proceed in silence, which
+is what the fourth finding of the reading of 2026-09-07 named and what the
+recommendation moved for. The reading's three other corrections — the mood of the
+sentence that the two nodes cite this node, the scope of the question, and the
+tradition pass — are not what separates the two options; they are carried in the
+recommended text, which is what a ruling reads.
 
-## Answer
-
-Three surfaces bound what reaches the author, and on them every turn addressed to
-the author takes one of four forms and no fifth. The periagogic movement
-establishes common grounding in the record; the maieutic movement clarifies
-ambiguities in the author's intent; the alignment page takes the confirmation of a
-disposition's facts. So a turn of the alignment dialogue addressed to the author is
-a periagogic probe, which turns them back to the record for the ground of a
-question; a maieutic probe, which asks what they intend where the record leaves it
-open; a direction to the alignment page, where a disposition's facts stand for
-confirmation; or an acknowledgement of a confirmation, which says which rulings
-were recorded and, where the response moved the node, that it moved and why, as
-`commons.systems/disposition-graph/recording` requires of the turn that makes the
-move. A session with none of the four to give has nothing to stop for and
-proceeds. The readings and what they return, the instruments the sitting runs, the
-measurements it takes, and the mechanical and encoding defects it finds and
-repairs are the sitting's own: it corrects them and passes through without asking,
-and their appearance in a turn addressed to the author is noise to be minimised
-and not thoroughness.
-
-Two things stand outside the rule. A turn the author has expressly asked for takes
-the form they asked for: the same words that give the four forms end by asking for
-a listing of the AI's recommendations queued for reconciliation, so a rule that
-forbade what the author had just requested would be a rule read against the party
-it exists to serve. And what a reconciliation session outputs, a listing or a
-report included, is outside the rule altogether, which binds the alignment
-dialogue and nothing else; what form a reconciliation's own output takes is
-`commons.systems/disposition-graph/work-loop`'s question and is not decided here.
-
-The rule is stated once, here, and the two nodes that carry it from one side each
-cite this node rather than restating half of it.
-`commons.systems/disposition-graph/author-questions` carries the probe's side, as
-`the-sitting-stops-only-on-intent`: a sitting stops for the author only where
-there is a question about their intent, so a session with no probe to raise has
-nothing to stop for. `commons.systems/disposition-graph/alignment-page` carries
-the page's side, as `page-collects-only-the-confirmation`: the page collects the
-final confirmation and nothing else, and every other thing the author has to say
-is given in the interview. Each is this rule seen from one surface, and neither is
-the whole of it, since neither says that the three surfaces together bound what
-may reach the author at all.
-
-What the author's words ask for, beyond the record of the rule, is that the
-alignment skill be reconciled to it, and that reconciliation is what makes the
-rule act rather than merely stand: the skill's turns to the author are the four
-forms, and what it learns from a reading, an instrument or a repair is written to
-the record and not reported to the author.
-
-## Rationale
-
-Four forms and not three because the acknowledgement is doing work the other three
+**AI support.** Four forms and not three because the acknowledgement is doing work the other three
 cannot do. `commons.systems/disposition-graph/recording`'s recommended text
 requires that the session, having classified a response, "tells the author in the
 turn it makes the move that the node has moved and why, since a movement the
@@ -172,45 +148,65 @@ it. That is a consequence of the design and not a reason for it: a record whose
 projections the author reads is where such a finding belongs, and a finding that
 cannot survive being written down was not worth the author's turn.
 
-## Facts
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-### answer
+**Content.**
 
-Recommended because the four forms are the author's own enumeration, given in the
-turn that named the breach, and because the record's two conducts already run that
-way: the periagogic conduct holds the AI's account back until the author has
-committed, and the maieutic conduct draws one thing out at a time, so a turn that
-is neither probe nor direction nor acknowledgement is the AI's account put before
-the author's. `a-turn-that-reports-an-impediment` and not `four-forms`, because
-the rule as first drafted left a sitting that cannot continue no form in which to
-say so and then told it that a turn of none of the four means it has nothing to
-stop for: the clean-context reading of 2026-09-07 found it, and the exemption it
-asks for is of the same kind as the two the answer already carried, a turn that is
-not the AI's account put before the author's.
+```markdown
+---
+question: What form does a turn of the alignment dialogue addressed to the author take?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
 
-Boldness moderate. The enumeration is the author's: the three surfaces are their
-words of 2026-09-06 and the four forms their words of 2026-09-07, close to as
-they stand. What is the AI's is the hardening of them into a bound — the author
-wrote that dialogue prompts are expected to take the four forms, and this answer
-writes that a turn takes one of four forms and no fifth — and that is not an edge
-but the whole operative force of the answer, since it is what makes a turn of a
-fifth kind a breach rather than a departure. The three exemptions are the AI's
-too, the third of them this reading's. `expected-not-required` is the option that
-carries the softer reading, and it and the fact's case against are what argue with
-the bound.
+## Answer
 
-#### four-forms
+Three surfaces bound what reaches the author, and on them every turn addressed to
+the author takes one of four forms and no fifth. The periagogic movement
+establishes common grounding in the record; the maieutic movement clarifies
+ambiguities in the author's intent; the alignment page takes the confirmation of a
+disposition's facts. So a turn of the alignment dialogue addressed to the author is
+a periagogic probe, which turns them back to the record for the ground of a
+question; a maieutic probe, which asks what they intend where the record leaves it
+open; a direction to the alignment page, where a disposition's facts stand for
+confirmation; or an acknowledgement of a confirmation, which says which rulings
+were recorded and, where the response moved the node, that it moved and why, as
+`commons.systems/disposition-graph/recording` requires of the turn that makes the
+move. A session with none of the four to give has nothing to stop for and
+proceeds. The readings and what they return, the instruments the sitting runs, the
+measurements it takes, and the mechanical and encoding defects it finds and
+repairs are the sitting's own: it corrects them and passes through without asking,
+and their appearance in a turn addressed to the author is noise to be minimised
+and not thoroughness.
 
-The author's four forms with two things outside the rule and no third: everything
-the recommended option says, without the turn that reports an impediment. Its text
-is the `## Answer` above, as first recorded. Under it a session that cannot
-continue has no form in which to say so, and the sentence that a session with none
-of the four to give has nothing to stop for tells it to proceed in silence, which
-is what the fourth finding of the reading of 2026-09-07 named and what the
-recommendation moved for. The reading's three other corrections — the mood of the
-sentence that the two nodes cite this node, the scope of the question, and the
-tradition pass — are not what separates the two options; they are carried in the
-recommended text, which is what a ruling reads.
+Two things stand outside the rule. A turn the author has expressly asked for takes
+the form they asked for: the same words that give the four forms end by asking for
+a listing of the AI's recommendations queued for reconciliation, so a rule that
+forbade what the author had just requested would be a rule read against the party
+it exists to serve. And what a reconciliation session outputs, a listing or a
+report included, is outside the rule altogether, which binds the alignment
+dialogue and nothing else; what form a reconciliation's own output takes is
+`commons.systems/disposition-graph/work-loop`'s question and is not decided here.
+
+The rule is stated once, here, and the two nodes that carry it from one side each
+cite this node rather than restating half of it.
+`commons.systems/disposition-graph/author-questions` carries the probe's side, as
+`the-sitting-stops-only-on-intent`: a sitting stops for the author only where
+there is a question about their intent, so a session with no probe to raise has
+nothing to stop for. `commons.systems/disposition-graph/alignment-page` carries
+the page's side, as `page-collects-only-the-confirmation`: the page collects the
+final confirmation and nothing else, and every other thing the author has to say
+is given in the interview. Each is this rule seen from one surface, and neither is
+the whole of it, since neither says that the three surfaces together bound what
+may reach the author at all.
+
+What the author's words ask for, beyond the record of the rule, is that the
+alignment skill be reconciled to it, and that reconciliation is what makes the
+rule act rather than merely stand: the skill's turns to the author are the four
+forms, and what it learns from a reading, an instrument or a repair is written to
+the record and not reported to the author.
+```
 
 #### expected-not-required
 
@@ -218,16 +214,39 @@ Everything `four-forms` says, with the rule read as a default rather
 than a bound: the author wrote that dialogue prompts "are expected to take" the
 four forms, and under this option a session may depart from one of them where it
 states its reason, the departure being a thing the author can see and correct
-rather than a thing the record forbids. For it: it is what the author's words
+rather than a thing the record forbids.
+
+**AI support.** For it: it is what the author's words
 literally say, it needs no exemption for a turn they asked for, since such a turn
 is simply a departure with the best of reasons, and it leaves the record honest
-about a rule whose source broke it in the sentence that gave it. Against it: a
+about a rule whose source broke it in the sentence that gave it.
+
+**AI divergence.** Against it: a
 default the session may leave with a reason is the state the record was already
 in, since the session that gave the turn the author called noise would have
 recorded a reason for it and did not think it noise, and the rule exists precisely
 because the AI is the party whose judgment about what is worth the author's
 attention was found wrong. It stays viable and is not adopted; where the author
 prefers the softer reading, this is the option that carries it.
+
+**Content.**
+
+```markdown
+---
+question: What form does a turn of the alignment dialogue addressed to the author take?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+Everything `four-forms` says, with the rule read as a default rather
+than a bound: the author wrote that dialogue prompts "are expected to take" the
+four forms, and under this option a session may depart from one of them where it
+states its reason, the departure being a thing the author can see and correct
+rather than a thing the record forbids.
+```
 
 #### three-forms-no-acknowledgement
 
@@ -238,6 +257,30 @@ acknowledgement is where `recording` requires the session to say which rulings i
 recorded and that the node moved and why, and folding it away leaves that notice
 with no form to take.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What form does a turn of the alignment dialogue addressed to the author take?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+Everything `four-forms` says, with the acknowledgement folded into the
+direction to the alignment page, so that the confirmation is directed for and the
+next direction to the page is the only reply a confirmation gets. Passed over: the
+acknowledgement is where `recording` requires the session to say which rulings it
+recorded and that the node moved and why, and folding it away leaves that notice
+with no form to take.
+```
+
 #### rule-on-growth
 
 Everything `four-forms` says, kept as a clause of
@@ -246,6 +289,30 @@ and no node minted. Passed over: a rule that governs every turn of every sitting
 its own question, `growth`'s answer already answers more questions than one, and
 the author's words of 2026-09-07 send a persistent intent of theirs to a node of
 its own to be reconciled into the skill.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What form does a turn of the alignment dialogue addressed to the author take?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+Everything `four-forms` says, kept as a clause of
+`commons.systems/disposition-graph/growth`'s answer, where the two conducts are,
+and no node minted. Passed over: a rule that governs every turn of every sitting is
+its own question, `growth`'s answer already answers more questions than one, and
+the author's words of 2026-09-07 send a persistent intent of theirs to a node of
+its own to be reconciled into the skill.
+```
 
 #### a-turn-that-reports-an-impediment
 
@@ -261,95 +328,7 @@ two exemptions the answer already carries are of the same kind, things that are
 not the AI's account put before the author's. Raised by the clean-context reading
 of 2026-09-07 as its fourth finding, and recommended over `four-forms` on it.
 
-#### a-turn-that-reports-a-prune
-
-Everything `a-turn-that-reports-an-impediment` says, with a fourth thing standing outside the rule: a turn reporting what the AI has deleted under a delegation — the node, the survivor that keeps its question, and the reason the question was closed — given at the next sitting and asking nothing. It is on the table because graph-topology's option `prunes-reported-to-the-author` proposes exactly that surface and declines to adopt it on the ground that "which surfaces reach the author is `turn-form`'s question for the sitting", and this answer's list of what stands outside the rule is exhaustive and does not reach it. Against it: a prune leaves its trace on the survivor's account, which the browser renders and the frontier lists, so the report may be the noise the rule exists to bound rather than the notice a deletion owes.
-
-### authority
-
-Ratified, on the capture-shaped limb of
-`commons.systems/disposition-graph/class-recommendation`'s test. The rule fixes
-what the AI may say to the author, and the author is the only check the record has
-on the AI; a class that let the recommending party set that bound would let it
-decide how much of its own work the checking party ever sees. The other two limbs
-are not met: the object is the form of a turn, which costs a paragraph of the
-alignment skill to get wrong and can be changed back at the next sitting, so a
-wrong answer here is neither expensive nor irreversible. Boldness low: the class
-follows the stated test, and the rule whose class is in question is in the
-author's own words.
-
-## Recommendation
-
-```markdown
----
-question: What form does a turn of the alignment dialogue addressed to the author take?
-form: rule
-under:
-  - commons.systems/disposition-graph/growth
----
-## Answer
-
-Three surfaces bound what reaches the author, and on them every turn of the
-alignment dialogue addressed to the author takes one of four forms and no fifth.
-The periagogic movement establishes common grounding in the record; the maieutic
-movement clarifies ambiguities in the author's intent; the alignment page takes
-the confirmation of a disposition's facts. So such a turn is a periagogic probe,
-which turns them back to the record for the ground of a question; a maieutic
-probe, which asks what they intend where the record leaves it open; a direction to
-the alignment page, where a disposition's facts stand for confirmation; or an
-acknowledgement of a confirmation, which says which rulings were recorded and,
-where the response moved the node, that it moved and why, as
-`commons.systems/disposition-graph/recording` requires of the turn that makes the
-move. A session with none of the four to give, and no impediment to report, has
-nothing to stop for and proceeds. The readings and what they return, the
-instruments the sitting runs, the measurements it takes, and the mechanical and
-encoding defects it finds and repairs are the sitting's own: it corrects them and
-passes through without asking, and their appearance in a turn addressed to the
-author is noise to be minimised and not thoroughness.
-
-Three things stand outside the rule. A turn the author has expressly asked for
-takes the form they asked for: the same words that give the four forms end by
-asking for a listing of the AI's recommendations queued for reconciliation, so a
-rule that forbade what the author had just requested would be a rule read against
-the party it exists to serve. What a reconciliation session outputs, a listing or
-a report included, is outside the rule altogether, which binds the alignment
-dialogue and nothing else; what form a reconciliation's own output takes is
-`commons.systems/disposition-graph/work-loop`'s question and is not decided here.
-And a turn that reports an impediment is outside it: where the sitting cannot
-continue — the landing will not land, the record will not validate, the worktree
-is reaped under the session, the instruction contradicts a ruling already recorded
-— the session says in one line that it cannot continue and what stopped it, and
-asks nothing. It is outside the rule because it is not the AI's account put before
-the author's but the sitting's inability to give them any of the four; without it
-the session with no turn of the four to give is sent to the sentence above, which
-tells it to proceed, and proceeding in silence is the one wrong act there.
-
-The rule is stated here and once. The two nodes that carry it from one side are
-amended to cite this node rather than restating half of it.
-`commons.systems/disposition-graph/author-questions` carries the probe's side, as
-`the-sitting-stops-only-on-intent`: a sitting stops for the author only where
-there is a question about their intent, so a session with no probe to raise has
-nothing to stop for. That option today restates the three surfaces in full, and
-the amendment is recorded on that node as the option
-`cites-turn-form-for-the-three-surfaces`, for the author to rule on and not yet
-made. `commons.systems/disposition-graph/alignment-page` carries the page's side,
-in the page-scope clause of its recommended answer, which the option
-`page-collects-only-the-confirmation` records: the page's scope is the final
-confirmation and, of every other movement, a preview and a read-only indicator,
-and every other thing the author has to say is given in the interview; that clause
-is amended in this sitting to cite this node where it states that side. Each is
-this rule seen from one surface, and neither is the whole of it, since neither
-says that the three surfaces together bound what may reach the author at all.
-
-What the author's words ask for, beyond the record of the rule, is that the
-alignment skill be reconciled to it, and that reconciliation is what makes the
-rule act rather than merely stand: the skill's turns to the author are the four
-forms, and what it learns from a reading, an instrument or a repair is written to
-the record and not reported to the author.
-
-## Rationale
-
-Four forms and not three because the acknowledgement is doing work the other three
+**AI support.** Four forms and not three because the acknowledgement is doing work the other three
 cannot do. `commons.systems/disposition-graph/recording`'s recommended text
 requires that the session, having classified a response, "tells the author in the
 turn it makes the move that the node has moved and why, since a movement the
@@ -421,7 +400,114 @@ projections the author reads is where such a finding belongs, and a finding that
 cannot survive being written down was not worth the author's turn. The impediment
 turn does not soften that cost and is not meant to: it is not for a finding the
 author would want, but for the sitting that has nothing to give at all.
+
+**AI divergence.** The rule is drawn from a single turn the author disliked, and their own words in that message call the four forms what a prompt is expected to take rather than what every turn must be; the hardening into a bound is the AI's, and its cost is paid where it cannot be seen, in the turns a future session does not make. The impediment turn answers only the sitting that cannot continue: a session that has found something the author would want to know, and that is neither probe nor direction nor acknowledgement, is still told to write it to the record and let the projections carry it, and surviving in a record this size is not the same as reaching the author when it matters.
+
+**Content.**
+
+```markdown
+---
+question: What form does a turn of the alignment dialogue addressed to the author take?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+## Answer
+
+Three surfaces bound what reaches the author, and on them every turn of the
+alignment dialogue addressed to the author takes one of four forms and no fifth.
+The periagogic movement establishes common grounding in the record; the maieutic
+movement clarifies ambiguities in the author's intent; the alignment page takes
+the confirmation of a disposition's facts. So such a turn is a periagogic probe,
+which turns them back to the record for the ground of a question; a maieutic
+probe, which asks what they intend where the record leaves it open; a direction to
+the alignment page, where a disposition's facts stand for confirmation; or an
+acknowledgement of a confirmation, which says which rulings were recorded and,
+where the response moved the node, that it moved and why, as
+`commons.systems/disposition-graph/recording` requires of the turn that makes the
+move. A session with none of the four to give, and no impediment to report, has
+nothing to stop for and proceeds. The readings and what they return, the
+instruments the sitting runs, the measurements it takes, and the mechanical and
+encoding defects it finds and repairs are the sitting's own: it corrects them and
+passes through without asking, and their appearance in a turn addressed to the
+author is noise to be minimised and not thoroughness.
+
+Three things stand outside the rule. A turn the author has expressly asked for
+takes the form they asked for: the same words that give the four forms end by
+asking for a listing of the AI's recommendations queued for reconciliation, so a
+rule that forbade what the author had just requested would be a rule read against
+the party it exists to serve. What a reconciliation session outputs, a listing or
+a report included, is outside the rule altogether, which binds the alignment
+dialogue and nothing else; what form a reconciliation's own output takes is
+`commons.systems/disposition-graph/work-loop`'s question and is not decided here.
+And a turn that reports an impediment is outside it: where the sitting cannot
+continue — the landing will not land, the record will not validate, the worktree
+is reaped under the session, the instruction contradicts a ruling already recorded
+— the session says in one line that it cannot continue and what stopped it, and
+asks nothing. It is outside the rule because it is not the AI's account put before
+the author's but the sitting's inability to give them any of the four; without it
+the session with no turn of the four to give is sent to the sentence above, which
+tells it to proceed, and proceeding in silence is the one wrong act there.
+
+The rule is stated here and once. The two nodes that carry it from one side are
+amended to cite this node rather than restating half of it.
+`commons.systems/disposition-graph/author-questions` carries the probe's side, as
+`the-sitting-stops-only-on-intent`: a sitting stops for the author only where
+there is a question about their intent, so a session with no probe to raise has
+nothing to stop for. That option today restates the three surfaces in full, and
+the amendment is recorded on that node as the option
+`cites-turn-form-for-the-three-surfaces`, for the author to rule on and not yet
+made. `commons.systems/disposition-graph/alignment-page` carries the page's side,
+in the page-scope clause of its recommended answer, which the option
+`page-collects-only-the-confirmation` records: the page's scope is the final
+confirmation and, of every other movement, a preview and a read-only indicator,
+and every other thing the author has to say is given in the interview; that clause
+is amended in this sitting to cite this node where it states that side. Each is
+this rule seen from one surface, and neither is the whole of it, since neither
+says that the three surfaces together bound what may reach the author at all.
+
+What the author's words ask for, beyond the record of the rule, is that the
+alignment skill be reconciled to it, and that reconciliation is what makes the
+rule act rather than merely stand: the skill's turns to the author are the four
+forms, and what it learns from a reading, an instrument or a repair is written to
+the record and not reported to the author.
 ```
+
+#### a-turn-that-reports-a-prune
+
+Everything `a-turn-that-reports-an-impediment` says, with a fourth thing standing outside the rule: a turn reporting what the AI has deleted under a delegation — the node, the survivor that keeps its question, and the reason the question was closed — given at the next sitting and asking nothing. It is on the table because graph-topology's option `prunes-reported-to-the-author` proposes exactly that surface and declines to adopt it on the ground that "which surfaces reach the author is `turn-form`'s question for the sitting", and this answer's list of what stands outside the rule is exhaustive and does not reach it.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: a prune leaves its trace on the survivor's account, which the browser renders and the frontier lists, so the report may be the noise the rule exists to bound rather than the notice a deletion owes.
+
+**Content.**
+
+```markdown
+---
+question: What form does a turn of the alignment dialogue addressed to the author take?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+Everything `a-turn-that-reports-an-impediment` says, with a fourth thing standing outside the rule: a turn reporting what the AI has deleted under a delegation — the node, the survivor that keeps its question, and the reason the question was closed — given at the next sitting and asking nothing. It is on the table because graph-topology's option `prunes-reported-to-the-author` proposes exactly that surface and declines to adopt it on the ground that "which surfaces reach the author is `turn-form`'s question for the sitting", and this answer's list of what stands outside the rule is exhaustive and does not reach it.
+```
+
+### authority
+
+Ratified, on the capture-shaped limb of
+`commons.systems/disposition-graph/class-recommendation`'s test. The rule fixes
+what the AI may say to the author, and the author is the only check the record has
+on the AI; a class that let the recommending party set that bound would let it
+decide how much of its own work the checking party ever sees. The other two limbs
+are not met: the object is the form of a turn, which costs a paragraph of the
+alignment skill to get wrong and can be changed back at the next sitting, so a
+wrong answer here is neither expensive nor irreversible. Boldness low: the class
+follows the stated test, and the rule whose class is in question is in the
+author's own words.
 
 ## Account
 
@@ -583,3 +669,7 @@ Recorded as an option on this node's answer fact: `a-turn-that-reports-a-prune` 
 ### Amended after the frontier survey, 2026-09-07
 
 The survey's finding named this node and is recorded as the option `a-turn-that-reports-a-prune`, not adopted: a prune leaves its trace on the survivor's account, which the browser renders and the frontier lists, and a turn that reports it would be the noise the rule bounds. The option stands for the author's ruling. No text moves, both pins hold, and the node returns to ruling.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/turn-form stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `four-forms`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `a-turn-that-reports-an-impediment`; 3 `## Disposition` entries became the ledger entries words/2026-09-06/5, words/2026-09-07/18, words/2026-09-07/19, referenced by 2 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `expected-not-required`, `three-forms-no-acknowledgement`, `rule-on-growth`, `a-turn-that-reports-a-prune`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `387386abd5048685a94a39df8346873c76a4cc04` is re-computed for the encoding as `7443e62c32e1349585432dbfeb53c047785ead32`; nothing it read changed. The survey's pin `387386abd5048685a94a39df8346873c76a4cc04` is re-computed for the encoding as `7443e62c32e1349585432dbfeb53c047785ead32`; nothing it read changed.

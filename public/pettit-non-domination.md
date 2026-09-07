@@ -24,7 +24,6 @@ facts:
         ref: "2026-09-03"
     recommends: standing
     boldness: high
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -49,29 +48,109 @@ bears:
     option: every-fact-every-option
     relation: adopted
 ---
-## Answer
-
-Supports. Unfreedom is another's capacity to interfere arbitrarily, whether or not it is exercised, so a delegation from which one could not recover is capture even while the delegatee behaves. This is why the archē names a capacity, not a practice of detachment, and why the legacy phrase "can I still move when I choose" was pointing at the right thing with the wrong word.
-
-## Rationale
-
-Sen's capability approach says the same of freedom in general, freedom as what one is able to do rather than what one does; a separate reading is owed for it. Validated by the AI on 2026-09-02 from its own knowledge; deferred until the author reads the chapter.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+Supports.
+
+**AI support.** Sen's capability approach says the same of freedom in general, freedom as what one is able to do rather than what one does; a separate reading is owed for it. Validated by the AI on 2026-09-02 from its own knowledge; deferred until the author reads the chapter.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does freedom as non-domination support the modal reading of this root?
+form: reading
+under:
+  - commons.systems/public/agency
+source: Pettit, Republicanism, A Theory of Freedom and Government (1997), chapter 2, "Liberty as non-domination"; Skinner, Liberty before Liberalism (1998).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+  - node: commons.systems/disposition-graph/alignment-page
+    fact: answer
+    option: three-column-ruling-screen
+    relation: diverged
+  - node: commons.systems/disposition-graph/alignment-page
+    fact: answer
+    option: every-fact-every-option
+    relation: adopted
+---
+
+## Answer
+
+Supports. Unfreedom is another's capacity to interfere arbitrarily, whether or not it is exercised, so a delegation from which one could not recover is capture even while the delegatee behaves. This is why the archē names a capacity, not a practice of detachment, and why the legacy phrase "can I still move when I choose" was pointing at the right thing with the wrong word.
+```
+
 #### record-the-divergence
 
 The frontmatter records the relation as adopted with no divergence, although the transposition is large: non-domination is a status between persons under institutions, applied here to a person's relation to their own tools. Evaluation requires the divergence to be recorded or it is a frontier item deferred to neither side. The alternative records the transposition as a divergence on this reading, which the session accepted as owed at the sitting and which has not been written.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -20,4 +20,4 @@
+ 
+ ## Answer
+ 
+-Supports. Unfreedom is another's capacity to interfere arbitrarily, whether or not it is exercised, so a delegation from which one could not recover is capture even while the delegatee behaves. This is why the archē names a capacity, not a practice of detachment, and why the legacy phrase "can I still move when I choose" was pointing at the right thing with the wrong word.
++The frontmatter records the relation as adopted with no divergence, although the transposition is large: non-domination is a status between persons under institutions, applied here to a person's relation to their own tools. Evaluation requires the divergence to be recorded or it is a frontier item deferred to neither side. The alternative records the transposition as a divergence on this reading, which the session accepted as owed at the sitting and which has not been written.
+```
 
 #### sen-capability-loss
 
 The reviewer's counter-argument, twice: a dominus with arbitrary power is a relation under institutions one cannot exit, and a tool the author can switch off either dominates the way any dependency does or does not dominate at all, so the analogy proves too much or too little. The failure the record actually fears is capture through atrophy, which is Sen's capability loss and not Pettit's mechanism. The alternative grounds the archē on the Sen reading this node's rationale defers and has never written, with Pettit demoted to a supporting reading or recorded as diverged.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -20,4 +20,4 @@
+ 
+ ## Answer
+ 
+-Supports. Unfreedom is another's capacity to interfere arbitrarily, whether or not it is exercised, so a delegation from which one could not recover is capture even while the delegatee behaves. This is why the archē names a capacity, not a practice of detachment, and why the legacy phrase "can I still move when I choose" was pointing at the right thing with the wrong word.
++The reviewer's counter-argument, twice: a dominus with arbitrary power is a relation under institutions one cannot exit, and a tool the author can switch off either dominates the way any dependency does or does not dominate at all, so the analogy proves too much or too little. The failure the record actually fears is capture through atrophy, which is Sen's capability loss and not Pettit's mechanism. The alternative grounds the archē on the Sen reading this node's rationale defers and has never written, with Pettit demoted to a supporting reading or recorded as diverged.
+```
+
 #### disclose-unstated-arche
 
 The parent, public/agency, is at the periagogic stage with no author words anywhere on it, and this reading stands at the ruling stage arguing for an answer the author has never given. The alternative adds one clause saying the reading rests on an archē the author has not yet stated, and holds the reading to be re-read against the account the author gives at agency's sitting. The counter-argument on agency also observes that Pettit's structural test is adopted as support without the record carrying any structural test of its own. Raised on commons.systems/public/aristotle-arche-of-action, commons.systems/public/agency.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -20,4 +20,4 @@
+ 
+ ## Answer
+ 
+-Supports. Unfreedom is another's capacity to interfere arbitrarily, whether or not it is exercised, so a delegation from which one could not recover is capture even while the delegatee behaves. This is why the archē names a capacity, not a practice of detachment, and why the legacy phrase "can I still move when I choose" was pointing at the right thing with the wrong word.
++The parent, public/agency, is at the periagogic stage with no author words anywhere on it, and this reading stands at the ruling stage arguing for an answer the author has never given. The alternative adds one clause saying the reading rests on an archē the author has not yet stated, and holds the reading to be re-read against the account the author gives at agency's sitting. The counter-argument on agency also observes that Pettit's structural test is adopted as support without the record carrying any structural test of its own. Raised on commons.systems/public/aristotle-arche-of-action, commons.systems/public/agency.
+```
 
 ## Account
 
@@ -144,3 +223,7 @@ The census unit's note: The reading has a standing answer and no recommended tex
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `disclose-unstated-arche` absorbs `reread-after-arche`.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/public/pettit-non-domination stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `record-the-divergence`, `sen-capability-loss`, `disclose-unstated-arche`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `793d76498e1c7f2d0b8f07d16ff8d13a395e9895` was already past the recommendation and is left as it stood.

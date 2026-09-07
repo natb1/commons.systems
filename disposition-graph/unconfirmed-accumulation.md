@@ -8,6 +8,15 @@ facts:
       - name: the-node-is-what-the-artifact-reads
         source: author
         ref: "2026-09-07"
+        supports:
+          - words/2026-09-07/2
+          - words/2026-09-07/3
+          - words/2026-09-07/4
+          - words/2026-09-07/11
+          - words/2026-09-07/12
+          - words/2026-09-07/13
+          - words/2026-09-07/14
+          - words/2026-09-07/15
       - name: the-rest-is-folded-or-absorbed
         source: ai
         ref: "2026-09-07"
@@ -35,7 +44,6 @@ facts:
     recommends: the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed
     boldness: moderate
     against: "The rule that decides what a node keeps is now read off what one projection needs, so a page whose design moves takes the record's shape with it, and material struck for not supporting today's artifact cannot be un-struck when tomorrow's asks for it; and the party deciding which of its own reasons survive is the party whose reasoning the author is checking, working from a list of readers it also wrote."
-    stands: the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed
   - name: authority
     options:
       - name: ratified
@@ -48,7 +56,7 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 10d93a148b2f67d4948fdda5ac9861c71ca310cc
+  of: f77ad34cb474cebe27f97d061fad03e6ebe63d21
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "All three findings are answered on the text itself, but one loose end survives: the repaired sentence fixes the contradiction by saying `## Disposition` absorption happens 'once for each node... at the migration' and that 'no node gains the section again,' yet it never states when 'the migration' occurs relative to a node's own first checkpoint — whether it is a single graph-wide event this node either falls before or after, or something folded into each node's own first fold. This node currently carries a live `## Disposition` section and no migration has run, so the amendment's fix is consistent as written, but the timing question it leaves open could recreate the previous contradiction for a node minted between the migration and its own first checkpoint if 'the migration' turns out not to be a single one-time event. This is an underspecified point, not a restated contradiction, so it does not by itself defeat the amendment."
 under:
@@ -64,48 +72,92 @@ depends:
   - commons.systems/disposition-graph/recording#per-fact-after-two-readings
   - commons.systems/disposition-graph/quotes#words-in-a-ledger-on-the-ref
 ---
-## Disposition
 
-The author, 2026-09-07, on the optimization of the frontier survey, carried here because this node defines the state an unconfirmed node carries and what the recording does with it:
+## Facts
 
-> The optimizations must involve some accumulation strategy, with the full history preserved only in git but enough context in the unconfirmed node to support alignment across an unconfirmed frontier. Something between keeping the full pre-confirmation record in the graph and the accumulation that is performed after confirmation. One the recommendation is established, you have bootstrap authority to reconcile that accumulation.
+### answer
 
-The author, 2026-09-07, in the next turn:
+`the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed` is recommended, and the recommendation is the weighing of the support and divergence recorded on each option below; the boldness is moderate for the reason the rationale gives.
 
-> (The accumulation strategy may be used in conjunction with other recommended optimizations)
+#### the-node-is-what-the-artifact-reads
 
-The author, 2026-09-07, when the design of the accumulation had been drafted and before it was recorded:
+The node carries what the alignment dialogue and its artifact read of a node still in dialogue, and nothing else; the list is the author's, clause by clause: the answer's paragraph "**What the node carries.**" and its first sentence up to the semicolon, with nothing said of the rest.
 
-> stop before reconciling the accumulation strategy. First describe the recommended strategy to let me review.
+**AI support.** The author's three clauses of 2026-09-07 each name a part: the content of every option, so the context pane can preview the node under the one being selected; the quotes that support and diverge from each option; and the AI's accumulated support and divergence for each option, kept whatever the recommendation is. Add what a ruling cannot happen without — the question, the facts, the recommendation with its boldness and its case against, the labels, the stage and the two readings' pins — and the node is complete. Everything else in a node file today is the AI's account of how it got here: measured at graph commit `32cd2e18` over all 143 nodes, the files are 6,069,526 bytes of which `## Account` is 4,172,598, 68.7%, spread over 1,154 account subsections, one node carrying fifty-five.
 
-The author, 2026-09-07, after the session described the recommended accumulation strategy, refining the disposition on what an option carries and what an unconfirmed node keeps:
+**AI divergence.** The list is read off one projection's needs, so a page whose design moves takes the record's shape with it, and the party drawing the list is the party whose account it strikes.
 
-> record this refinement to disposition and ensure the accumulation strategy supports it:
-> - each option for each fact is recorded with its actual fact content so that when the author selects an option via the alignment artifact the context pane is dynamically updated to preview the node that is being confirmed.
-> - "standing" is just a label that can be applied to an option (similar to an AI recommendation) to indicate that it was the last confirmed option for that fact on that node.
-> - the expanded details of an option (before and also after confirmation) shows a) the history of author quotes that both support and/or contradict the option (implies that one quote may be reference by multiple options) b) the accumulated/current AI support and/or rejection rationale for that option (independent of ultimate recommendation)
->
-> Anything else that doesn't support the alignment dialogue/artifact disposition is subject to accumulation/removal.
+**Content.**
 
-The author, 2026-09-07, in the next turn, granting the reconciliation of the refinement above:
+```markdown
+---
+question: What does an unconfirmed node carry between sittings, and what is left to git?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - accumulation
+  - fold
+  - manifest line
+---
 
-> reconciliation of that disposition in included in the bootstrap reconciliation authority for this sitting
+## Answer
 
-The author, 2026-09-07, answering the three calls the session put before them on the revised accumulation strategy:
+The node carries what the alignment dialogue and its artifact read of a node still in dialogue, and nothing else; the list is the author's, clause by clause: the answer's paragraph "**What the node carries.**" and its first sentence up to the semicolon, with nothing said of the rest.
+```
 
-> 1. named-change form legibility tradeoff is acceptable as long as the exact node preview can be mechanically derived (eg. via patch syntax)
-> 2. previously confirmed and standing are just one and the same thing (we can probably just remove reference to "standing" and replace it with "confirmed"
-> 3. All of AI and author rationale and references to tradition are recorded as support and/or divergence for each option. AI response is accumulated, reference to tradition is accumulated, author response is concatenated quotation. AI support and divergence can be recorded for any option. The AI recommendation is the judgement that weighs AI support/divergence for each option.
->
-> This implies guidance for which quotes from the author need to be retained and which options need to be recorded. We don't need to retain author quotes that neither support or diverge from an option. If a quote from an author expresses support or divergence from an option then that option must be recorded. Any option with support or divergence in tradition must be recorded. If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded.
+#### the-rest-is-folded-or-absorbed
 
-The author, 2026-09-07, asking where the words an option cites are kept:
+Everything above, and the author's last sentence given effect: what is not on that list is folded into the history or absorbed into the parts the dialogue reads, which is the answer's paragraphs "**What is folded, and what is absorbed.**" and "**The manifest line.**" added, with nothing said of when or by what.
 
-> Does the disposition for author quoting suggest that author quotes are kept in a ledger outside the graph and referenced by options? A single quote may be referenced by options across nodes.
+**AI support.** The author, 2026-09-07: "Anything else that doesn't support the alignment dialogue/artifact disposition is subject to accumulation/removal." The distinction between folded and absorbed is what keeps that sentence from destroying material the dialogue does need: a node-level `## Rationale` is not history, it is the argument for a recommendation, and under the refinement that argument has three homes the dialogue reads, so it is moved rather than struck. The same holds of an account section whose findings are now an option's divergence and of the author's words, which move to the ledger and reach the options as references.
 
-The author, 2026-09-07, on the ledger question and on how the sitting proceeds:
+**AI divergence.** Absorption is a rewrite and not a move: a rationale paragraph turned into an option's divergence is a paragraph edited to fit there, by the party whose paragraph it was, and no manifest line makes that reversible in the way a fold's commit does.
 
-> choice is for confirmation. if there is periagogic grounding or meiutic clarification required then do so, otherwise make a recommendation and proceed to bootstrap reconciliation.
+**Content.**
+
+```markdown
+---
+question: What does an unconfirmed node carry between sittings, and what is left to git?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - accumulation
+  - fold
+  - manifest line
+---
+
+## Answer
+
+Everything above, and the author's last sentence given effect: what is not on that list is folded into the history or absorbed into the parts the dialogue reads, which is the answer's paragraphs "**What is folded, and what is absorbed.**" and "**The manifest line.**" added, with nothing said of when or by what.
+```
+
+#### the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed
+
+What the alignment dialogue and its artifact read, and nothing else; the rest is folded into the history or absorbed into the parts they do read.
+
+**AI support.** The recommendation is the weighing: the three viable options are a ladder — what the node is for, then what follows for everything else, then when and by what and under what condition — and the third carries the support the first two carry plus the only answer on the fact to the divergence they share, which is that a rule about which bytes leave the record without a trigger, an instrument and a safety condition is a rule nobody can run and nobody can check. Moderate boldness. The list of what the node keeps is the author's, clause by clause, and so is the sentence that puts everything else at risk. What is the AI's is the reading that the rationale and the words are absorbed rather than kept as sections, the checkpoint as the trigger, the condition on pushing, and the distinction between a folded and an absorbed section.
+
+One tradition is read under this node: `event-sourcing-with-snapshots`, adopted, bearing on `the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed` — the append-only stream is the system of record, current state is a fold over it, and a snapshot bounds what any reader replays, git being the journal and the accumulated node the snapshot; its own condition, that a snapshot must be derivable from the stream or it becomes a second record that can itself drift, is the reason for the condition on pushing. The traditions surfaced and not yet read are enumerated on `commons.systems/disposition-graph/survey-selection`.
+
+Measured at graph commit `32cd2e18`, over all 143 nodes: 6,069,526 bytes, of which `## Account` is 4,172,598 (68.7%, 1,154 subsections), `## Facts` 664,650, frontmatter 366,981, the 39 recommendation fences 333,223, `## Answer` 267,774, `## Rationale` 141,929 and `## Disposition` 121,370; the last account section across all nodes is 445,602, so keeping it and folding or absorbing the rest strikes 3,726,996 bytes, 61.4% of the record.
+
+**AI divergence.** The rule that decides what a node keeps is now read off what one projection needs, so a page whose design moves takes the record's shape with it, and material struck for not supporting today's artifact cannot be un-struck when tomorrow's asks for it; and the party deciding which of its own reasons survive is the party whose reasoning the author is checking, working from a list of readers it also wrote.
+
+**Content.**
+
+```markdown
+---
+question: What does an unconfirmed node carry between sittings, and what is left to git?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - accumulation
+  - fold
+  - manifest line
+---
 
 ## Answer
 
@@ -122,36 +174,7 @@ What the alignment dialogue and its artifact read, and nothing else; the rest is
 **What reads an accumulated node.** The alignment page, which renders the facts, the options with their three accumulations, and previews the node under the option the author selects — all of which the node keeps, which is the test this answer is drawn from. The browser. The two readings' briefs, which carry a node by what it answers or by what its validations read, and which on an accumulated node describe the file rather than filtering it. And a session resuming a node, which meets every option, every word of the author's for and against it and the case both ways, and reaches the argument behind anything folded through the commit its manifest line names.
 
 **What is not decided here.** How an option's content, its references and its accumulated support and divergence are encoded is the dialogue node's, whose answer this one uses and does not restate. Where the author's words are kept is the quotes node's. What a node carries at and after the confirmation is the dialogue node's and the recording node's. What a reading is given, and what a survey selects, are the review-cost and survey-selection nodes'. Nothing this answer names is materialized on 2026-09-07: no instrument folds, no manifest line exists, and the validator checks none; the instrument, `accumulate.mjs`, is the reconciliation the author's grant of that day covers.
-
-## Rationale
-
-The recommendation is the weighing: the three viable options are a ladder — what the node is for, then what follows for everything else, then when and by what and under what condition — and the third carries the support the first two carry plus the only answer on the fact to the divergence they share, which is that a rule about which bytes leave the record without a trigger, an instrument and a safety condition is a rule nobody can run and nobody can check. Moderate boldness. The list of what the node keeps is the author's, clause by clause, and so is the sentence that puts everything else at risk. What is the AI's is the reading that the rationale and the words are absorbed rather than kept as sections, the checkpoint as the trigger, the condition on pushing, and the distinction between a folded and an absorbed section.
-
-One tradition is read under this node: `event-sourcing-with-snapshots`, adopted, bearing on `the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed` — the append-only stream is the system of record, current state is a fold over it, and a snapshot bounds what any reader replays, git being the journal and the accumulated node the snapshot; its own condition, that a snapshot must be derivable from the stream or it becomes a second record that can itself drift, is the reason for the condition on pushing. The traditions surfaced and not yet read are enumerated on `commons.systems/disposition-graph/survey-selection`.
-
-Measured at graph commit `32cd2e18`, over all 143 nodes: 6,069,526 bytes, of which `## Account` is 4,172,598 (68.7%, 1,154 subsections), `## Facts` 664,650, frontmatter 366,981, the 39 recommendation fences 333,223, `## Answer` 267,774, `## Rationale` 141,929 and `## Disposition` 121,370; the last account section across all nodes is 445,602, so keeping it and folding or absorbing the rest strikes 3,726,996 bytes, 61.4% of the record.
-
-## Facts
-
-### answer
-
-`the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed` is recommended, and the recommendation is the weighing of the support and divergence recorded on each option below; the boldness is moderate for the reason the rationale gives.
-
-#### the-node-is-what-the-artifact-reads
-
-The node carries what the alignment dialogue and its artifact read of a node still in dialogue, and nothing else; the list is the author's, clause by clause: the answer's paragraph "**What the node carries.**" and its first sentence up to the semicolon, with nothing said of the rest.
-
-**AI support.** The author's three clauses of 2026-09-07 each name a part: the content of every option, so the context pane can preview the node under the one being selected; the quotes that support and diverge from each option; and the AI's accumulated support and divergence for each option, kept whatever the recommendation is. Add what a ruling cannot happen without — the question, the facts, the recommendation with its boldness and its case against, the labels, the stage and the two readings' pins — and the node is complete. Everything else in a node file today is the AI's account of how it got here: measured at graph commit `32cd2e18` over all 143 nodes, the files are 6,069,526 bytes of which `## Account` is 4,172,598, 68.7%, spread over 1,154 account subsections, one node carrying fifty-five.
-
-**AI divergence.** The list is read off one projection's needs, so a page whose design moves takes the record's shape with it, and the party drawing the list is the party whose account it strikes.
-
-#### the-rest-is-folded-or-absorbed
-
-Everything above, and the author's last sentence given effect: what is not on that list is folded into the history or absorbed into the parts the dialogue reads, which is the answer's paragraphs "**What is folded, and what is absorbed.**" and "**The manifest line.**" added, with nothing said of when or by what.
-
-**AI support.** The author, 2026-09-07: "Anything else that doesn't support the alignment dialogue/artifact disposition is subject to accumulation/removal." The distinction between folded and absorbed is what keeps that sentence from destroying material the dialogue does need: a node-level `## Rationale` is not history, it is the argument for a recommendation, and under the refinement that argument has three homes the dialogue reads, so it is moved rather than struck. The same holds of an account section whose findings are now an option's divergence and of the author's words, which move to the ledger and reach the options as references.
-
-**AI divergence.** Absorption is a rewrite and not a move: a rationale paragraph turned into an option's divergence is a paragraph edited to fit there, by the party whose paragraph it was, and no manifest line makes that reversible in the way a fold's commit does.
+```
 
 #### keep-a-node-level-rationale
 
@@ -161,6 +184,25 @@ Everything the recommendation says, with `## Rationale` kept as a section rather
 
 **AI divergence.** Nothing in the record requires the section, the artifact does not read it, and under the refinement the material it holds has three homes the artifact does read; keeping it makes the fact's reason and the recommended option's support a second and third copy of the same argument.
 
+**Content.**
+
+```markdown
+---
+question: What does an unconfirmed node carry between sittings, and what is left to git?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - accumulation
+  - fold
+  - manifest line
+---
+
+## Answer
+
+Everything the recommendation says, with `## Rationale` kept as a section rather than absorbed: the clause absorbing it struck from "**What is folded, and what is absorbed.**" and `## Rationale` added to what the node carries.
+```
+
 #### a-passed-option-keeps-its-reason-and-not-its-prose
 
 The prose of an option marked passed folds to its row and the one clause that says why it was passed over.
@@ -168,6 +210,25 @@ The prose of an option marked passed folds to its row and the one clause that sa
 **AI support.** Measured at `32cd2e18`: 203 passed options carry 102,719 bytes of prose, and `viable-options` requires of a passed option the status and "the one clause saying why" and not the essay.
 
 **AI divergence.** The author's refinement of 2026-09-07 asks that an option's quotes and the AI's support and divergence be shown "before and also after confirmation", and a passed option must carry its content so the artifact can preview the node under it if the author selects it, so what this would strike is prose the artifact reads. Passed over on that ground the same day it was drafted.
+
+**Content.**
+
+```markdown
+---
+question: What does an unconfirmed node carry between sittings, and what is left to git?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - accumulation
+  - fold
+  - manifest line
+---
+
+## Answer
+
+The prose of an option marked passed folds to its row and the one clause that says why it was passed over.
+```
 
 #### no-fold-before-confirmation
 
@@ -177,6 +238,25 @@ The node keeps everything until the recording folds it, which is what the record
 
 **AI divergence.** It is the first of the two ends the author's words ask for something between, and it is the state the graph is in, where the account is 68.7% of every byte the record holds and one node carries fifty-five account sections.
 
+**Content.**
+
+```markdown
+---
+question: What does an unconfirmed node carry between sittings, and what is left to git?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - accumulation
+  - fold
+  - manifest line
+---
+
+## Answer
+
+The node keeps everything until the recording folds it, which is what the record does today.
+```
+
 #### the-projections-read-the-list-and-the-file-keeps-everything
 
 The node file keeps every section it ever had, and the projections and the briefs read only the parts the dialogue node's encoding lists; nothing is folded, nothing is absorbed, and git keeps nothing that the file does not.
@@ -184,6 +264,25 @@ The node file keeps every section it ever had, and the projections and the brief
 **AI support.** It spends no instrument and takes no risk: no rewrite, no manifest line, no commit that a fold could name wrongly, and a reader who wants the history opens the file. Raised by the clean-context reading of 2026-09-07 as the rival the author is actually choosing against.
 
 **AI divergence.** The readers the accumulation exists to relieve are the ones that read the file whole: a brief carries a node by its file, and a resuming session reads the file, so a filter in the projections relieves the page and not the readings, which are where the cost is measured. And a filter that the file cannot carry is a rule the record does not hold, as the dialogue node's fourth requirement says. Passed over for that reason.
+
+**Content.**
+
+```markdown
+---
+question: What does an unconfirmed node carry between sittings, and what is left to git?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - accumulation
+  - fold
+  - manifest line
+---
+
+## Answer
+
+The node file keeps every section it ever had, and the projections and the briefs read only the parts the dialogue node's encoding lists; nothing is folded, nothing is absorbed, and git keeps nothing that the file does not.
+```
 
 ### authority
 
@@ -259,3 +358,7 @@ On the facts and what they recommend: The diff touches only the answer fact, and
 On the viability of the options: The diff leaves every previously-listed option viable and repairs the one viability gap the previous reading flagged: the rival design where projections filter and the file keeps everything is now recorded as a proper passed-over option with a reason, so the author sees the choice actually being made rather than an unlisted alternative.
 
 Strongest counter-argument (weak): All three findings are answered on the text itself, but one loose end survives: the repaired sentence fixes the contradiction by saying `## Disposition` absorption happens 'once for each node... at the migration' and that 'no node gains the section again,' yet it never states when 'the migration' occurs relative to a node's own first checkpoint — whether it is a single graph-wide event this node either falls before or after, or something folded into each node's own first fold. This node currently carries a live `## Disposition` section and no migration has run, so the amendment's fix is consistent as written, but the timing question it leaves open could recreate the previous contradiction for a node minted between the migration and its own first checkpoint if 'the migration' turns out not to be a single one-time event. This is an underspecified point, not a restated contradiction, so it does not by itself defeat the amendment.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/unconfirmed-accumulation stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed`; the `## Rationale` its `**AI support.**`; 8 `## Disposition` entries became the ledger entries words/2026-09-07/11, words/2026-09-07/12, words/2026-09-07/13, words/2026-09-07/2, words/2026-09-07/3, words/2026-09-07/4, words/2026-09-07/14, words/2026-09-07/15, referenced by 8 options the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `the-node-is-what-the-artifact-reads`, `the-rest-is-folded-or-absorbed`, `keep-a-node-level-rationale`, `a-passed-option-keeps-its-reason-and-not-its-prose`, `no-fold-before-confirmation`, `the-projections-read-the-list-and-the-file-keeps-everything`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `10d93a148b2f67d4948fdda5ac9861c71ca310cc` is re-computed for the encoding as `f77ad34cb474cebe27f97d061fad03e6ebe63d21`; nothing it read changed.

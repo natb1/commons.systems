@@ -9,7 +9,6 @@ facts:
         ref: "2026-09-04"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -39,6 +38,50 @@ bears:
     option: confirmed-is-a-derived-label
     relation: adopted
 ---
+
+## Facts
+
+### answer
+
+The standing text is the only reading of this pattern the record has produced,
+and no second account of what it takes from it is on the table.
+
+#### standing
+
+Supports the derivation, and carries the warning that comes with it.
+
+**AI support.** Recorded as one of the eight traditions in `viable-options`' rationale, adopted for the class as a projection of recorded rulings, and moved here under `prose-and-structure`, which holds that a tradition named only in prose carries no `bears` entry and no pin. It bears on the option that stands on `viable-options`' answer fact, which is the one that reads the class off the rulings rather than storing it.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does event sourcing say about a status that is derived rather than stored, and what does the record take from it?
+form: reading
+under:
+  - commons.systems/disposition-graph/viable-options
+source: Event sourcing and the derived read model. Fowler, "Event Sourcing" (2005) and "CQRS" (2011); the command-query separation literature that grew around Young's work from about 2010; and the same shape treated as a general principle in Kleppmann, Designing Data-Intensive Applications (2017), the chapter on stream processing, where the log of events is the system of record and every view over it is a materialized projection that can be discarded and rebuilt.
+bears:
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: grant-from-a-ruling
+    relation: adopted
+  - node: commons.systems/disposition-graph/prose-and-structure
+    fact: answer
+    option: prose-argues-structure-records
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: confirmed-is-a-derived-label-and-every-option-carries-its-content
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: confirmed-is-a-derived-label
+    relation: adopted
+---
+
 ## Answer
 
 Supports the derivation, and carries the warning that comes with it. The pattern's claim is that the durable thing is the sequence of recorded facts, and that any current-state view is a fold over that sequence: the view is convenient, it may be cached, and it is never the source of truth. Two properties follow and both matter here. A view can be thrown away and rebuilt from the log, so a bug in the fold is repaired by re-deriving rather than by migrating; and a view that has drifted from the log is wrong by definition, since the log is what happened.
@@ -48,17 +91,7 @@ The record adopts it for the class. A node's authority is a fold over the ruling
 The warning is the pattern's known cost and the record takes it as stated: with the view derived, every reader must derive it the same way. In a system with one code path that is a design rule; here the readers are the projector, the two skills, a session reading a node by hand, and the author, and a second implementation of the fold is a second truth. What the record does about it is keep the derivation in one place and treat any other derivation of the class as an implementation to be liquidated, which is a rule and not a mechanism.
 
 The scope stops short of the rest of the pattern. Event sourcing normally means an append-only log with events never rewritten, and this record is a git history of node files that alignment edits in place; the fold is over the rulings a node currently carries, not over an immutable stream. What is adopted is derive-the-view-never-store-it, and the immutability that usually accompanies it is version control's, at a coarser grain.
-
-## Rationale
-
-Recorded as one of the eight traditions in `viable-options`' rationale, adopted for the class as a projection of recorded rulings, and moved here under `prose-and-structure`, which holds that a tradition named only in prose carries no `bears` entry and no pin. It bears on the option that stands on `viable-options`' answer fact, which is the one that reads the class off the rulings rather than storing it.
-
-## Facts
-
-### answer
-
-The standing text is the only reading of this pattern the record has produced,
-and no second account of what it takes from it is on the table.
+```
 
 ### authority
 
@@ -97,3 +130,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/event-sourcing-derived-view stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.

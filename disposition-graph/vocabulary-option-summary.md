@@ -8,6 +8,8 @@ facts:
       - name: term-at-the-first-level
         source: author
         ref: "2026-09-04"
+        supports:
+          - words/2026-09-04/43
       - name: gloss-at-the-first-level
         source: commons.systems/disposition-graph/alignment-page
         ref: "2026-09-05"
@@ -30,7 +32,6 @@ facts:
     recommends: term-at-the-first-level
     boldness: low
     against: "On the most repeated decision on the page the author will now read three words, ratified, delegated and deferred, and the sentence saying what confirming each would do sits behind a fold on every one of the 134 nodes that carry the fact. The record's own reason for putting it on the row was that the bare words told the author nothing they did not already have to know, and this answer's reply is that they do already know it, which is true of this author and of no other reader the page may ever have."
-    stands: term-at-the-first-level
   - name: authority
     options:
       - name: ratified
@@ -49,20 +50,79 @@ review:
   verdict: forward
   strength: none
   date: 2026-09-07
-  of: 01059350d1d2da037d38b5ada9e1e5e49463203f
+  of: cac03b089a525288b22d5aab8c049cb57bac3ec3
   commit: f146f8f44b295c64e47a13bff338748035183d87
   survey:
     date: 2026-09-07
-    of: 01059350d1d2da037d38b5ada9e1e5e49463203f
+    of: cac03b089a525288b22d5aab8c049cb57bac3ec3
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
   - commons.systems/disposition-graph/what-an-option-row-carries
 ---
-## Disposition
 
-The author, 2026-09-04, on the alignment page, queued from the sitting on author-questions:
-> - Authority fact does not require verbose description of each authority level. Just rename section heading "Who may change an answer?" to "Authority" and hyperlink heading to authority node in the browser. Text summary for each authority option is just the name of the authority level.
+## Facts
+
+### answer
+
+Recommended because it is the author's sentence applied where it falls, and
+because the division it applies to is the record's own. The first clause is
+theirs, verbatim in effect: the summary is the name of the level.
+
+Boldness low, because the recommendation rests on the author's words rather than
+against them, which is the measure `dialogue` gives boldness. What is the AI's is
+the disposal of the gloss, which the record's rule against a fold decides, and
+the reach to the second vocabulary fact, which `dialogue`'s own sentence decides
+by naming the two together. Neither is a departure from anything the author has
+said, and neither is the AI preferring its own reading of the page's purpose to
+theirs, which is what this fact's `against` is about.
+
+The case against is on the fact at full strength: the record wrote the gloss onto
+the row for a reason, and this answer removes it on the strength of the one reader
+the page has today.
+
+#### term-at-the-first-level
+
+The option's name, as the term it is, and the gloss one step down.
+
+**AI support.** The author, 2026-09-04, on the alignment page: "Authority fact does not require
+verbose description of each authority level. Just rename section heading 'Who may
+change an answer?' to 'Authority' and hyperlink heading to authority node in the
+browser. Text summary for each authority option is just the name of the authority
+level."
+
+The last sentence is this node's, and it is the whole of the recommendation's
+first clause. The two before it are `how-a-fact-is-headed`'s and are cited here
+only because they are what makes the term legible: the author asked for the
+heading to name the fact and to link to the node that defines it, so the reader
+who meets a bare term on a row has the definition one line above and one click
+away, which is the reply to the record's own reason for the gloss.
+
+Two things in the answer are not in that sentence. The gloss going one step down
+rather than off the page, which the record's own rule requires, since a projection
+that drops what it stops showing is a fold and the author's words of 2026-09-04
+struck the fold. And the reach to `existence`, which the author did not name:
+`dialogue` states one rule for the two facts in one sentence, and a page showing a
+term on one and a sentence on the other would make the reader learn which fact
+they are looking at before they could read a row, so the answer is about
+vocabulary facts as a class and says so.
+
+What the answer beat is on the fact: `gloss-at-the-first-level`, the incumbent,
+which the author's words strike; `authority-alone`, which is this answer for one
+fact; and `term-and-a-short-gloss`, which is the gloss again at the width a row
+allows.
+
+**AI divergence.** On the most repeated decision on the page the author will now read three words, ratified, delegated and deferred, and the sentence saying what confirming each would do sits behind a fold on every one of the 134 nodes that carry the fact. The record's own reason for putting it on the row was that the bare words told the author nothing they did not already have to know, and this answer's reply is that they do already know it, which is true of this author and of no other reader the page may ever have.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's summary say on a fact whose options are the record's own vocabulary?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
 
 ## Answer
 
@@ -149,71 +209,46 @@ the lead's cap is `CHOICE_LEAD_CHARS`, 400 characters, in the same file; so the
 gloss reaches the drill-down only if the projector is told to put it there, and a
 reconciliation that moved the lead and not the body would drop the sentence off
 the page entirely.
-
-## Rationale
-
-The author, 2026-09-04, on the alignment page: "Authority fact does not require
-verbose description of each authority level. Just rename section heading 'Who may
-change an answer?' to 'Authority' and hyperlink heading to authority node in the
-browser. Text summary for each authority option is just the name of the authority
-level."
-
-The last sentence is this node's, and it is the whole of the recommendation's
-first clause. The two before it are `how-a-fact-is-headed`'s and are cited here
-only because they are what makes the term legible: the author asked for the
-heading to name the fact and to link to the node that defines it, so the reader
-who meets a bare term on a row has the definition one line above and one click
-away, which is the reply to the record's own reason for the gloss.
-
-Two things in the answer are not in that sentence. The gloss going one step down
-rather than off the page, which the record's own rule requires, since a projection
-that drops what it stops showing is a fold and the author's words of 2026-09-04
-struck the fold. And the reach to `existence`, which the author did not name:
-`dialogue` states one rule for the two facts in one sentence, and a page showing a
-term on one and a sentence on the other would make the reader learn which fact
-they are looking at before they could read a row, so the answer is about
-vocabulary facts as a class and says so.
-
-What the answer beat is on the fact: `gloss-at-the-first-level`, the incumbent,
-which the author's words strike; `authority-alone`, which is this answer for one
-fact; and `term-and-a-short-gloss`, which is the gloss again at the width a row
-allows.
-
-## Facts
-
-### answer
-
-Recommended because it is the author's sentence applied where it falls, and
-because the division it applies to is the record's own. The first clause is
-theirs, verbatim in effect: the summary is the name of the level.
-
-Boldness low, because the recommendation rests on the author's words rather than
-against them, which is the measure `dialogue` gives boldness. What is the AI's is
-the disposal of the gloss, which the record's rule against a fold decides, and
-the reach to the second vocabulary fact, which `dialogue`'s own sentence decides
-by naming the two together. Neither is a departure from anything the author has
-said, and neither is the AI preferring its own reading of the page's purpose to
-theirs, which is what this fact's `against` is about.
-
-The case against is on the fact at full strength: the record wrote the gloss onto
-the row for a reason, and this answer removes it on the strength of the one reader
-the page has today.
+```
 
 #### gloss-at-the-first-level
 
 Everything the recommended option says, reversed: the row's lead is the gloss of
 the term, in the words of the node that defines the fact, which is what the page
-prints today for all three authority options on every node. For it, the parent's
+prints today for all three authority options on every node.
+
+**AI support.** For it, the parent's
 own reason, that the bare words told the author nothing they did not already have
 to know, and the fact that a reader new to the record can rule from the row
 without opening anything. Passed over: the author's words of 2026-09-04 ask for
 the name of the level and nothing more, and the parent's clause already records
 itself as standing only until this node rules.
 
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's summary say on a fact whose options are the record's own vocabulary?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, reversed: the row's lead is the gloss of
+the term, in the words of the node that defines the fact, which is what the page
+prints today for all three authority options on every node.
+```
+
 #### authority-alone
 
 Everything the recommended option says, for the authority fact alone, with
-`existence` keeping the gloss at the first level. For it: the author named
+`existence` keeping the gloss at the first level.
+
+**AI support.** For it: the author named
 authority, `existence` appears on 6 nodes against authority's 134, so the argument
 from repetition is weak there, and `keep` and `prune` are terms whose glosses are
 short. Viable and not adopted: `dialogue` states one rule for the two facts in one
@@ -221,10 +256,30 @@ sentence, and a row that leads with a term on one fact and with a sentence on
 another asks the reader to know which fact they are in before they can read the
 row, which is a rule the page would carry and no node would project.
 
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's summary say on a fact whose options are the record's own vocabulary?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, for the authority fact alone, with
+`existence` keeping the gloss at the first level.
+```
+
 #### term-linked-to-the-definer
 
 Everything the recommended option says, with the term on the row made a link to
-the node that defines it. For it: a bare term is the one lead on the page that
+the node that defines it.
+
+**AI support.** For it: a bare term is the one lead on the page that
 tells a new reader nothing, and a link on the term is the shortest route to the
 sentence it stands for. Viable and not adopted:
 `commons.systems/disposition-graph/vocabulary-view` asks how a defined term is
@@ -233,10 +288,30 @@ settle its question from this page; and under `how-a-fact-is-headed` the fact's
 own heading already carries that link for the whole fact, so a link per row prints
 the same route three times on one fieldset.
 
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's summary say on a fact whose options are the record's own vocabulary?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the term on the row made a link to
+the node that defines it.
+```
+
 #### term-and-a-short-gloss
 
 Everything the recommended option says, with the term at the first level and the
-gloss's opening clause beside it. For it: it keeps some of the sentence where the
+gloss's opening clause beside it.
+
+**AI support.** For it: it keeps some of the sentence where the
 author reads and still shortens the row. Passed over: it is the gloss again, cut
 to the width a row allows, where the author asked for the name and nothing more;
 and a gloss with its qualification removed is worse than no gloss, since on
@@ -244,12 +319,32 @@ and a gloss with its qualification removed is worse than no gloss, since on
 before the answer changes, which is the whole of what distinguishes it from
 `delegated`.
 
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's summary say on a fact whose options are the record's own vocabulary?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with the term at the first level and the
+gloss's opening clause beside it.
+```
+
 #### term-with-the-gloss-on-the-first-node-only
 
 Everything the recommended option says, with one exception: the row leads with
 the term everywhere except on the first node of a sitting, or on the first fact
 of the page's session, where the gloss is printed once so that a reader who does
-not hold the vocabulary meets it before they meet 402 bare terms. For it: it
+not hold the vocabulary meets it before they meet 402 bare terms.
+
+**AI support.** For it: it
 takes the author's words where the argument for them is strongest, the same
 sentence repeated on 134 nodes, and refuses them only where the argument is
 weakest, the first reading, which the recommended option's own `against` concedes
@@ -262,6 +357,26 @@ something no node projects; and the record already has a device for the first
 reading, the fact's own heading linked to the node that defines the term, which
 is one click from the row on the line above it and is there on every node rather
 than on one.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What does an option's summary say on a fact whose options are the record's own vocabulary?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+Everything the recommended option says, with one exception: the row leads with
+the term everywhere except on the first node of a sitting, or on the first fact
+of the page's session, where the gloss is printed once so that a reader who does
+not hold the vocabulary meets it before they meet 402 bare terms.
+```
 
 ### authority
 
@@ -494,3 +609,7 @@ Findings:
 
 
 Strongest counter-argument (weak): The answer's reply to the record's own reason for the gloss is the fact's heading, "which under `how-a-fact-is-headed` is the fact's name linked to the node that defines it", and that sibling's recommendation itself turns on two glosses not yet written on dialogue and two bare `defines` entries not yet released on node and transience. This node names the sibling in prose and not in depends, so the row can be ruled bare before the heading it leans on can resolve; in that interval a reader who does not hold the vocabulary meets three words and no route, which is exactly the state the fact's own case against describes.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/vocabulary-option-summary stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `term-at-the-first-level`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/43, referenced by 1 option the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `gloss-at-the-first-level`, `authority-alone`, `term-linked-to-the-definer`, `term-and-a-short-gloss`, `term-with-the-gloss-on-the-first-node-only`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `01059350d1d2da037d38b5ada9e1e5e49463203f` is re-computed for the encoding as `cac03b089a525288b22d5aab8c049cb57bac3ec3`; nothing it read changed. The survey's pin `01059350d1d2da037d38b5ada9e1e5e49463203f` is re-computed for the encoding as `cac03b089a525288b22d5aab8c049cb57bac3ec3`; nothing it read changed.

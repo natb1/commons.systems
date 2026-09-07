@@ -30,7 +30,6 @@ facts:
     recommends: gathered-and-cited
     boldness: high
     against: "The list is a copy, and a copy of a set of clauses that are still being amended one node at a time will be stale between one landing and the next; the record's own answer to a restatement is a citation, and a node whose whole content is six citations may be a projection the browser should compute rather than a question the author should rule."
-    stands: gathered-and-cited
   - name: authority
     options:
       - name: ratified
@@ -43,7 +42,7 @@ review:
   verdict: kickback
   strength: strong
   date: 2026-09-05
-  of: 9fdaf700285363f7bd41256bdf6246b58933a875
+  of: 4c2b49fa3b6d838aec346d4eb834c8daf2520611
   commit: e44599b546f90dc6a30049b5ae229f18238f5bef
   against: "The strongest argument against is still that this node stores a derived view as prose, and the fourth reading is the first to see the mechanism fail in the way that argument predicts. The pins are the answer's own guarantee that the copy cannot drift -- \"the `cites` field carries the pins that make that promise checkable\" -- and five of the seven were stale within two commits of the redraw landing, both of them made by the same thread that wrote the pins, neither touching any quoted field. So the mechanism does not fail by a quotation going bad; it fails by producing an alarm that means nothing, since a stale pin here signals only that the cited node was edited somewhere. A reader who follows five pins, finds five mismatches, and finds every quotation intact learns to stop following pins, and that is exactly when the second home goes unchecked -- the harm the node exists to prevent, arrived at through the instrument meant to prevent it. This reading's other findings are the same shape at smaller scale: an ordinal inverted against its field, a field misattributed in one text and corrected in the other, a count contradicted eighteen lines below itself. None is hard to fix; that they recur across four readings, each fix landing where the reading pointed and the next reading finding the same class of slip elsewhere, is the evidence that the copy is the problem and not the copyist -- which is `conditions-derived-not-restated`'s case, and it is stronger now than when that option was raised."
 form: rule
@@ -74,7 +73,85 @@ depends:
   - commons.systems/disposition-graph/alignment-order
   - commons.systems/disposition-graph/transience
 ---
+
+## Facts
+
+### answer
+
+`gathered-and-cited` is recommended at high boldness, which in this record means low
+confidence. The failure it exists to prevent has already happened once: a list
+written from memory into a rule file that every session loads, missing two
+conditions the author gave and carrying a third that could never be met. A gathering
+that cites each condition to its declaring node and quotes it verbatim cannot
+drift silently, because the citation is checkable and a reader who follows it
+finds the words. The reading of 2026-09-05 found that guarantee undelivered,
+three of nine items quoted and six paraphrased, and every clause is now quoted
+from the field that carries it; that the promise had to be made good after it was
+made is itself evidence for the case against. What
+rests on the AI is not a part of this answer but all of it: every line is a sorting
+decision, and the reading of 2026-09-05 found the first sorting refused by
+`work-loop`'s own rationale, by the author's words quoted on that node, and by the
+reading that minted this one. The sorting now runs on one stated rule instead of two
+unstated ones, which makes it checkable and does not make it right. The case against
+is on the fact and is unanswered.
+
+#### gathered-and-cited
+
+The conditions the record declares, gathered here and minted nowhere.
+
+**AI support.** Minted on 2026-09-05 by the second clean-context reading of
+`what-acts-during-bootstrap`, under validation 15: the question is asked by no node
+and answered in four places, the reconciliation shim's liquidation on `work-loop`,
+the greenfield shim's on `materialization`, the code-review shim's artifact clause
+on `review`, and one clause of `what-acts-during-bootstrap`'s own answer, with two
+conditions in the author's own words standing outside all four. The reading found
+that clause false where it stood, circular in one limb, and short by two, and
+proposed the node.
+
+Which node holds the list is the author's to choose, and the record holds the
+choice open from both ends. `work-loop` carries the option
+`exit-conditions-cited-not-carried`, repointed on 2026-09-05 so that its
+destination is this node: under it the shim's exit clauses move here and the shim
+cites this node instead of restating them, keeping only the limb that cannot
+move, validation in use after the swap. `left-where-they-stand` on this fact is the same choice seen from
+this side, the clauses staying on the shims and this node listing none. The parent
+is no longer a candidate home for them.
+
+The gathering is a citation and not a copy of authority: every condition here acts
+because the node that declares it declares it, and this node acts on nothing until
+it is ruled. That is what makes the list safe to write while every node it cites is
+itself unanswered. It is not what makes the list safe from going stale, which is the
+case against and is unanswered.
+
+**AI divergence.** The list is a copy, and a copy of a set of clauses that are still being amended one node at a time will be stale between one landing and the next; the record's own answer to a restatement is a citation, and a node whose whole content is six citations may be a projection the browser should compute rather than a question the author should rule.
+
+**Content.**
+
+```markdown
+---
+question: What are the conditions of bootstrap exit?
+form: rule
+cites:
+  - id: commons.systems/disposition-graph/work-loop
+    hash: 7d568f0ce07adf37623f69d140d547af54eb8241
+  - id: commons.systems/disposition-graph/materialization
+    hash: 14d4bc68bb3860cd5657b5fec088020e3dc8eae4
+  - id: commons.systems/disposition-graph/review
+    hash: 5b376ac3d4f02c470e7767fc1b2101bf0f3f1afe
+  - id: commons.systems/disposition-graph/vocabulary-view
+    hash: 861a710ed6a4903d9df8e4c68503fbb093e8d058
+  - id: commons.systems/disposition-graph/attention
+    hash: f03f75cced351fe59bae8dc6903326eeb5b16ffe
+  - id: commons.systems/disposition-graph/alignment-order
+    hash: 41c66b660af20cbd84ad6a0666db25466530ad7d
+  - id: commons.systems/disposition-graph/transience
+    hash: 22d7e322281a6951bdde89c2870745acfe0de3e6
+under:
+  - commons.systems/disposition-graph/what-acts-during-bootstrap
+---
+
 ## Answer
+
 The conditions the record declares, gathered here and minted nowhere. This node
 adds no condition of its own: each one below is quoted verbatim from the field
 that carries it and cited to the node that declares it, and a condition struck or
@@ -202,53 +279,7 @@ that loaded it; a list of clauses that live on six other nodes, copied into a fi
 every session reads, is that same second home multiplied by every context it enters.
 The rival is on the fact as `conditions-projected-as-a-rule`, where the author can
 rule for it.
-
-## Rationale
-
-Minted on 2026-09-05 by the second clean-context reading of
-`what-acts-during-bootstrap`, under validation 15: the question is asked by no node
-and answered in four places, the reconciliation shim's liquidation on `work-loop`,
-the greenfield shim's on `materialization`, the code-review shim's artifact clause
-on `review`, and one clause of `what-acts-during-bootstrap`'s own answer, with two
-conditions in the author's own words standing outside all four. The reading found
-that clause false where it stood, circular in one limb, and short by two, and
-proposed the node.
-
-Which node holds the list is the author's to choose, and the record holds the
-choice open from both ends. `work-loop` carries the option
-`exit-conditions-cited-not-carried`, repointed on 2026-09-05 so that its
-destination is this node: under it the shim's exit clauses move here and the shim
-cites this node instead of restating them, keeping only the limb that cannot
-move, validation in use after the swap. `left-where-they-stand` on this fact is the same choice seen from
-this side, the clauses staying on the shims and this node listing none. The parent
-is no longer a candidate home for them.
-
-The gathering is a citation and not a copy of authority: every condition here acts
-because the node that declares it declares it, and this node acts on nothing until
-it is ruled. That is what makes the list safe to write while every node it cites is
-itself unanswered. It is not what makes the list safe from going stale, which is the
-case against and is unanswered.
-
-## Facts
-
-### answer
-
-`gathered-and-cited` is recommended at high boldness, which in this record means low
-confidence. The failure it exists to prevent has already happened once: a list
-written from memory into a rule file that every session loads, missing two
-conditions the author gave and carrying a third that could never be met. A gathering
-that cites each condition to its declaring node and quotes it verbatim cannot
-drift silently, because the citation is checkable and a reader who follows it
-finds the words. The reading of 2026-09-05 found that guarantee undelivered,
-three of nine items quoted and six paraphrased, and every clause is now quoted
-from the field that carries it; that the promise had to be made good after it was
-made is itself evidence for the case against. What
-rests on the AI is not a part of this answer but all of it: every line is a sorting
-decision, and the reading of 2026-09-05 found the first sorting refused by
-`work-loop`'s own rationale, by the author's words quoted on that node, and by the
-reading that minted this one. The sorting now runs on one stated rule instead of two
-unstated ones, which makes it checkable and does not make it right. The case against
-is on the fact and is unanswered.
+```
 
 #### left-where-they-stand
 
@@ -266,6 +297,52 @@ missing from the list this node replaces. Raised on
 the list until 2026-09-05, and named there as `conditions-cited-not-listed`; the
 same choice seen from `work-loop`'s side is `exit-conditions-cited-not-carried`.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What are the conditions of bootstrap exit?
+form: rule
+cites:
+  - id: commons.systems/disposition-graph/work-loop
+    hash: 7d568f0ce07adf37623f69d140d547af54eb8241
+  - id: commons.systems/disposition-graph/materialization
+    hash: 14d4bc68bb3860cd5657b5fec088020e3dc8eae4
+  - id: commons.systems/disposition-graph/review
+    hash: 5b376ac3d4f02c470e7767fc1b2101bf0f3f1afe
+  - id: commons.systems/disposition-graph/vocabulary-view
+    hash: 861a710ed6a4903d9df8e4c68503fbb093e8d058
+  - id: commons.systems/disposition-graph/attention
+    hash: f03f75cced351fe59bae8dc6903326eeb5b16ffe
+  - id: commons.systems/disposition-graph/alignment-order
+    hash: 41c66b660af20cbd84ad6a0666db25466530ad7d
+  - id: commons.systems/disposition-graph/transience
+    hash: 22d7e322281a6951bdde89c2870745acfe0de3e6
+under:
+  - commons.systems/disposition-graph/what-acts-during-bootstrap
+---
+
+## Answer
+
+The conditions are read where the record declares them and this node lists none:
+three nodes declare them in their own fields, `work-loop`, `materialization` and
+`review`, and the author's words stand on four more, `vocabulary-view`, `attention`,
+`alignment-order` and `work-loop` itself; a session that needs to know whether exit
+is reachable reads those six. It is what the record does today, and it is not dominated: it keeps each
+condition beside the shim whose liquidation it is, where the person amending that
+shim will see it, and it mints no seventh place to fall stale, which is the case
+against this node's answer. What it costs is that the conditions in the author's
+words are reachable from no node that names exit, which is how they came to be
+missing from the list this node replaces. Raised on
+`commons.systems/disposition-graph/what-acts-during-bootstrap`, whose answer carried
+the list until 2026-09-05, and named there as `conditions-cited-not-listed`; the
+same choice seen from `work-loop`'s side is `exit-conditions-cited-not-carried`.
+```
+
 #### minted-here
 
 This node states the conditions in its own voice and the other nodes cite it.
@@ -273,6 +350,44 @@ Passed over on 2026-09-05: a condition minted here would bind the record from a
 node no ruling reaches, and the conditions that exist are the author's words and
 the liquidation clauses the record already declares, which is authority this node
 does not have and does not need.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What are the conditions of bootstrap exit?
+form: rule
+cites:
+  - id: commons.systems/disposition-graph/work-loop
+    hash: 7d568f0ce07adf37623f69d140d547af54eb8241
+  - id: commons.systems/disposition-graph/materialization
+    hash: 14d4bc68bb3860cd5657b5fec088020e3dc8eae4
+  - id: commons.systems/disposition-graph/review
+    hash: 5b376ac3d4f02c470e7767fc1b2101bf0f3f1afe
+  - id: commons.systems/disposition-graph/vocabulary-view
+    hash: 861a710ed6a4903d9df8e4c68503fbb093e8d058
+  - id: commons.systems/disposition-graph/attention
+    hash: f03f75cced351fe59bae8dc6903326eeb5b16ffe
+  - id: commons.systems/disposition-graph/alignment-order
+    hash: 41c66b660af20cbd84ad6a0666db25466530ad7d
+  - id: commons.systems/disposition-graph/transience
+    hash: 22d7e322281a6951bdde89c2870745acfe0de3e6
+under:
+  - commons.systems/disposition-graph/what-acts-during-bootstrap
+---
+
+## Answer
+
+This node states the conditions in its own voice and the other nodes cite it.
+Passed over on 2026-09-05: a condition minted here would bind the record from a
+node no ruling reaches, and the conditions that exist are the author's words and
+the liquidation clauses the record already declares, which is authority this node
+does not have and does not need.
+```
 
 #### global-tier-ruled-is-a-condition
 
@@ -288,6 +403,51 @@ which is why the option stands on the fact rather than beside `minted-here`.
 Raised by the sitting of 2026-09-05 as the condition the withdrawn gloss implied
 and the record does not declare, and redrawn after the reading of the same day,
 which found its prose arguing it off the list.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What are the conditions of bootstrap exit?
+form: rule
+cites:
+  - id: commons.systems/disposition-graph/work-loop
+    hash: 7d568f0ce07adf37623f69d140d547af54eb8241
+  - id: commons.systems/disposition-graph/materialization
+    hash: 14d4bc68bb3860cd5657b5fec088020e3dc8eae4
+  - id: commons.systems/disposition-graph/review
+    hash: 5b376ac3d4f02c470e7767fc1b2101bf0f3f1afe
+  - id: commons.systems/disposition-graph/vocabulary-view
+    hash: 861a710ed6a4903d9df8e4c68503fbb093e8d058
+  - id: commons.systems/disposition-graph/attention
+    hash: f03f75cced351fe59bae8dc6903326eeb5b16ffe
+  - id: commons.systems/disposition-graph/alignment-order
+    hash: 41c66b660af20cbd84ad6a0666db25466530ad7d
+  - id: commons.systems/disposition-graph/transience
+    hash: 22d7e322281a6951bdde89c2870745acfe0de3e6
+under:
+  - commons.systems/disposition-graph/what-acts-during-bootstrap
+---
+
+## Answer
+
+The ruling of the global tier is added to the list. The withdrawn gloss on
+`what-acts-during-bootstrap` implied it, by making bootstrap the state until the
+global tier is ruled, and it is the condition a reader would expect the record to
+declare; against it, no node declares it, and the record's own answer to what the
+state is has moved to bootstrap exit, so writing it into the list on the AI's own
+judgment would be minting a condition, which the passed option above says this
+node may not do. That bar binds the AI and not the author: a condition the author
+declares in ruling for this option is the author's own and is not minted here,
+which is why the option stands on the fact rather than beside `minted-here`.
+Raised by the sitting of 2026-09-05 as the condition the withdrawn gloss implied
+and the record does not declare, and redrawn after the reading of the same day,
+which found its prose arguing it off the list.
+```
 
 #### shim-liquidation-is-never-a-condition
 
@@ -308,6 +468,55 @@ call it "bootstrap/shim exit criteria"; a list drawn this way strikes the author
 own sentence. Recorded so that the author sees the rival the recommendation moved
 away from, and not only the list it moved to.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What are the conditions of bootstrap exit?
+form: rule
+cites:
+  - id: commons.systems/disposition-graph/work-loop
+    hash: 7d568f0ce07adf37623f69d140d547af54eb8241
+  - id: commons.systems/disposition-graph/materialization
+    hash: 14d4bc68bb3860cd5657b5fec088020e3dc8eae4
+  - id: commons.systems/disposition-graph/review
+    hash: 5b376ac3d4f02c470e7767fc1b2101bf0f3f1afe
+  - id: commons.systems/disposition-graph/vocabulary-view
+    hash: 861a710ed6a4903d9df8e4c68503fbb093e8d058
+  - id: commons.systems/disposition-graph/attention
+    hash: f03f75cced351fe59bae8dc6903326eeb5b16ffe
+  - id: commons.systems/disposition-graph/alignment-order
+    hash: 41c66b660af20cbd84ad6a0666db25466530ad7d
+  - id: commons.systems/disposition-graph/transience
+    hash: 22d7e322281a6951bdde89c2870745acfe0de3e6
+under:
+  - commons.systems/disposition-graph/what-acts-during-bootstrap
+---
+
+## Answer
+
+No clause of a shim's liquidation is a condition of exit, whatever the shim says:
+a shim liquidates when the thing it stands in for exists, which is its own event
+and not the record's, so the conditions of exit are the author's words on four
+nodes and `materialization`'s coverage limb, which its own clause marks a
+condition of exit and not of the swap. What survives the strike is more than the
+list this option first named: the author's words on `work-loop`, at that node's
+`## Disposition`, make the completion of the second direction and the drain of
+the legacy record conditions of exit in the author's own voice, so those two
+stand whatever becomes of the shim clause that also carries them. It is the
+position this node held until the reading of
+2026-09-05, and it is the shortest list the record can be read to support. Against
+it stands `work-loop`'s rationale, which calls the batched validation "the
+bootstrap exit criteria" in those words, and the author's words on that node, which
+call it "bootstrap/shim exit criteria"; a list drawn this way strikes the author's
+own sentence. Recorded so that the author sees the rival the recommendation moved
+away from, and not only the list it moved to.
+```
+
 #### conditions-derived-not-restated
 
 The conditions are the shim liquidation clauses and the author's quotations as
@@ -318,7 +527,11 @@ at its source changes the list by construction rather than by an editor noticing
 It is the shape this node's own case against names as what would answer it, and
 `transience`'s standing answer already prescribes it for two of these very
 clauses, the review of every landing before exit and the drain of the legacy
-record, which it calls criteria on the nodes they serve. Against it: no such
+record, which it calls criteria on the nodes they serve.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: no such
 derivation exists today, and `transience`'s own instrument note concedes that the
 flagging of a met condition is not yet materialized, so the node would stand
 meanwhile on citations alone and name the instrument as owed -- which is how the
@@ -326,18 +539,91 @@ author's two conditions came to be reachable from no node that names exit, the
 failure this node was minted to close. Raised by the clean-context reading of
 2026-09-05.
 
+**Content.**
+
+```markdown
+---
+question: What are the conditions of bootstrap exit?
+form: rule
+cites:
+  - id: commons.systems/disposition-graph/work-loop
+    hash: 7d568f0ce07adf37623f69d140d547af54eb8241
+  - id: commons.systems/disposition-graph/materialization
+    hash: 14d4bc68bb3860cd5657b5fec088020e3dc8eae4
+  - id: commons.systems/disposition-graph/review
+    hash: 5b376ac3d4f02c470e7767fc1b2101bf0f3f1afe
+  - id: commons.systems/disposition-graph/vocabulary-view
+    hash: 861a710ed6a4903d9df8e4c68503fbb093e8d058
+  - id: commons.systems/disposition-graph/attention
+    hash: f03f75cced351fe59bae8dc6903326eeb5b16ffe
+  - id: commons.systems/disposition-graph/alignment-order
+    hash: 41c66b660af20cbd84ad6a0666db25466530ad7d
+  - id: commons.systems/disposition-graph/transience
+    hash: 22d7e322281a6951bdde89c2870745acfe0de3e6
+under:
+  - commons.systems/disposition-graph/what-acts-during-bootstrap
+---
+
+## Answer
+
+The conditions are the shim liquidation clauses and the author's quotations as
+the fields that carry them hold them, and this node names the declaring loci and
+carries no clause of its own, an instrument deriving the list from those fields
+onto the frontier. Nothing is restated in prose, and a clause struck or amended
+at its source changes the list by construction rather than by an editor noticing.
+It is the shape this node's own case against names as what would answer it, and
+`transience`'s standing answer already prescribes it for two of these very
+clauses, the review of every landing before exit and the drain of the legacy
+record, which it calls criteria on the nodes they serve.
+```
+
 #### conditions-projected-as-a-rule
 
 The same gathering with `tier: global`, so the conditions are projected into
 `.claude/rules/` beside the parent's rule and the session that rule points at
 this node loads the text it is pointed at, instead of being told where to look.
-Against it, the second home the answer's last paragraph argues against,
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it, the second home the answer's last paragraph argues against,
 multiplied by every session's context: a list of clauses living on six other
 nodes, copied into a file every session reads. Where the conditions are read is a
 decision the answer argued in prose with its rival named and no row to rule it
 on, which the `dialogue` node holds is a fact's option or a node and not a
 paragraph; nothing above settles it either, `tier` standing at the maieutic stage
 with no answer. Raised by the clean-context reading of 2026-09-05.
+
+**Content.**
+
+```markdown
+---
+question: What are the conditions of bootstrap exit?
+form: rule
+cites:
+  - id: commons.systems/disposition-graph/work-loop
+    hash: 7d568f0ce07adf37623f69d140d547af54eb8241
+  - id: commons.systems/disposition-graph/materialization
+    hash: 14d4bc68bb3860cd5657b5fec088020e3dc8eae4
+  - id: commons.systems/disposition-graph/review
+    hash: 5b376ac3d4f02c470e7767fc1b2101bf0f3f1afe
+  - id: commons.systems/disposition-graph/vocabulary-view
+    hash: 861a710ed6a4903d9df8e4c68503fbb093e8d058
+  - id: commons.systems/disposition-graph/attention
+    hash: f03f75cced351fe59bae8dc6903326eeb5b16ffe
+  - id: commons.systems/disposition-graph/alignment-order
+    hash: 41c66b660af20cbd84ad6a0666db25466530ad7d
+  - id: commons.systems/disposition-graph/transience
+    hash: 22d7e322281a6951bdde89c2870745acfe0de3e6
+under:
+  - commons.systems/disposition-graph/what-acts-during-bootstrap
+---
+
+## Answer
+
+The same gathering with `tier: global`, so the conditions are projected into
+`.claude/rules/` beside the parent's rule and the session that rule points at
+this node loads the text it is pointed at, instead of being told where to look.
+```
 
 ### authority
 
@@ -831,3 +1117,7 @@ The count is wrong and the reading has it exactly: the codification is the third
 The three substantive findings are the ones that make this a kickback and not an amendment. The clause at lines 126-128 is on the list by neither sorting rule and carries no ground at all, and `work-loop`'s own `#### split-the-shim` distinguishes "all batched validation together with the bootstrap exit criteria" inside the very field it sits in, so membership settles nothing — and it is precisely the item `shim-liquidation-is-never-a-condition` strikes, so the one clause that rival takes unopposed is the one the answer never argues for. That option's own premise then defeats the clause it keeps: no clause of a shim's liquidation is a condition of exit "whatever the shim says", and `materialization`'s coverage limb is kept on the strength of what that shim says. And `review`'s standing answer declares "review is required ... for everything before exit", which is wider than item five's scoping to landings under the reconciliation shim; the paragraph surveys that node's shim fields and never its answer, so the reader cannot tell which was chosen. `tier` belongs in `depends`: `conditions-projected-as-a-rule` says in its own prose that nothing above settles where the conditions are read because `tier` stands at maieutic with no answer.
 
 The redraw is owed at the maieutic stage and this sitting does not take it. This is the fourth reading of this node, and each of the four has found the same class of defect — a derived list stored as prose drifting from the fields it copies between one landing and the next — which is the reading's own case against, and `prose-and-structure`'s rule that prose carries never a list a field also carries. Four readings of one question is evidence about the shape and not only about the draft, so what goes to the author is the question the evidence raises: whether this node is a gathering to be ratified at all, or `conditions-derived-not-restated`, or `left-where-they-stand`. Redrawing a fifth time inside this sitting would spend another reading on a shape the author has not yet chosen. The mechanical five and the substantive three are recorded here so the redraw, whenever it is taken, starts from them and not from a re-reading.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/bootstrap-exit-conditions stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `gathered-and-cited`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `left-where-they-stand`, `minted-here`, `global-tier-ruled-is-a-condition`, `shim-liquidation-is-never-a-condition`, `conditions-derived-not-restated`, `conditions-projected-as-a-rule`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `9fdaf700285363f7bd41256bdf6246b58933a875` is re-computed for the encoding as `4c2b49fa3b6d838aec346d4eb834c8daf2520611`; nothing it read changed.

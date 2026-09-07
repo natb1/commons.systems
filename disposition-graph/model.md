@@ -9,7 +9,7 @@ review:
   against: "The rewrite answers the author's complaint that the node 'jumps too quickly into reference shaped material', and it is well written for a newcomer — but it is the second page of the walk and every term on it is still being decided: 'criteria' by instruments at maieutic, 'rank' by under at maieutic with no drafted text, readings' tradition mount by traditions-home at review. A newcomer's second page cannot be stable while its whole vocabulary is in flight, so the case for ruling model after those nodes is stronger than its rank suggests. The ruling order below does that, which answers the objection at the cost of putting the record's second-highest-ranked node late."
   survey:
     date: 2026-09-05
-    of: bb8fd6059650d7d4175d8d799d0cc314db19b350
+    of: d7c9c95d10582f3cf8bc4e9f9bf2de0391feb561
 facts:
   - name: answer
     options:
@@ -19,6 +19,8 @@ facts:
       - name: draft
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-02/13
       - name: alignment-acts-first
         source: review
         ref: "2026-09-03"
@@ -30,7 +32,6 @@ facts:
         ref: "2026-09-05"
     recommends: draft
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -47,46 +48,48 @@ defines:
   - disposition graph
   - node
 ---
-## Disposition
-
-The author, 2026-09-02:
-> The next direction for onboarding (the next ranking refinement under the purpose node) should be some disposition that introduces the basics of the intention graph primitives. Enough to understand how to interact with the `/align` skill - authority, rank, tradition, etc. "How is intent recorded here" jumps too quickly into reference shaped material. Projecting "cites" relationships will aid onboarding navigation. Consider how an onboarding person will navigate from purpose, to graph concepts, to `/align` usage.
-
-## Answer
-
-As a disposition graph. A disposition is one standing answer to one question, held by the author or by the AI under the author's rules; a node is the file that records it. Nodes refine one another through a single edge, `under`. Each node carries who holds its answer and with what authority, what the answer rests on, and how one would know it still holds. Rank, the context a session loads, the work queue, and the author's review queue are computed from those facts and never stored. The history of every answer lives in version control.
-
-## Rationale
-
-The refinements of this node define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, instruments, readings, the work loop, materialized implementation, and the standing of the legacy record. Each is ratified in onboarding order.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+As a disposition graph.
+
+**AI support.** The refinements of this node define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, instruments, readings, the work loop, materialized implementation, and the standing of the legacy record. Each is ratified in onboarding order.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is intent recorded here?
+form: rule
+boost: 8
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - disposition
+  - disposition graph
+  - node
+---
+
+## Answer
+
+As a disposition graph. A disposition is one standing answer to one question, held by the author or by the AI under the author's rules; a node is the file that records it. Nodes refine one another through a single edge, `under`. Each node carries who holds its answer and with what authority, what the answer rests on, and how one would know it still holds. Rank, the context a session loads, the work queue, and the author's review queue are computed from those facts and never stored. The history of every answer lives in version control.
+```
+
 #### draft
 
 The draft rewrites the answer for a reader arriving from purpose who needs to use the alignment skill rather than look up the schema: disposition and the three stamp classes, the under edge and how rank follows it, readings with their relations, criteria as check, assessment or assumption, and the sitting, in that order. The standing answer is the terse schema statement the author found too reference-shaped, and its list of refinements moves to the draft's rationale, which also rejects a separate primer node. The draft presumes the instruments vocabulary, which no node's defines carries today, and keeps a deferred stamp with a placeholder date the recording is to replace.
 
-#### alignment-acts-first
+**AI support.** This node is the second stop of the onboarding walk, after purpose, and it is written for a reader who needs to use the skill, not for one looking up the schema. Its refinements define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, criteria, readings, the work loop, materialized implementation, transience, and the standing of the legacy record.
 
-Model's recommended rationale says growth is first among model's children because the sitting is the first thing a newcomer does, which second-stop's amendment withdrew and which attention's recorded boosts and the frontier's ranks contradict, projection standing at 5 and growth at 4. The alternative strikes that sentence and says at most that alignment is where the newcomer acts first, asserting no rank, which second-stop's amended option permits and which the contradiction finding of 2026-09-03 proposes as the form the claim may take. Raised on commons.systems/disposition-graph/attention.
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-#### primer-node
-
-Model carries the primer-node option as an alternative of its own, a new node between purpose and model introducing the graph primitives, with model's answer left as it stands, and second-stop is folded away. Under the new encoding an option-node whose whole content is a choice between two answers to a sibling's question is that sibling's alternatives list, which is what the redundancy finding of 2026-09-03 offers as the alternative to keeping the option-node. (Raised on commons.systems/disposition-graph/second-stop.)
-
-#### chosen-over-derived
-
-This node's draft names three relations on a reading, "a relation of adopted,
-diverged, or chosen over", where the `readings` node under it makes chosen over
-derived and never stored and the reader accepts two, `RELATIONS` being
-`['adopted', 'diverged']`. Strike "or chosen over" from the clause and let the
-`readings` node's definition stand, since that node defines the term and is the
-survivor of the redundancy. Raised by the second clean-context reading of
-`readings` on 2026-09-05, which proposed it and did not make it.
-
-## Recommendation
+**Content.**
 
 ```markdown
 ---
@@ -102,10 +105,102 @@ defines:
 ## Answer
 
 As a disposition graph, which you read from the purpose node down and change only through a sitting. A disposition is one standing answer to one question, written as a node, and each node says who holds its answer: ratified when the author ruled on it in a sitting and wants to be asked before it changes, delegated when the author handed that class of decision to the AI, deferred when the AI answered within the author's rules and owes a review. Nodes refine one another through one edge, under, and rank follows it: a node's share of attention is its parent's share divided among siblings and weighted by boost, which only the author ratifies, so the order you meet nodes in is also the order work goes in. A node's answer is grounded by readings, each a reference to a tradition with a relation of adopted, diverged, or chosen over, and guarded by criteria, each a check, an assessment, or an assumption, so that the record can say whether an answer still holds. To change any of this you run the alignment skill on a node or on a disposition in your own words; it turns you back to what the record already says before it draws out what you intend, and it ends in your ruling. Everything else, the review queue, the work queue, and the context a session loads, is computed from these facts and never stored; the history of every answer lives in version control.
+```
 
-## Rationale
+#### alignment-acts-first
 
-This node is the second stop of the onboarding walk, after purpose, and it is written for a reader who needs to use the skill, not for one looking up the schema. Its refinements define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, criteria, readings, the work loop, materialized implementation, transience, and the standing of the legacy record.
+Model's recommended rationale says growth is first among model's children because the sitting is the first thing a newcomer does, which second-stop's amendment withdrew and which attention's recorded boosts and the frontier's ranks contradict, projection standing at 5 and growth at 4. The alternative strikes that sentence and says at most that alignment is where the newcomer acts first, asserting no rank, which second-stop's amended option permits and which the contradiction finding of 2026-09-03 proposes as the form the claim may take. Raised on commons.systems/disposition-graph/attention.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is intent recorded here?
+form: rule
+boost: 8
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - disposition
+  - disposition graph
+  - node
+---
+
+## Answer
+
+Model's recommended rationale says growth is first among model's children because the sitting is the first thing a newcomer does, which second-stop's amendment withdrew and which attention's recorded boosts and the frontier's ranks contradict, projection standing at 5 and growth at 4. The alternative strikes that sentence and says at most that alignment is where the newcomer acts first, asserting no rank, which second-stop's amended option permits and which the contradiction finding of 2026-09-03 proposes as the form the claim may take. Raised on commons.systems/disposition-graph/attention.
+```
+
+#### primer-node
+
+Model carries the primer-node option as an alternative of its own, a new node between purpose and model introducing the graph primitives, with model's answer left as it stands, and second-stop is folded away. Under the new encoding an option-node whose whole content is a choice between two answers to a sibling's question is that sibling's alternatives list, which is what the redundancy finding of 2026-09-03 offers as the alternative to keeping the option-node. (Raised on commons.systems/disposition-graph/second-stop.)
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is intent recorded here?
+form: rule
+boost: 8
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - disposition
+  - disposition graph
+  - node
+---
+
+## Answer
+
+Model carries the primer-node option as an alternative of its own, a new node between purpose and model introducing the graph primitives, with model's answer left as it stands, and second-stop is folded away. Under the new encoding an option-node whose whole content is a choice between two answers to a sibling's question is that sibling's alternatives list, which is what the redundancy finding of 2026-09-03 offers as the alternative to keeping the option-node. (Raised on commons.systems/disposition-graph/second-stop.)
+```
+
+#### chosen-over-derived
+
+This node's draft names three relations on a reading, "a relation of adopted,
+diverged, or chosen over", where the `readings` node under it makes chosen over
+derived and never stored and the reader accepts two, `RELATIONS` being
+`['adopted', 'diverged']`. Strike "or chosen over" from the clause and let the
+`readings` node's definition stand, since that node defines the term and is the
+survivor of the redundancy. Raised by the second clean-context reading of
+`readings` on 2026-09-05, which proposed it and did not make it.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: How is intent recorded here?
+form: rule
+boost: 8
+under:
+  - commons.systems/disposition-graph/purpose
+defines:
+  - disposition
+  - disposition graph
+  - node
+---
+
+## Answer
+
+This node's draft names three relations on a reading, "a relation of adopted,
+diverged, or chosen over", where the `readings` node under it makes chosen over
+derived and never stored and the reader accepts two, `RELATIONS` being
+`['adopted', 'diverged']`. Strike "or chosen over" from the clause and let the
+`readings` node's definition stand, since that node defines the term and is the
+survivor of the redundancy. Raised by the second clean-context reading of
+`readings` on 2026-09-05, which proposed it and did not make it.
 ```
 
 ## Account
@@ -217,3 +312,7 @@ Findings:
 - `## Answer` (the draft the recommendation `draft` adopts) says "Rank, the context a session loads, the work queue, and the author's review queue are computed from those facts and never stored." Rank is computed from boost, and `commons.systems/disposition-graph/attention`'s `## Answer` says of boost that it is "an allocation only the author may ratify, and every boost in the record today is the AI's and unratified". Boost is a stored frontmatter field. So the sentence's "never stored" is true of the output and false of the input, and the input is the one the author is told they alone may ratify: the ruling order this survey was launched under is computed from unratified stored numbers. The two sentences should be reconciled, either by qualifying this one or by moving the boost claim here.
 
 Strongest counter-argument (moderate): The answer's force rests on "computed from those facts and never stored", and the record does not keep that line: `stage`, `review`, `probes` and `depends` are stored dialogue state written on the node at every transition by `checkpoint`'s own rule, and the ruling order is computed from stored, unratified boosts. What is actually distinctive here is that the *class* is derived, which is `authority`'s claim and not this node's; strip the derivation claim and the model reduces to "one file per standing answer, one edge, version control for history", which is not in dispute and does not need this node's ratification.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/model stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `draft`; 1 `## Disposition` entry became the ledger entry words/2026-09-02/13, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `alignment-acts-first`, `primer-node`, `chosen-over-derived`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `04b24674220938c0568577b2df45eae56c0415ba` was already past the recommendation and is left as it stood. The survey's pin `bb8fd6059650d7d4175d8d799d0cc314db19b350` is re-computed for the encoding as `d7c9c95d10582f3cf8bc4e9f9bf2de0391feb561`; nothing it read changed.

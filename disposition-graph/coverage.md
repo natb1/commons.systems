@@ -97,13 +97,6 @@ facts:
 under:
   - commons.systems/disposition-graph/purpose
 ---
-## Disposition
-
-The author, 2026-09-02, on coverage:
-> If there are other recorded functions in the incumbent code/graph then present for review to ensure full coverage of scope.
-
-The author, 2026-09-02:
-> "Who is this repository for?" to the extent this needs to be recorded right now it is handled by the purpose node already. It can be pruned. We might fold some of this in from the incumbent graph later.
 
 ## Facts
 
@@ -113,9 +106,17 @@ The author, 2026-09-02:
 
 One of the two candidate answers to the audience part of this question, moved here when the audience node was recommended for pruning. The purpose node's one audience covers the other four the evidence names — practitioners forking the harness, the author alone, prospective consulting clients, the general public downloading a stand-alone plugin, and an unspecified future collaborator — because each is served through the primary audience's tooling, and no surface is excluded on that ground.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
 #### name-excluded-audiences
 
 The alternative to the above, also moved here from the audience node's account: the audiences outside the purpose are named as excluded, and the surfaces built for them — the public site's About page, the plugin listing, the fork template and separability audit, the morning brief — become unsupported implementation at the swap of the implementation ref with main. It is the same choice the twelve-function survey poses for functions nine to twelve, applied to readers rather than to functions.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
 
 ## Account
 
@@ -189,3 +190,7 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `audiences-served-through-primary` (ai, 2026-09-03); `name-excluded-audiences` (ai, 2026-09-03).
 Merge analysis of the author's words: 2026-09-02, own-question: If there are other recorded functions in the incumbent code or graph, they are to be presented for review so that the scope's coverage is complete. 2026-09-02, own-question: The audience question is handled by the purpose node already and can be pruned, though some of the incumbent graph's material on it might be folded in later — the folding being this node's question, and the same words grounding the prune recommended on the audience node.
 The census unit's note: The node carries no `## Answer` and no `recommendation`, so `adopts` is null and it stands at the periagogic stage awaiting the author's clarification against the twelve-function survey. The survey itself, and the four questions it attaches to functions nine to twelve, are evidence and open questions with no candidate answer, so they are not alternatives. The two I did record are the audience choice, which the audience node's account states as a genuine either-or and which this node's own text says now belongs here. The second author block is classified own-question rather than new-answer on audience even though audience carries the same words: this node's account says the paragraph that addressed audience now addresses this question, and the words' last sentence, about folding the incumbent graph in later, is this node's own. The two frontier findings carried here are duplicates of those on audience and their elsewhere entries are recorded there once.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/coverage stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 2 `## Disposition` entries became the ledger entries words/2026-09-02/5, words/2026-09-02/2, referenced by 0 options the entry's own date names. No content is recorded for `audiences-served-through-primary`, `name-excluded-audiences`: the record never wrote one and the migration invents none.

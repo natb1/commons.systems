@@ -5,17 +5,19 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: b2f24269ce14ca0e05593e53ba7d04ca2a21807f
+  of: 959920e40b4beda31e84fb1a01067d695f1112ed
   against: "The reading adopts 'addresses do not change' and the record then declares two exceptions to it: the public graph's prefix rewrite, now recorded, and the framed viewer's inability to show or receive an address, recorded as a clause in the answer. A principle with two live exceptions, one of which the record imposes on itself and one of which is a stand-in with no liquidation condition anything reads, is adopted more strongly than the record can honour. The honest form is a relation of diverged with both exceptions named, which is what the sibling readings' `relation-diverged` alternatives propose for the same shape."
   survey:
     date: 2026-09-05
-    of: b2f24269ce14ca0e05593e53ba7d04ca2a21807f
+    of: 959920e40b4beda31e84fb1a01067d695f1112ed
 facts:
   - name: answer
     options:
       - name: standing
         source: ai
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-03/88
       - name: narrow-fielding-citation
         source: review
         ref: "2026-09-03"
@@ -27,7 +29,6 @@ facts:
         ref: "2026-09-03"
     recommends: standing
     boldness: moderate
-    stands: standing
   - name: authority
     options:
       - name: ratified
@@ -44,34 +45,122 @@ bears:
     option: standing
     relation: adopted
 ---
-## Disposition
-
-The author, 2026-09-03:
-> Record reference to web app routing tradition for disposition. Edit the browser shim to reconcile the disposition.
-
-## Answer
-
-Supports. The tradition holds that everything a reader can reach has an address, that moving between things changes the address shown, that an address reopens what it names, and that addresses do not change. The browser adopts all four: a node's address is its id, written into the page's fragment as the reader moves, read back when the reader arrives by it, and stable because ids are import paths. One divergence is the record's own: the public graph's ids are rewritten by prefix when it moves to natb1.com, and the namespaces node's shim carries the redirect obligation that principle imposes. One divergence is imposed by the host and not chosen: a page framed by a viewer can neither show its address in the viewer's own bar nor receive one through it, so until the browser is published from the implementation ref the page keeps the reader's place itself and shows the address of the node in view.
-
-## Rationale
-
-Recorded at the author's direction on 2026-09-03 after the address was seen not to change on navigation in the framed viewer, and tested the same day: the viewer neither passes a fragment in nor reflects one out. Validated by the AI from its own knowledge of the sources; deferred until the author reads them.
 
 ## Facts
 
 ### answer
 
+#### standing
+
+Supports.
+
+**AI support.** Recorded at the author's direction on 2026-09-03 after the address was seen not to change on navigation in the framed viewer, and tested the same day: the viewer neither passes a fragment in nor reflects one out. Validated by the AI from its own knowledge of the sources; deferred until the author reads them.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does the web-routing tradition support addressing every node of the browser?
+form: reading
+under:
+  - commons.systems/disposition-graph/projection
+source: Fielding, Architectural Styles and the Design of Network-based Software Architectures (2000), chapter 5, identification of resources by URI; Berners-Lee, "Cool URIs don't change" (1998); the HTML Living Standard, the History interface (pushState, replaceState, popstate) and fragment navigation; Nielsen, "URL as UI" (1999).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+Supports. The tradition holds that everything a reader can reach has an address, that moving between things changes the address shown, that an address reopens what it names, and that addresses do not change. The browser adopts all four: a node's address is its id, written into the page's fragment as the reader moves, read back when the reader arrives by it, and stable because ids are import paths. One divergence is the record's own: the public graph's ids are rewritten by prefix when it moves to natb1.com, and the namespaces node's shim carries the redirect obligation that principle imposes. One divergence is imposed by the host and not chosen: a page framed by a viewer can neither show its address in the viewer's own bar nor receive one through it, so until the browser is published from the implementation ref the page keeps the reader's place itself and shows the address of the node in view.
+```
+
 #### narrow-fielding-citation
 
 The source field is rewritten so that Fielding chapter 5 is cited for the principle of identification by address only, and the fragment mechanism is cited to the HTML Living Standard's History interface and fragment navigation. A fragment is resolved client-side and is never seen by a server, so citing Fielding for a fragment scheme is loose. The session accepted the narrowing twice and the frontmatter still lists Fielding first among four sources unchanged.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does the web-routing tradition support addressing every node of the browser?
+form: reading
+under:
+  - commons.systems/disposition-graph/projection
+source: Fielding, Architectural Styles and the Design of Network-based Software Architectures (2000), chapter 5, identification of resources by URI; Berners-Lee, "Cool URIs don't change" (1998); the HTML Living Standard, the History interface (pushState, replaceState, popstate) and fragment navigation; Nielsen, "URL as UI" (1999).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+The source field is rewritten so that Fielding chapter 5 is cited for the principle of identification by address only, and the fragment mechanism is cited to the HTML Living Standard's History interface and fragment navigation. A fragment is resolved client-side and is never seen by a server, so citing Fielding for a fragment scheme is loose. The session accepted the narrowing twice and the frontmatter still lists Fielding first among four sources unchanged.
+```
 
 #### split-the-sources
 
 The node's four sources under one relation of adopted are split into separate readings, or the answer states that the single relation covers the group. Readings speaks of a reading's source, locus and relation in the singular, so if one of the four were later diverged from, one relation could not say so.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does the web-routing tradition support addressing every node of the browser?
+form: reading
+under:
+  - commons.systems/disposition-graph/projection
+source: Fielding, Architectural Styles and the Design of Network-based Software Architectures (2000), chapter 5, identification of resources by URI; Berners-Lee, "Cool URIs don't change" (1998); the HTML Living Standard, the History interface (pushState, replaceState, popstate) and fragment navigation; Nielsen, "URL as UI" (1999).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+The node's four sources under one relation of adopted are split into separate readings, or the answer states that the single relation covers the group. Readings speaks of a reading's source, locus and relation in the singular, so if one of the four were later diverged from, one relation could not say so.
+```
+
 #### divergence-as-shim
 
 The host's divergence, that a framed page can neither show nor receive its address so the page keeps the reader's place itself, leaves this answer and becomes part of projection's browser shim with a liquidation condition. As a clause in an answer it is a stand-in for an unmade materialization that the frontier cannot read, which transience makes a shim.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: Does the web-routing tradition support addressing every node of the browser?
+form: reading
+under:
+  - commons.systems/disposition-graph/projection
+source: Fielding, Architectural Styles and the Design of Network-based Software Architectures (2000), chapter 5, identification of resources by URI; Berners-Lee, "Cool URIs don't change" (1998); the HTML Living Standard, the History interface (pushState, replaceState, popstate) and fragment navigation; Nielsen, "URL as UI" (1999).
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
+---
+
+## Answer
+
+The host's divergence, that a framed page can neither show nor receive its address so the page keeps the reader's place itself, leaves this answer and becomes part of projection's browser shim with a liquidation condition. As a clause in an answer it is a stand-in for an unmade materialization that the frontier cannot read, which transience makes a shim.
+```
 
 ## Account
 
@@ -188,3 +277,7 @@ Findings:
 
 
 Strongest counter-argument (moderate): The reading adopts four principles and then breaks the fourth twice in the same paragraph: once by the record's own prefix rewrite when the public graph moves, and once by the host, which cannot give a framed page an address. A principle adopted with both of its known applications recorded as divergences has not been adopted in any sense that binds a future decision. What the tradition would actually say here is that a record whose ids are import paths and whose public half is going to be re-prefixed has not yet chosen its addressing scheme, and that is `namespaces`' question, unruled.
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/web-routing stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-03/88, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `narrow-fielding-citation`, `split-the-sources`, `divergence-as-shim`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `b2f24269ce14ca0e05593e53ba7d04ca2a21807f` is re-computed for the encoding as `959920e40b4beda31e84fb1a01067d695f1112ed`; nothing it read changed. The survey's pin `b2f24269ce14ca0e05593e53ba7d04ca2a21807f` is re-computed for the encoding as `959920e40b4beda31e84fb1a01067d695f1112ed`; nothing it read changed.

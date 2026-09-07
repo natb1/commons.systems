@@ -7,6 +7,8 @@ facts:
       - name: shim-and-grant
         source: commons.systems/disposition-graph/authority
         ref: "2026-09-05"
+        supports:
+          - words/2026-09-04/44
       - name: deferred-as-the-resting-state
         source: review
         ref: "2026-09-05"
@@ -16,6 +18,8 @@ facts:
       - name: grant-expires-at-exit
         source: author
         ref: "2026-09-03"
+        supports:
+          - words/2026-09-03/89
       - name: nothing-acts
         source: ai
         ref: "2026-09-05"
@@ -32,7 +36,6 @@ facts:
     recommends: shim-and-grant
     boldness: high
     against: "Every rule file under `.claude/rules/` that a session loads, this node's own projection among them, is the projection of a node no ruling reaches, and the `session-context` node declares a shim on `CLAUDE.md` and on `.claude/settings.json` and on neither the rules projection nor this file, so this answer says the doctrine the record is running on today acts on nothing, and says it in a file that binds every session while saying it. It leaves a session no account at all of what those files bind it to, and the option that would give one is `projected-doctrine-acts`."
-    stands: shim-and-grant
   - name: authority
     options:
       - name: ratified
@@ -49,7 +52,7 @@ review:
   against: "The amendment answers two of its five findings by adding a citation of a divergence rather than by removing one, so the rule the author is asked to ratify now says twice, in the text `.claude/rules/` carries, that the node it cites holds the other position, and each contest is parked as an option on a node that is itself unruled: a session that reads the notice has nowhere to go for the resolution, and at the first ruling `.claude/rules/authority.md` will still carry 'During bootstrap no class acts' with no notice in that file. Beside that, the standing objection is untouched: the answer still says only what does not make the rule files unsupported and never what makes them binding, and the amendment's own new work — a second row for `projected-doctrine-acts` at `session-context` — moves the remedy one node further from the recommendation without moving the recommendation. None of this defeats the amendment: each of the five defects is cured at its own locus, verified at the loci below, and what is left is the record's condition and not a fault of this text."
   survey:
     date: 2026-09-07
-    of: 102fdff47a95d8e89691c8905d9d1b9a3d3b7ad5
+    of: ecc0a1e411b5735921b5144dc9a2ba61292af004
 form: rule
 under:
   - commons.systems/disposition-graph/authority
@@ -64,13 +67,75 @@ defines:
   - term: bootstrap authority
     gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
 ---
-## Disposition
 
-The author, 2026-09-03, on bootstrap authority:
-> also record the concept of bootstrap authority as an alignment shim - unanswered nodes may be reconciled by alignment with explicit bootstrap authority, but that authority expires on bootstrap exit
+## Facts
 
-The author, 2026-09-04, on the viable-options node, on what unanswered is:
-> Is "unanswered" just an authority - as in no authority granted for reconciliation. Or, more precicely, explicit bootstrap authority required for reconciliation - in this way bootstrap authority is not a shim, but a persistent disposition about reconciliation authority.
+### answer
+
+The recommendation is `shim-and-grant`, at high boldness, which in this
+record means low confidence. The two rules are the record's own words, from
+the evaluation node, the transience node and the authority node, and gathering
+them here invents nothing. What is the AI's, and what the boldness marks, is
+that bootstrap relaxes node by node rather than ending in one act, and that the
+conditions the record declares elsewhere, gathered on the node beneath this one
+and not minted here, say when it is over. No
+ruling of the author's fixes either, and the record's stopgaps date themselves
+by this term, so a wrong answer here mis-dates every one of them. The one place
+the answer departs from the author's words is the expiry, which is why their
+side of it is on the list as `grant-expires-at-exit` and the case against the
+whole answer is on the fact. The case against has one option that answers it
+and the answer does not, `projected-doctrine-acts`, which would make the
+doctrine the record projects into `.claude/rules/` a third thing that acts; it
+is listed and not recommended, because whether the rule files a session loads
+bind it is the author's to say and not the AI's.
+
+#### shim-and-grant
+
+Two things act by right, and no class acts until a ruling confers one; from that
+ruling the class acts, as the authority node says, whose own sentence that no
+class acts during bootstrap was written of the narrower state and stands with
+the author as the option `a-conferred-class-acts-during-bootstrap`; and what
+acts by right shrinks with every ruling.
+
+**AI support.** The question is authority's neighbour and not authority's own: that node
+answers who may change an answer, and this one answers what binds a session
+while the answer to that question reaches nothing. It is minted here because
+the rule has to survive the sitting that wrote it, be cited, and be read by
+sessions that never saw the question, which is what makes a disposition
+rather than a probe. Until 2026-09-05 the rule lived as one clause in
+authority's answer, where a reader looking for what governs a session today
+would not find it.
+
+The clause it carries is the reply authority's own reading of 2026-09-05
+recorded to the counter-argument that the classes describe none of the
+record's present operation. That counter-argument is the ground of the
+option `deferred-as-the-resting-state`, and it is not answered by putting
+the clause in its own node: it asks for a resting state in which the AI's
+recommendation acts by default under a review that is owed, which is what
+the retired deferred stamp did and what the `approval-directed-agents`
+reading describes. This answer refuses that resting state and pays for it in
+the author's attention, one grant at a time; the author may prefer the other
+side, and the option is on the list for that reason.
+
+**AI divergence.** Every rule file under `.claude/rules/` that a session loads, this node's own projection among them, is the projection of a node no ruling reaches, and the `session-context` node declares a shim on `CLAUDE.md` and on `.claude/settings.json` and on neither the rules projection nor this file, so this answer says the doctrine the record is running on today acts on nothing, and says it in a file that binds every session while saying it. It leaves a session no account at all of what those files bind it to, and the option that would give one is `projected-doctrine-acts`.
+
+**Content.**
+
+```markdown
+---
+question: What acts while nothing in the record is ratified, and when does that state end?
+form: rule
+under:
+  - commons.systems/disposition-graph/authority
+tier: global
+defines:
+  - term: bootstrap
+    gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
+  - term: bootstrap exit
+    gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
+  - term: bootstrap authority
+    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+---
 
 ## Answer
 
@@ -115,49 +180,7 @@ an unanswered node on the author's explicit word is the rule at any time, as the
 authority node holds, and that strikes the expiry the author's words of
 2026-09-03 gave it, quoted above; the divergence is recorded here, and
 `grant-expires-at-exit` keeps the author's own side of it on the list.
-
-## Rationale
-
-The question is authority's neighbour and not authority's own: that node
-answers who may change an answer, and this one answers what binds a session
-while the answer to that question reaches nothing. It is minted here because
-the rule has to survive the sitting that wrote it, be cited, and be read by
-sessions that never saw the question, which is what makes a disposition
-rather than a probe. Until 2026-09-05 the rule lived as one clause in
-authority's answer, where a reader looking for what governs a session today
-would not find it.
-
-The clause it carries is the reply authority's own reading of 2026-09-05
-recorded to the counter-argument that the classes describe none of the
-record's present operation. That counter-argument is the ground of the
-option `deferred-as-the-resting-state`, and it is not answered by putting
-the clause in its own node: it asks for a resting state in which the AI's
-recommendation acts by default under a review that is owed, which is what
-the retired deferred stamp did and what the `approval-directed-agents`
-reading describes. This answer refuses that resting state and pays for it in
-the author's attention, one grant at a time; the author may prefer the other
-side, and the option is on the list for that reason.
-
-## Facts
-
-### answer
-
-The recommendation is `shim-and-grant`, at high boldness, which in this
-record means low confidence. The two rules are the record's own words, from
-the evaluation node, the transience node and the authority node, and gathering
-them here invents nothing. What is the AI's, and what the boldness marks, is
-that bootstrap relaxes node by node rather than ending in one act, and that the
-conditions the record declares elsewhere, gathered on the node beneath this one
-and not minted here, say when it is over. No
-ruling of the author's fixes either, and the record's stopgaps date themselves
-by this term, so a wrong answer here mis-dates every one of them. The one place
-the answer departs from the author's words is the expiry, which is why their
-side of it is on the list as `grant-expires-at-exit` and the case against the
-whole answer is on the fact. The case against has one option that answers it
-and the answer does not, `projected-doctrine-acts`, which would make the
-doctrine the record projects into `.claude/rules/` a third thing that acts; it
-is listed and not recommended, because whether the rule files a session loads
-bind it is the author's to say and not the AI's.
+```
 
 #### deferred-as-the-resting-state
 
@@ -175,6 +198,46 @@ per reconciliation, which is the cost this answer accepts, and the author's
 own remedy of 2026-09-02 for unearned authority was a rollback to deferred
 for review, not a halt. It is not dominated, and the choice between the two
 is the author's.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What acts while nothing in the record is ratified, and when does that state end?
+form: rule
+under:
+  - commons.systems/disposition-graph/authority
+tier: global
+defines:
+  - term: bootstrap
+    gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
+  - term: bootstrap exit
+    gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
+  - term: bootstrap authority
+    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+---
+
+## Answer
+
+Deferred returns as the state the AI may write for itself: a recommendation
+on an unanswered node acts, under a review that is owed, until the author
+rules. This is what the record carried until 2026-09-03, when the author
+classified the deferred stamps the bootstrap had written as unanswered, and
+what approval-direction describes as action pending approval. The
+`approval-directed-agents` reading supports deferred as a class the author
+confers and expressly refuses it as a resting state, calling it approval-
+direction with a debt attached and a date on it, so this option diverges from
+that reading rather than resting on it, and the reading records the
+divergence. Viable and not chosen: it makes the machine run without a grant
+per reconciliation, which is the cost this answer accepts, and the author's
+own remedy of 2026-09-02 for unearned authority was a rollback to deferred
+for review, not a halt. It is not dominated, and the choice between the two
+is the author's.
+```
 
 #### projected-doctrine-acts
 
@@ -195,6 +258,48 @@ unaccounted; the reading of 2026-09-05 named it, and it is recorded here and
 not answered, because the AI may not answer a case against itself by ruling
 on it.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What acts while nothing in the record is ratified, and when does that state end?
+form: rule
+under:
+  - commons.systems/disposition-graph/authority
+tier: global
+defines:
+  - term: bootstrap
+    gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
+  - term: bootstrap exit
+    gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
+  - term: bootstrap authority
+    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+---
+
+## Answer
+
+Three things act, and no class does: a declared shim, the author's grant, and
+the doctrine the record projects from its own nodes into `.claude/rules/`,
+which binds every session as the record's interim doctrine until each node it
+projects is ruled. Whether that is written as a third limb here or declared as
+a shim on the `session-context` node over the rules projection is the same
+answer reached two ways; the shim shape is before the author at the node whose
+frontmatter would hold it, as `rules-projection-declared-a-shim` on
+`session-context`, and a ruling here is for the limb written here. It is not dominated by
+either live alternative: `deferred-as-the-resting-state` would give every
+recommendation of the AI's the force of an answer, which this does not, and
+`grant-expires-at-exit` grounds nothing that runs today. It is the only way on
+this list for the author to rule that the rule files every session loads bind
+it, which is what the case against the recommendation says the answer leaves
+unaccounted; the reading of 2026-09-05 named it, and it is recorded here and
+not answered, because the AI may not answer a case against itself by ruling
+on it.
+```
+
 #### grant-expires-at-exit
 
 The grant is a bootstrap expedient and goes at bootstrap exit, after which an
@@ -206,11 +311,74 @@ authority's rationale records the strike and says the author may strike the
 line in turn. The option is here so the author rules on their own words rather
 than on the AI's amendment of them.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What acts while nothing in the record is ratified, and when does that state end?
+form: rule
+under:
+  - commons.systems/disposition-graph/authority
+tier: global
+defines:
+  - term: bootstrap
+    gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
+  - term: bootstrap exit
+    gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
+  - term: bootstrap authority
+    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+---
+
+## Answer
+
+The grant is a bootstrap expedient and goes at bootstrap exit, after which an
+unanswered node is reconciled only through the dialectic. These are the
+author's words of 2026-09-03, quoted above, and the standing answer strikes
+them on the AI's own judgment, that a rule requiring the author's explicit
+word to reconcile an unanswered node is right at any time and not a stopgap;
+authority's rationale records the strike and says the author may strike the
+line in turn. The option is here so the author rules on their own words rather
+than on the AI's amendment of them.
+```
+
 #### nothing-acts
 
 Nothing acts until a ruling reaches it, shims and grants included. Passed
 over: the record would then have to be built by an agent forbidden to act on
 any of it, and the first sitting could not be run.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What acts while nothing in the record is ratified, and when does that state end?
+form: rule
+under:
+  - commons.systems/disposition-graph/authority
+tier: global
+defines:
+  - term: bootstrap
+    gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
+  - term: bootstrap exit
+    gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
+  - term: bootstrap authority
+    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+---
+
+## Answer
+
+Nothing acts until a ruling reaches it, shims and grants included. Passed
+over: the record would then have to be built by an agent forbidden to act on
+any of it, and the first sitting could not be run.
+```
 
 #### a-bootstrap-class
 
@@ -220,9 +388,67 @@ same ground that node passed it over: the author's words of 2026-09-04 make
 the grant a persistent rule about reconciliation authority, and a rule is
 not a class.
 
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is owed.
+
+**Content.**
+
+```markdown
+---
+question: What acts while nothing in the record is ratified, and when does that state end?
+form: rule
+under:
+  - commons.systems/disposition-graph/authority
+tier: global
+defines:
+  - term: bootstrap
+    gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
+  - term: bootstrap exit
+    gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
+  - term: bootstrap authority
+    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+---
+
+## Answer
+
+Bootstrap authority is a fourth class beside ratified, delegated and
+deferred, which the authority node would then define. Passed over on the
+same ground that node passed it over: the author's words of 2026-09-04 make
+the grant a persistent rule about reconciliation authority, and a rule is
+not a class.
+```
+
 #### a-standing-direction-acts-by-right
 
-Everything `shim-and-grant` says, with a third thing acting by right beside the shim and the grant: a standing direction the author has given about a class of act, which acts on every instance of that class until a ruling confers the class, where a grant acts on the one reconciliation it names. It is on the table because graph-topology and probe-or-node both now take a prune on the author's word "wherever it was given" and cite this node for it, where this answer's grant is "given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant"; either the third limb is written here or those two clauses have no ground. Against it: it is a wider licence than the fact's own case against already worries about, and the party reading which direction reaches which act is the party the act benefits.
+Everything `shim-and-grant` says, with a third thing acting by right beside the shim and the grant: a standing direction the author has given about a class of act, which acts on every instance of that class until a ruling confers the class, where a grant acts on the one reconciliation it names. It is on the table because graph-topology and probe-or-node both now take a prune on the author's word "wherever it was given" and cite this node for it, where this answer's grant is "given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant"; either the third limb is written here or those two clauses have no ground.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** Against it: it is a wider licence than the fact's own case against already worries about, and the party reading which direction reaches which act is the party the act benefits.
+
+**Content.**
+
+```markdown
+---
+question: What acts while nothing in the record is ratified, and when does that state end?
+form: rule
+under:
+  - commons.systems/disposition-graph/authority
+tier: global
+defines:
+  - term: bootstrap
+    gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
+  - term: bootstrap exit
+    gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
+  - term: bootstrap authority
+    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+---
+
+## Answer
+
+Everything `shim-and-grant` says, with a third thing acting by right beside the shim and the grant: a standing direction the author has given about a class of act, which acts on every instance of that class until a ruling confers the class, where a grant acts on the one reconciliation it names. It is on the table because graph-topology and probe-or-node both now take a prune on the author's word "wherever it was given" and cite this node for it, where this answer's grant is "given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant"; either the third limb is written here or those two clauses have no ground.
+```
 
 ### authority
 
@@ -736,3 +962,7 @@ Also named: commons.systems/disposition-graph/graph-topology, commons.systems/di
 Proposed: what-acts-during-bootstrap owns what acts by right and is the survivor of the definition. Either its answer gains a third thing that acts, a standing direction of the author's about a class of act, which is the option recorded here for the author to rule; or the two citing nodes redraw their interim so that it names a grant given for the prune in hand and not a word given elsewhere. graph-topology and probe-or-node are the nodes whose text must change under the second, and the interim is the one clause of either that acts before any ruling, so it is the clause the author should meet with the definition beside it.
 
 Recorded as an option on this node's answer fact: `a-standing-direction-acts-by-right` (source review, 2026-09-07).
+
+### Migrated to the content encoding, 2026-09-07
+
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/what-acts-during-bootstrap stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `shim-and-grant`; the `## Rationale` its `**AI support.**`; 2 `## Disposition` entries became the ledger entries words/2026-09-03/89, words/2026-09-04/44, referenced by 1 option the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `deferred-as-the-resting-state`, `projected-doctrine-acts`, `grant-expires-at-exit`, `nothing-acts`, `a-bootstrap-class`, `a-standing-direction-acts-by-right`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `978ae6c02bed0e9281b0b0c76daa5e5c761ba09c` was already past the recommendation and is left as it stood. The survey's pin `102fdff47a95d8e89691c8905d9d1b9a3d3b7ad5` is re-computed for the encoding as `ecc0a1e411b5735921b5144dc9a2ba61292af004`; nothing it read changed.
