@@ -1,7 +1,7 @@
 ---
 question: How does a survey narrow its object without narrowing what it can find?
 form: rule
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -52,9 +52,9 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 5b7146faad57c25c3df6cb60385e71e93e559d50
-  commit: abb15a3e8dbf6291b4a07db98466c158ac0acbbe
-  against: "The previous reading's own weak counter-argument -- that a delta reading of this node's file alone is never given the four newly minted reading-node files themselves, so a defect internal to one of them (a `bears` entry on the wrong option, or too thin a gloss to count as recording a tradition under `evaluation`'s rule) would not surface here -- still holds after this amendment: this reading, like the last, was given only survey-selection.md's own diff and text, not the minted reading nodes' content, and the newly added option's citation of `regression-test-selection`'s repaired reading is likewise unverifiable at this reading's scope. It is carried forward rather than re-raised as a new finding, since the amendment does not purport to close it."
+  of: db8719da83e5ac0f7d3a0f5487291829b220aca2
+  commit: ef730c4be412b1b0de36675b9bfc5746bc8cbf8f
+  against: "The account's figures -- that the narrowed key nominates 2,793 of 4,698 pairs at commit 3eb4942b (versus 11,781 under the wide key), and that the mechanical tier at edbe507a found 3,819 findings across eight checks (3,532 of them term-without-a-path), forcing that survey's launch gate -- rest entirely on the AI's own reported measurements. A delta reading of this node's file alone has no independent access to the term concordance, the validator's actual run, or the pair generator's output at those commits, so a miscounted or overstated figure would not surface here; the internal arithmetic is self-consistent (3,532+183+87+17=3,819) but that only checks the addition, not the underlying counts. This is the same scope limit the previous reading already flagged about the four minted reading nodes, applied now to this amendment's own measurements, and it is carried forward rather than treated as a new defect since the amendment does not purport to close it."
 under:
   - commons.systems/disposition-graph/review-cost
 defines:
@@ -287,3 +287,20 @@ The session's reply: The four minted readings, and the nine under this node, are
 ### Amended under the grant, 2026-09-07
 
 The term key narrowed, from any two nodes that share a defined term to the node that defines it paired with each node that uses it, under the author's words of 2026-09-07, "begin applying the optimizations as you progress", and on the first measurement of the selection. At graph commit `3eb4942b` the generator produced 11,781 candidate pairs and the term key nominated every one of them; the same commit under the narrowed key produces 4,698, the term key nominating 2,793 of them, a citation either way 2,444, a shared parent 687, `depends` 92, resemblance 17 and the author's words none, a pair counted under every key that nominates it, and the selection sidecar falls from 13.6 MB to 2.8 MB. The mechanical tier at `edbe507a` reports 3,819 findings over eight checks: term-without-a-path 3,532, duplicated-passage 183, unfolded-account-section 87, recommendation-past-its-pin 17; the first is the term key's own measurement of how many uses of a defined term carry no path to its definer, and the launch gate was forced for that survey. The reading as first written is recorded as `a-defined-term-shared-by-any-two-nodes` and passed over on that measurement. The recommendation does not move; the answer's text moved, so the node returns to the review stage and owes a re-reading of the amendment.
+
+### Clean-context re-reading, 2026-09-07, of db8719da
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `candidate-pairs-with-their-nominating-key`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff adds one new passed-over answer-fact option, `a-defined-term-shared-by-any-two-nodes` (source ai, ref 2026-09-07, status passed, reason "measured at graph commit 3eb4942b it nominated every candidate pair the generator produced, 11,781 of them, so the key ordered nothing"), with its own facts subsection giving AI support and divergence, and narrows the 'The candidate pairs' paragraph's key definition from "a defined term shared" to "a defined term, the node that defines it paired with each node that uses it," recorded in a new '### Amended under the grant, 2026-09-07' account section. `recommends` (candidate-pairs-with-their-nominating-key), `stands` (the same option) and boldness (high) on the answer fact are unchanged, so the '## Recommendation' fence stays absent; the authority fact is untouched. The review block's restamped `commit` (to abb15a3e) and `against` text are the previous reading's own apply step, not part of this amendment, per the brief's own instruction.
+
+On the viability of the options: The diff only adds one new, already-passed-over answer-fact option drawn from the design's own first-cut measurement, and leaves every existing option's status, recommendation and ranking untouched; nothing on the authority fact changes.
+
+Strongest counter-argument (weak): The account's figures -- that the narrowed key nominates 2,793 of 4,698 pairs at commit 3eb4942b (versus 11,781 under the wide key), and that the mechanical tier at edbe507a found 3,819 findings across eight checks (3,532 of them term-without-a-path), forcing that survey's launch gate -- rest entirely on the AI's own reported measurements. A delta reading of this node's file alone has no independent access to the term concordance, the validator's actual run, or the pair generator's output at those commits, so a miscounted or overstated figure would not surface here; the internal arithmetic is self-consistent (3,532+183+87+17=3,819) but that only checks the addition, not the underlying counts. This is the same scope limit the previous reading already flagged about the four minted reading nodes, applied now to this amendment's own measurements, and it is carried forward rather than treated as a new defect since the amendment does not purport to close it.
+
+The session's reply: [object Object]
