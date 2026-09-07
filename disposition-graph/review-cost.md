@@ -142,6 +142,10 @@ The author, 2026-09-07, in the next turn:
 
 > (The accumulation strategy may be used in conjunction with other recommended optimizations)
 
+The author, 2026-09-07, when the design had been drafted and before it was recorded:
+
+> stop before reconciling the accumulation strategy. First describe the recommended strategy to let me review.
+
 ## Facts
 
 ### answer
