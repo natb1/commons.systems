@@ -1,6 +1,6 @@
 ---
 question: Is each unit of a sitting its own skill?
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -31,6 +31,9 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "a survey's contract decides what the design is given, so an uncodified survey is the same defect one step earlier"
+      - name: the-package-first-and-the-skills-after
+        source: review
+        ref: "2026-09-07"
     recommends: a-skill-per-unit-kind
     boldness: moderate
     against: "The answer creates five more hand-written projections of nodes the projector cannot write, in a record whose own measurement of 2026-09-05 found two such files diverging from each other on the model rule within a day, and it does so while `hand-written-projection-drift`, minted from that measurement, stands at the periagogic stage with no answer; `brief-generator-without-skills` buys the substance the author's words ask for — the instructions leave gitignored scratch and enter the record, generated and not hand-written — at one artifact instead of six, and leaves the count and the names of the skills to be settled after the guard is known."
@@ -39,9 +42,9 @@ facts:
       - name: ratified
       - name: delegated
       - name: deferred
-    recommends: ratified
+    recommends: deferred
     boldness: low
-    against: "The packaging of an instrument is a rename and a move, and none of `class-recommendation`'s three limbs reaches it, so a delegation covering how a sitting's units are instructed would spare the author every future kind of unit and every rename, which is what the author's own words of 2026-09-04 on right-sizing units already leave to the AI."
+    against: "The names this ruling fixes are cited by every sitting and every telemetry reading, and that a unit's instructions are codified rather than improvised is the author's own words; under a deferred class a later sitting's recommendation acts, so the family could be renamed or un-codified with the author asked only afterwards, at a frontier they may reach late. And the limb the recommendation rests on is the one `class-recommendation` cannot yet apply: its own probe `which-classes-of-decision-have-you-said` is open, so deferred is chosen because the record holds no enumeration of the classes the author has excused and not because it holds one that excludes this."
   - name: persistence
     options:
       - name: with the six shims
@@ -140,7 +143,13 @@ before it is answered. Against it: the author's words say codified in a skill,
 and the alignment skill would then carry seven launch paragraphs of seven
 different contracts in one file, which is the one-file-many-contracts shape the
 record's own two-contracts test rejects; the telemetry would report every unit
-of every sitting under `/align`.
+of every sitting under `/align`. That last count against it rests on the
+author's premise that the harness's telemetry names a skill by its directory,
+which `review-skills` records as unverified in this repository, so it is held
+under the condition that node attached to the same premise: this option is not
+passed over before the first per-skill usage reading the author can produce,
+and on that reading either it is passed over on evidence or this node's count
+of skills is revisited.
 
 #### one-generator-for-every-brief
 
@@ -178,14 +187,19 @@ hand under `tmp/align/`, from the alignment skill's list of a sitting's units.
 What it would answer: no, a unit's instructions are the sitting's to write each
 time. Passed over on the author's words and on `session-context`'s rule that a
 rule living only in a file is invisible to the projector and to review, which
-holds twice over of a file under `tmp/`: measured on 2026-09-07, this sitting's
-fifteen unit briefs are 77,297 bytes, every one of them gitignored, seven of
-them stating `delegation`'s bound against state-changing git in three different
-wordings, thirteen stating the bound against editing a node, eight carrying
-their own copy of the primer on how a node's recommended text is read, and
-three sharing the one common fragment the sitting wrote for its reconciliation
-units. Nothing that steers a unit is in the record, and nothing that steers a
-unit survives the sitting.
+holds twice over of a file under `tmp/`. The measure prices a scratch directory
+the record does not keep, so it is given as a dated observation with its pins
+and its criterion and not as a claim a later session could check: on 2026-09-07,
+at graph commit 2e1d5e44 and implementation commit cb0e02c6, `tmp/align/` held
+twenty unit briefs of 109,328 bytes beside the one common fragment the sitting
+had written, every one of them gitignored; counted by the literal strings,
+twenty of the twenty carry `state-changing` and eighteen carry `edit a node`,
+which are `delegation`'s two bounds restated by hand in each brief, and three
+read the fragment. The figure moved twice inside the day — an earlier form of
+this sentence said fifteen briefs at 77,297 bytes and the reading that checked
+it measured 74,659 — and none of the three can be re-taken, which is not a
+defect in the measuring but the whole of the argument: nothing that steers a
+unit is in the record, and nothing that steers a unit survives the sitting.
 
 #### skills-for-the-design-unit-only
 
@@ -196,20 +210,73 @@ is given, so an uncodified survey is the same defect one step earlier and one
 step less visible: a design that reasons from a survey nobody contracted is a
 recommendation whose evidence has no rule behind it.
 
+#### the-package-first-and-the-skills-after
+
+The recommendation staged. `packages/sitting-units/` with the generator, the
+templates and the three fragments is built now, so that a unit's instructions
+leave gitignored scratch and enter the record at once; the five skill
+directories are created when `hand-written-projection-drift` is answered or the
+projector gains a skill mode, whichever comes first, and the launch stays in
+the alignment skill's list until then. Raised by the clean-context reading of
+2026-09-07 as the option the answer fact's own `against` describes without
+offering. Its case: it is undominated on the draft's own account of the
+author's words, buying the whole of what those words are about, without
+multiplying from four to nine the artifacts standing in an interval whose guard
+the record has not yet decided, and it does not foreclose the five skills.
+Viable and not adopted. Against it: the author's words are that each subagent
+have its instructions codified in a skill, and this option defers exactly what
+they asked for while doing the part they did not name; the interim it asks for
+has no date, since `hand-written-projection-drift` stands at the periagogic
+stage with no answer and nothing in the record fixes when the projector gains a
+skill mode, so the stage is bounded by two conditions the record cannot yet
+schedule; and in that interim the alignment skill carries seven launch
+paragraphs of seven different contracts in one file, which is the shape the
+record's own two-contracts test rejects, the same objection that stands against
+`brief-generator-without-skills`. It is on the fact for the author, whose words
+are the one thing that decides between it and the recommendation.
+
 ### authority
 
-Ratified, at low boldness. `class-recommendation`'s escalation test does not
-reach this node's subject: the packaging of an instrument is reversible and
-cheap, as `review-skills` says of the same question one level down. Ratified is
-recommended on the ground that node's authority fact gives, which holds harder
-here: that a unit's instructions are codified rather than improvised is the
-author's own words, and it is what they would want to be asked before it
-changes, where a delegation covering the class of decision below this node
-would cover un-codifying them; and the names, which every sitting and every
-telemetry reading will cite, are fixed by this ruling. Deferred is on the fact
-because the record's classes are three; it is not recommended, since the author
-has granted the reconciliation and the recommendation acts under the grant
-either way, and what the ruling settles is whether the rule is doctrine.
+Deferred, at low boldness, on `class-recommendation`'s test applied to its end
+rather than stopped halfway. None of the three limbs reaches this node's
+subject. Expensive: the packaging of an instrument is a rename and a move, and
+the work a wrong answer costs is the rewriting of seven files the record can
+rewrite again. Irreversible: nothing is deleted that the ruling does not put
+back — the incumbent briefs are scratch and the skills are shims with their
+liquidation already named. Capture-shaped: the party that would set the answer
+is the AI and the answer instructs the AI's own subagents, which is the limb
+that comes nearest, and it does not hold, because a unit's instructions are
+read by the author's readings and by the alignment dialogue, and the check the
+record has on this AI is the interview and not the packaging of the briefs.
+Where none of the three holds the rule sends the class to delegated where the
+author has said they do not want to be asked again about that class of
+decision, and to deferred otherwise; the record holds no enumeration of what
+the author has said that about, which is the open probe
+`which-classes-of-decision-have-you-said` on `class-recommendation` itself, so
+the answer is deferred. Low boldness: the class is read off the rule and the
+one choice left to the AI, deferred over delegated, is made by the absence the
+probe names.
+
+Ratified is on the fact and is the rival this node's earlier reading argued
+for, in its own words: that a unit's instructions are codified rather than
+improvised is the author's own words, and it is what they would want to be
+asked before it changes, where a delegation covering the class of decision
+below this node would cover un-codifying them; and the names, which every
+sitting and every telemetry reading will cite, are fixed by this ruling. That
+argument is kept whole because it may be the author's, but it is not the test:
+it reasons from what the author would want, which is the definition of the
+class, and the test the record adopted asks after the three limbs and then
+after what the author has actually said. Recommending ratified on it would be
+recommending a class the record's own rule reserves for the cases the test
+reaches.
+
+Delegated is on the fact and is not recommended for the same reason deferred
+is: it is the limb that turns on the author having said they do not want to be
+asked again, and no such saying is in the record. What the classes decide today
+is only what the author is asked, since during bootstrap no class acts and the
+author's grant carries this reconciliation either way; what a ruling of
+deferred settles is that the recommendation acts and the node stays on the
+alignment frontier until the author returns to it.
 
 ### persistence
 
@@ -255,45 +322,45 @@ under:
   - commons.systems/disposition-graph/decomposition
 shims:
   - artifact: "`.claude/skills/align-decompose/SKILL.md` on the implementation ref, the decomposition of a bundled disposition into the questions it asks, hand-written from this node, `decomposition`, `node`, `probe-or-node` and `recording`"
-    for: the projection of the decomposition unit as a skill of its own
+    for: "the projection of the decomposition unit as a skill of its own, an artifact this answer makes rather than one it names: it comes into being at the reconciliation this answer names, which lands with the ruling"
     liquidation: the projector materializes the skill from ratified nodes and the hand-written file is deleted
     declared: 2026-09-07
   - artifact: "`.claude/skills/align-survey-record/SKILL.md` on the implementation ref, the record survey, hand-written from this node, `decomposition`, `frontier-consistency` and `viable-options`"
-    for: the projection of the record survey as a skill of its own
+    for: "the projection of the record survey as a skill of its own, an artifact this answer makes rather than one it names: it comes into being at the reconciliation this answer names, which lands with the ruling"
     liquidation: the projector materializes the skill from ratified nodes and the hand-written file is deleted
     declared: 2026-09-07
   - artifact: "`.claude/skills/align-survey-tradition/SKILL.md` on the implementation ref, the tradition survey, hand-written from this node, `decomposition`, `evaluation` and `readings`"
-    for: the projection of the tradition survey as a skill of its own
+    for: "the projection of the tradition survey as a skill of its own, an artifact this answer makes rather than one it names: it comes into being at the reconciliation this answer names, which lands with the ruling"
     liquidation: the projector materializes the skill from ratified nodes and the hand-written file is deleted
     declared: 2026-09-07
   - artifact: "`.claude/skills/align-survey-implementation/SKILL.md` on the implementation ref, the implementation survey, hand-written from this node, `decomposition` and `materialization`"
-    for: the projection of the implementation survey as a skill of its own
+    for: "the projection of the implementation survey as a skill of its own, an artifact this answer makes rather than one it names: it comes into being at the reconciliation this answer names, which lands with the ruling"
     liquidation: the projector materializes the skill from ratified nodes and the hand-written file is deleted
     declared: 2026-09-07
   - artifact: "`.claude/skills/align-design/SKILL.md` on the implementation ref, the design unit, hand-written from this node, `decomposition`, `dialogue`, `viable-options`, `prose-and-structure` and `evaluation`"
-    for: the projection of the design unit as a skill of its own
+    for: "the projection of the design unit as a skill of its own, an artifact this answer makes rather than one it names: it comes into being at the reconciliation this answer names, which lands with the ruling"
     liquidation: the projector materializes the skill from ratified nodes and the hand-written file is deleted
     declared: 2026-09-07
   - artifact: "the five brief templates and the fragments `brief-bounds.md`, `brief-record.md` and `brief-report.md` under `packages/sitting-units/` on the implementation ref, hand-written from the nodes each summarizes"
-    for: the briefs the five skills write for their units, whose common text is three fragments filled into every template
+    for: "the briefs the five skills write for their units, whose common text is three fragments filled into every template; the package and its files are artifacts this answer makes rather than ones it names, coming into being at the reconciliation this answer names, which lands with the ruling"
     liquidation: the brief generator fills a brief's common and kind-specific text from the nodes' answers and the hand-written templates and fragments are deleted
     declared: 2026-09-07
 ---
 ## Answer
 
-Yes. Each kind of unit a sitting launches is one skill directory under `.claude/skills/` with one `SKILL.md`, invoked by its name, carrying only what is specific to its kind. `decomposition` names the kinds; this node names the skills that carry them: `/align-decompose`, the decomposition of a bundled disposition into the questions it asks; `/align-survey-record`, what the graph says on a question; `/align-survey-tradition`, the second evaluation, returning readings with their source, their locus and what each bears on; `/align-survey-implementation`, what exists and what a named artifact or command does; `/align-design`, the options on each fact, the recommendation with its boldness and its case against, and the draft text; and, standing already and untouched here, `/align-review`, the reading of one draft, and `/align-survey`, the survey of the frontier, which `review-skills` decides. Seven kinds and seven skills. The author's words are that each subagent's instructions be codified in a skill, and what codified means is fixed by the record's own two rules: `session-context`, under which a rule living only in a file is invisible to the projector and to review, so no skill states a rule of its own; and `materialization`, under which every artifact is the projection of the node whose answer it carries, so each skill is a declared shim on the node it projects until the projector writes it.
+Yes. Each kind of unit a sitting launches is one skill directory under `.claude/skills/` with one `SKILL.md`, invoked by its name, carrying only what is specific to its kind. `decomposition` names the kinds; this node names the skills that carry them: `/align-decompose`, the decomposition of a bundled disposition into the questions it asks; `/align-survey-record`, what the graph says on a question; `/align-survey-tradition`, the second evaluation, returning readings with their source, their locus and what each bears on; `/align-survey-implementation`, what exists and what a named artifact or command does; `/align-design`, the options on each fact, the recommendation with its boldness and its case against, and the draft text; and, standing already and untouched here, `/align-review`, the reading of one draft, and `/align-survey`, the survey of the frontier, which `review-skills` decides. Seven kinds and seven skills. What a ruling on this node binds is the five it creates: `review-skills` stands under `clean-context-review` and so under `recording`, not under this node, and authority only narrows on the way down, so a ruling here confers nothing on `/align-review` and `/align-survey` any more than a ruling there could confer the general rule — which is the objection this answer records against `two-skills-under-the-general-rule` in the other direction. The two readings' skills are named for the family's shape and are `review-skills`' to decide; the two nodes agree today, and neither governs the other. The author's words are that each subagent's instructions be codified in a skill, and what codified means is fixed by the record's own two rules: `session-context`, under which a rule living only in a file is invisible to the projector and to review, so no skill states a rule of its own; and `materialization`, under which every artifact is the projection of the node whose answer it carries, so each skill is a declared shim on the node it projects until the projector writes it.
 
 The periagogic reading mints no skill. `decomposition`'s movement seam sends the periagogic object — the nodes a disposition would amend and the implementation their criteria point to — to a survey unit, and that object is the record survey's corpus together with the implementation survey's. The object a unit reads is its argument and not a second contract, so the periagogic reading is those two skills run over an object the sitting names, and the same test that divides the three surveys from each other collapses this one into them; a test that only ever multiplies is not a test. The reconciliation unit mints none either, and it is not a sitting's unit: its contract is the reconciliation skill's, which `work-loop` declares as a shim, and a sitting reconciling under the author's grant runs that contract with the bite named by the grant instead of derived from the frontier, which is a difference in how a bite is chosen and not in what the unit is. That a sitting launched three reconciliation units on briefs of its own on 2026-09-07 rather than through that skill is a divergence recorded on `work-loop` and not answered here.
 
 What each `SKILL.md` carries is what is specific to its kind and nothing else, in the shape `review-skills` fixes for the two readings. The object of the unit and what its reader is given, as `decomposition`'s paragraph on the kind of analysis gives them, cited and restated in no part, since a copy of another node's sentence falls behind its source. The currency step: fetch `origin/disposition`, the nested worktree at it with a clean tree but for the sitting's own drafts, `node packages/disposition/validate.mjs disposition`, then the nodes the skill's shim notice names read at their current text, where a node differs from the file the node wins and the difference is recorded on it as an un-aligned disposition. The brief, one command, below. The launch: one subagent of type `general-purpose`, never a fork, at the model `decomposition` names for that kind by its relation and never by a harness name, and at the effort the brief states, told to read and follow the brief exactly, to write only the output file the brief names, and never to run state-changing git; relaunched once with the same brief on a failure, reported on a second with the sitting's stage unchanged. What the main thread does with the conclusion, which is `decomposition`'s integration and is never delegated: it reads the conclusion and never the context, validates what the unit returns at the loci the unit names, and writes the node. And the landing, which for every unit but the two readings is the sitting's own round at its next stage transition, as `checkpoint` says. Each skill's frontmatter carries `name` equal to its directory and a description, and no model's name, which is the harness's and the day's.
 
-A unit's brief is written by a script and never by hand. `node packages/sitting-units/brief.mjs --kind <kind> --node <id> [--fact <name>…] --object <file> [--out <path>]` writes `tmp/align/<kind>-<slug>.brief.md` and names the unit's one output file. The generator fills three fragments into every kind's template: `brief-bounds.md`, the bounds `delegation` puts on a subagent, which are a bound of that node's answer and not sizing, as `delegation-bounds-and-sizing` divides them; `brief-record.md`, the primer on the record's encoding, facts, options, rulings, the derived class, boldness reversed, and what a node is; and `brief-report.md`, the report `decomposition` requires of every unit, the conclusion as data with the exact commands the unit ran and nothing of the unit's context. Each fragment exists in one file, and only the essential common text is factored, since factoring what merely looks the same today re-creates the flag inside the fragment. What is the sitting's own — which nodes the unit reads, the author's words it works from, which facts are its, and the form of its output — is the contract `decomposition` requires of every unit, and the sitting states it in the object file the generator names; the generator writes the frame and never guesses the contract.
+A unit's brief is written by a script and never by hand. `node packages/sitting-units/brief.mjs --kind <kind> --node <id> [--fact <name>…] --object <file> [--out <path>]` writes `tmp/align/<kind>-<slug>.brief.md` and names the unit's one output file. The generator fills three fragments into every kind's template: `brief-bounds.md`, the bounds `delegation` puts on a subagent, which are a bound of that node's answer and not sizing, as `delegation-bounds-and-sizing` divides them; `brief-record.md`, the primer on the record's encoding, facts, options, rulings, the derived class, boldness reversed, and what a node is; and `brief-report.md`, the report `decomposition` requires of every unit, the conclusion as data with the exact commands the unit ran and nothing of the unit's context. Each fragment exists in one file in this package, and only the essential common text is factored, since factoring what merely looks the same today re-creates the flag inside the fragment; whether the readings' package shares these files or keeps its own is `review-skills`' to rule, as the fifth paragraph says. None of these files exists yet: every artifact this answer names is declared a shim above and comes into being at the reconciliation this answer names, which lands with the ruling, so the shim rows are a declaration of what is being made and not a reference to what is missing. What is the sitting's own — which nodes the unit reads, the author's words it works from, which facts are its, and the form of its output — is the contract `decomposition` requires of every unit, and the sitting states it in the object file the generator names; the generator writes the frame and never guesses the contract.
 
-The mechanics are code and live where `materialization` puts the graph's own tooling: one workspace package, `packages/sitting-units/`, named `@commons.systems/sitting-units` after the units it briefs, declared like every package by the root manifest's workspaces, holding `brief.mjs`, the five templates, the three fragments, the fixture graph and the tests the root manifest's test script runs, and importing the reader from `packages/disposition` by its workspace name. It is a second generator beside the two readings', deliberately: a reading's generator assembles a neighbourhood out of the graph under `review-cost`'s rule, deciding what is carried whole and what as a pointer, and a unit's generator fills a template with a contract the sitting states, and the two share their common text and not their job. What they share is the three fragments, which live in this package and which `packages/clean-context-review/brief.mjs` fills from it by workspace name, its own `brief-bounds.md` and `brief-record.md` deleted, so that each fragment exists in one file across both packages. The stricter fold, one generator for every brief in the record, is on this node's answer fact as `one-generator-for-every-brief` and would move an artifact `review-skills`' fence names as its package's, which is that node's to rule and not this one's.
+The mechanics are code and live where `materialization` puts the graph's own tooling: one workspace package, `packages/sitting-units/`, named `@commons.systems/sitting-units` after the units it briefs, declared like every package by the root manifest's workspaces, holding `brief.mjs`, the five templates, the three fragments, the fixture graph and the tests the root manifest's test script runs, and importing the reader from `packages/disposition` by its workspace name. It is a second generator beside the two readings', deliberately: a reading's generator assembles a neighbourhood out of the graph under `review-cost`'s rule, deciding what is carried whole and what as a pointer, and a unit's generator fills a template with a contract the sitting states, and the two share their common text and not their job. What they share is the three fragments, which live in this package. Whether the readings' package fills `{{bounds}}` and `{{record}}` from here by workspace name, its own `brief-bounds.md` and `brief-record.md` deleted, so that each fragment exists in one file across both packages, is not this answer's to say: `review-skills`' fence names those two files as its package's, and this answer would be moving them on exactly the ground it refuses `one-generator-for-every-brief` two sentences on. It is recorded there as the option `fragments-move-to-the-units-package`, with this node as its source, for that node to rule; until it does, the two fragments stand in both packages and the duplication is this answer's cost and is stated as one. The stricter fold, one generator for every brief in the record, is on this node's answer fact as `one-generator-for-every-brief` and would move an artifact `review-skills`' fence names as its package's, which is that node's to rule and not this one's.
 
-Drift, and what the codification does and does not buy. Six of the seven artifacts are hand-written projections of nodes the projector cannot yet write, declared as shims above, and codification does not make them drift-proof: it moves a unit's instructions out of gitignored scratch, where no projector and no reading can see them and where they are rewritten every sitting, into the record, where a shim notice says the node wins, the currency step reads the nodes at every invocation, and the survey's validations read each skill as an artifact. That is a check and not a construction, and what guards a hand-written projection in the interval between a shim's declaration and its liquidation is not this node's question: it is asked on `hand-written-projection-drift`, minted on 2026-09-05 from the measurement that two hand-written skills had diverged from each other within a day, and this answer multiplies the artifacts standing in that interval from four to nine, which is the cost the case against this recommendation names. Skill reconciliation resolves the drift by construction at liquidation and not before, when the projector writes each skill from the nodes its shim notice names, as it writes the rules directory today, one file per node, regenerated whole, with a file it wrote and no node claims deleted.
+Drift, and what the codification does and does not buy. Six of the seven artifacts are hand-written projections of nodes the projector cannot yet write, declared as shims above, and codification does not make them drift-proof: it moves a unit's instructions out of gitignored scratch, where no projector and no reading can see them and where they are rewritten every sitting, into the record, where a shim notice says the node wins, the currency step reads the nodes at every invocation, and the survey's validations read each skill as an artifact. That is a check and not a construction, and what guards a hand-written projection in the interval between a shim's declaration and its liquidation is not this node's question: it is asked on `hand-written-projection-drift`, minted on 2026-09-05 from the measurement that two hand-written skills had diverged from each other within a day, and this answer multiplies the artifacts standing in that interval from four to nine, which is the cost the case against this recommendation names. What the five directories buy over the package and the generator alone is the harness's listing and the telemetry split, and the telemetry premise is the author's, which `review-skills` records as unverified in this repository; it is load-bearing here as it is there, and it carries the same condition rather than being inherited bare: `brief-generator-without-skills` is not passed over before the first per-skill usage reading the author can produce, an instrument the `instruments` node has yet to record, and on that reading either that option is passed over on evidence or this answer's count of skills is revisited. Skill reconciliation resolves the drift by construction at liquidation and not before, when the projector writes each skill from the nodes its shim notice names, as it writes the rules directory today, one file per node, regenerated whole, with a file it wrote and no node claims deleted.
 
-What this costs, as a consequence and never as a reason. Created: five skill directories with one `SKILL.md` each; `packages/sitting-units/` with `package.json`, `brief.mjs`, the five templates `brief-decompose.md`, `brief-survey-record.md`, `brief-survey-tradition.md`, `brief-survey-implementation.md` and `brief-design.md`, the three fragments, a fixture graph and `brief.test.mjs`. Changed: `packages/clean-context-review/brief.mjs`, to fill `{{bounds}}` and `{{record}}` from this package by workspace name, with its own two fragments deleted; the alignment skill's list of a sitting's units, which names each kind's skill and stops carrying each kind's launch text, and its shim notice; the bullet of `CLAUDE.md` that names the skills; and `decomposition`'s sentence on how its answer is materialized, which is recorded there as an option and not written here. In the harness's listing the author sees seven `align-` skills where three stand today, and the telemetry reports seven populations where it reports one. Nothing is liquidated: neither review skill is superseded, both are invoked at the same two moments and by the same names, and the units this answer codifies are the other units `decomposition` already named.
+What this costs, as a consequence and never as a reason. Created: five skill directories with one `SKILL.md` each; `packages/sitting-units/` with `package.json`, `brief.mjs`, the five templates `brief-decompose.md`, `brief-survey-record.md`, `brief-survey-tradition.md`, `brief-survey-implementation.md` and `brief-design.md`, the three fragments, a fixture graph and `brief.test.mjs`. Changed: nothing in `packages/clean-context-review/`, whose two fragments stay where `review-skills`' fence puts them until that node rules on `fragments-move-to-the-units-package`, so that `brief-bounds.md` and `brief-record.md` stand in two packages in the interim, which is a cost of this answer and is named as one; the alignment skill's list of a sitting's units, which names each kind's skill and stops carrying each kind's launch text, and its shim notice; the bullet of `CLAUDE.md` that names the skills; and `decomposition`'s sentence on how its answer is materialized, which is recorded there as an option and not written here. In the harness's listing the author sees seven `align-` skills where three stand today, and the telemetry reports seven populations where it reports one. Nothing is liquidated: neither review skill is superseded, both are invoked at the same two moments and by the same names, and the units this answer codifies are the other units `decomposition` already named.
 
 ## Rationale
 
@@ -303,7 +370,7 @@ Why a node and not an option on `review-skills`. `review-skills` asks whether ea
 
 Why a skill per kind, beyond the words. `delegation` divides delegated work by contract, and `review-skills` draws from it the analogy that an invocation needing a second contract is two invocations. Applied to the kinds `decomposition` names, it divides them: a decomposition takes the author's bundled words and returns a list of questions with their placement; a design takes a node and the facts that are its and returns options, a recommendation, a boldness, a case against and a fence; the three surveys read three different corpora and return three different shapes, one of them node-shaped readings. Applied the other way it collapses the periagogic reading into the record and implementation surveys, whose corpora it names, because the object is an argument and the contract is unchanged. The test is used in both directions on purpose: a discriminator that only ever multiplies is not a discriminator.
 
-Why the instructions are the record's and not the sitting's. The measurement is the argument. On 2026-09-07 this sitting's fifteen unit briefs were 77,297 bytes under `tmp/align/`, every byte gitignored: `delegation`'s bound against state-changing git appeared in seven of them in three wordings, its bound against editing a node in thirteen, the primer on how a node's recommended text is read in eight, and the one common fragment the sitting wrote covered three. Nothing there is projected from a node, so no reading can find a brief that contradicts the record and no projector can correct one; and none of it survives the sitting, so the next sitting writes it again and differently. That is `session-context`'s rule about a rule living only in a file, in its worst case, and it is what the author's words are about.
+Why the instructions are the record's and not the sitting's. The measurement is the argument, and it prices a scratch directory the record does not keep, so it is pinned and dated rather than asserted: on 2026-09-07, at graph commit 2e1d5e44 and implementation commit cb0e02c6, `tmp/align/` held twenty unit briefs of 109,328 bytes beside one common fragment, every byte gitignored, twenty of the twenty carrying the string `state-changing` and eighteen the string `edit a node`, which are `delegation`'s two bounds restated by hand in brief after brief, and three reading the fragment. An earlier form of this sentence gave fifteen briefs at 77,297 bytes and the reading that checked it measured 74,659 the same day; that the figure cannot be re-taken, and moved twice while the sitting ran, is the argument and not an objection to it. Nothing there is projected from a node, so no reading can find a brief that contradicts the record and no projector can correct one; and none of it survives the sitting, so the next sitting writes it again and differently. That is `session-context`'s rule about a rule living only in a file, in its worst case, and it is what the author's words are about.
 
 Why the common text is fragments and the per-kind text is the skill. `session-context` holds that a rule living only in a file is invisible, so no skill states a rule of its own and each cites the node; but a unit's reader is a subagent given a brief and the record and nothing else, so the primer, the bounds and the report contract must be in the brief, and one file each is the least that holds them until the generator writes them from the nodes. Only the essential common text is factored, which is the bound `the-wrong-abstraction` puts on factoring, already read under `review-skills`.
 

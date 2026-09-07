@@ -31,6 +31,9 @@ facts:
       - name: align-survey-renamed-for-the-family
         source: commons.systems/disposition-graph/unit-skills
         ref: "2026-09-07"
+      - name: fragments-move-to-the-units-package
+        source: commons.systems/disposition-graph/unit-skills
+        ref: "2026-09-07"
     recommends: two-skills-one-package
     boldness: moderate
     against: "The two readings share the one decision that matters, what a clean-context reading is, and until the projector writes the skills that decision is guarded by two hand-written files with nothing checking that they still agree; the telemetry motive is the observer's need, whose tradition's remedy is to name the operation and not to refactor the program, so the split bends the design to a limitation of a harness the record does not own."
@@ -225,6 +228,31 @@ the record and the telemetry cite; a rename costs both, and the cost is not a
 reason either way under `evaluation`, which is why the option is recorded here
 for the author rather than taken by the child. The child's answer does not
 depend on it and names the incumbent.
+
+#### fragments-move-to-the-units-package
+
+The same as `two-skills-one-package` except that `brief-bounds.md` and
+`brief-record.md` leave this node's package: they live in
+`packages/sitting-units/` and `packages/clean-context-review/brief.mjs` fills
+`{{bounds}}` and `{{record}}` from `@commons.systems/sitting-units` by
+workspace name, so that each fragment exists in one file across both packages.
+Raised by `commons.systems/disposition-graph/unit-skills` on 2026-09-07, whose
+answer creates a second brief generator for a sitting's units and needs the
+same two fragments: the reader's bounds and the primer on the record's
+encoding are one text, and two hand-written copies of one text is the update
+anomaly this node's own reading `codd-update-anomaly` names, in a record that
+has already measured two hand-written projections diverging within a day. For
+it: it is the shape in which the primer and the bounds stay one file each as
+this node's answer says they are, rather than one file each per package. The
+cost, and why the child did not take it: this node's answer enumerates the two
+fragments among what `packages/clean-context-review/` holds, so moving them is
+this node's to rule and not the child's, and the child refuses the move on
+exactly the ground it refuses the stricter fold `one-generator-for-every-brief`;
+the move also makes the readings' package depend on the units' package, so a
+change to a fragment for a unit's sake reaches a reading's brief, and the
+readings would then be reading a fragment maintained for another family's
+skills. Until this node rules, the two fragments stand in both packages, which
+the child's answer names as one of its costs.
 
 ### authority
 

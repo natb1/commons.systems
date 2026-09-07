@@ -41,6 +41,9 @@ facts:
         ref: "d078c119"
         status: passed
         reason: "the projector cannot see them there"
+      - name: skills-among-what-a-session-loads
+        source: commons.systems/disposition-graph/unit-skills
+        ref: "2026-09-07"
     recommends: standing
     boldness: low
     stands: standing
@@ -136,6 +139,16 @@ page.
 Operating rules stay in `CLAUDE.md` beside the orientation. It was passed over
 because the projector cannot see them there, so a rule that lives only in that
 page is invisible to review.
+
+#### skills-among-what-a-session-loads
+
+The standing answer with a fourth projection: the skills under
+`.claude/skills/`, one directory per unit or reading, each projected from the
+node whose answer it carries and declared a shim until the projector writes it,
+are what a session loads when it invokes one, so that the enumeration covers
+every file that instructs a session and not only the three it names. Raised on
+`unit-skills`, which cites this node for the rule that a rule living only in a
+file is invisible while adding five such files.
 
 ## Account
 
