@@ -380,6 +380,10 @@ The author, 2026-09-07, asking where the words an option cites are kept:
 
 > Does the disposition for author quoting suggest that author quotes are kept in a ledger outside the graph and referenced by options? A single quote may be referenced by options across nodes.
 
+The author, 2026-09-07, on the ledger question and on how the sitting proceeds:
+
+> choice is for confirmation. if there is periagogic grounding or meiutic clarification required then do so, otherwise make a recommendation and proceed to bootstrap reconciliation.
+
 ## Answer
 
 Its question, its fields, its facts with their options, and its answer as it stands; and, while a dialogue is active on it, the dialogue state. A dialogue is active on every node of the alignment frontier: every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The class is derived from the rulings on the facts, as the authority node says, and a confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. At the recording the dialogue folds: the stage, the review, the dependencies and the account go, the author's words stay as the quotes node decides, and the facts stay with their options, their recommendation, their readings and the rulings the author gave, so that a later session meets what was considered and why before proposing it again. Three requirements fix what the state must be: it must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the frontier, and, reading a node that already has an answer, whether options are pending on it and where each came from. It has these parts, each holding only what cannot be re-derived.

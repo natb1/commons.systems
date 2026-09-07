@@ -101,6 +101,10 @@ The author, 2026-09-07, asking where the words an option cites are kept:
 
 > Does the disposition for author quoting suggest that author quotes are kept in a ledger outside the graph and referenced by options? A single quote may be referenced by options across nodes.
 
+The author, 2026-09-07, on the ledger question and on how the sitting proceeds:
+
+> choice is for confirmation. if there is periagogic grounding or meiutic clarification required then do so, otherwise make a recommendation and proceed to bootstrap reconciliation.
+
 ## Answer
 
 The verbatim ruling stays in the node. When a sitting records a ruling, the author's words are quoted in the node's Disposition section with their date, and the message of the commit that lands the node carries them in addition. The rationale restates the ruling in the record's own register; the quotation is what the restatement is of, and is never replaced by it. The section accumulates, and each sitting on the node rolls up the quotations its answer has absorbed, version control holding what the roll-up drops. A ratified stamp whose ruling is not in the node is invalid, and the ruling a stamp requires is the one the author gives at that sitting, quoted then; words the author said earlier are the ground a draft rests on and bar no stamp.

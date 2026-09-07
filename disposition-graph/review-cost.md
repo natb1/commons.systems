@@ -167,6 +167,10 @@ The author, 2026-09-07, answering the three calls the session put before them on
 >
 > This implies guidance for which quotes from the author need to be retained and which options need to be recorded. We don't need to retain author quotes that neither support or diverge from an option. If a quote from an author expresses support or divergence from an option then that option must be recorded. Any option with support or divergence in tradition must be recorded. If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded.
 
+The author, 2026-09-07, on the ledger question and on how the sitting proceeds:
+
+> choice is for confirmation. if there is periagogic grounding or meiutic clarification required then do so, otherwise make a recommendation and proceed to bootstrap reconciliation.
+
 ## Facts
 
 ### answer
