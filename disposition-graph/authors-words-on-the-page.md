@@ -1,7 +1,7 @@
 ---
 question: Where does the alignment page show the author's recorded words?
 form: rule
-stage: review
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -73,11 +73,12 @@ facts:
     boldness: low
     against: "Whichever way this goes the author's words stay in the node unaltered and are read in full in the `/align` interview their own rule of 2026-09-06 sends everything else to, so nothing is lost that a session cannot show them on request; ratifying it spends the author's scarcest act on which dated entries a projector quotes beside an option, and the capture the reading names is already answered by the parent's own authority fact, under which the whole shape of this page is the author's to confirm."
 review:
-  verdict: forward
-  strength: none
+  verdict: kickback
+  strength: strong
   date: 2026-09-07
-  of: b41bd908254e08cdd52e3dd02a06a241d83a429c
-  commit: 98c4c8df3fa173654332bb33435ce145b57c2e1a
+  of: 15f43f2819a6cd817ae1e61b943427f1bba75629
+  commit: b95923d74ddfae71ace27fae2a831f4e278e57c1
+  against: "One could read the account's own description — that this is a mechanical migration applying specific old/new text pairs from an external source document to the prior recommended text — as meaning the untouched paragraphs were simply not among the pairs that document specified, so the omission is a known, bounded step in a multi-step migration rather than a defect of judgment. That reading does not survive contact with the text itself: the fence as it stands would go to the author as 'the whole recommended node' under a ruling, and it currently asserts in one paragraph that matching is no longer by the option's `ref` and, two paragraphs later, evaluates the very same rows by whether their `ref` resolves to an entry — a contradiction inside the one document the author is asked to confirm, not merely an unfinished measurement."
   survey:
     date: 2026-09-07
     of: b41bd908254e08cdd52e3dd02a06a241d83a429c
@@ -988,3 +989,25 @@ Strongest counter-argument (moderate): The answer's force is exclusivity — tha
 ### Option adopted, 2026-09-07
 
 One option recorded from `dialogue`'s recommended encoding, on the author's refinement of 2026-09-07 quoted under `## Disposition`. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `per-option-only`; The text `per-option-only` stands in this node's `## Answer`, which the new option's fence amends and which the migration under the author's grant of 2026-09-07 carries as that option's content. The stage returns to review and the amendment owes a reading.
+
+### Clean-context re-reading, 2026-09-07, of 15f43f28
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `the-words-are-referenced-both-ways-and-not-matched-by-date`.
+
+Findings:
+
+- ## Recommendation (fenced text): the fence's opening paragraph states the new mechanism the amendment adopts — "It is not matched by the option's `ref` and not conditioned on the option's source being the author, which between them could show only words that support and only on an option the author raised, while the author's words of 2026-09-07 ask for the history both ways on every option." — but the paragraphs that follow it were left unrevised from the superseded per-`ref`-date design and directly contradict that opening: "Where a `ref` names no entry the row carries nothing for the author's words, and the mismatch is a finding on the option rather than an occasion to quote. The fallback the projector runs today goes with it: at `packages/disposition/project.mjs:1425` at cb0e02c6 a date matching nothing returns the whole `## Disposition`". A design the opening sentence says is 'not matched by the option's `ref`' cannot, two paragraphs later, still be checked for whether 'a `ref` names no entry'. Suggested edit: rewrite the entry-mismatch/fallback paragraph, and the cost-measurement paragraph beneath it, in terms of the reference-per-entry mechanism the new option actually describes, rather than leaving the `ref`/date exposition and the `authorWordsFor` citation standing as if unchanged.
+- ## Recommendation (fenced text), cost measurement: the paragraph beginning "What this costs is measured, at graph commit `62121b69`" reports the same by-date-`ref` coverage arithmetic as the superseded design — "the references reach 113 of the entries and miss 142, and reach none at all on 39 of the 71 nodes" — unchanged from before this amendment, even though the recommended option changes what counts as a match (by reference, both ways, not by date). This figure measures the old mechanism's coverage and is presented as if it still measured the new one; it has not been re-taken for the reference-based, both-ways design the same fence now recommends. Suggested edit: either re-derive the coverage figure under the new matching rule or mark the existing figure explicitly as inherited from the prior design and not yet re-measured.
+- ## Recommendation (fenced text), Rationale: the fenced `## Rationale` is verbatim the old rationale arguing `per-option-only` (by-date matching, support only) over `section-folded-and-quotation-narrowed` (a folded whole-section drill-down); it never argues for the feature that is actually this amendment's substance — matching by reference rather than by date, and showing divergence as well as support — which is reasoned only in the new option's own `#### the-words-are-referenced-both-ways-and-not-matched-by-date` prose ("the match is by reference and not by the option's `ref` date") and not carried into the Recommendation's own Rationale. A recommended node forwarded for ruling should rationalize the design it actually recommends.
+- #### answer fact, `against`: the fact-level `against` ("this answer reads 'does not need to be played back' as 'must nowhere appear' and extends a sentence about the periagogic response to every dated entry a node's `## Disposition` holds, two readings of the AI's resting on the author's one sentence") was not revisited when `recommends` moved to `the-words-are-referenced-both-ways-and-not-matched-by-date`. It argues against the old design's exclusivity and does not mention the weakness the new option's own text concedes — "a word the AI omitted to reference is a word the page does not show" — which bears more directly on how the newly recommended option, specifically, could go wrong. Suggested edit: fold that conceded risk into the fact's `against`, or state why the retained text remains the strongest case against the option now actually recommended.
+- Frontmatter `depends: - commons.systems/disposition-graph/quotes#words-in-a-ledger-on-the-ref` is new in this amendment and names an option on `commons.systems/disposition-graph/quotes` that this reading has no access to verify (out of this delta reading's scope, per the brief). Worth the survey's or the next full reading's check that the named option exists on `quotes` and that its answer fact actually supports a per-reference, both-ways ledger, since the new option and the fence's opening paragraph both depend on it.
+
+On the facts and what they recommend: The diff moves the answer fact's `recommends` from `per-option-only` to a newly added option, `the-words-are-referenced-both-ways-and-not-matched-by-date` (source `commons.systems/disposition-graph/dialogue`, ref 2026-09-07), which is why a `## Recommendation` fence now appears (recommends != stands, still `per-option-only`); boldness stays `moderate`, unchanged by this diff. The review block's `strength` drops from `strong` to `none` and its stale `against` text is removed, matching the previous reading's report of no strong counter-argument; `of`/`commit` now pin the previous reading's commit and a `survey` sub-block is added. A new `depends` entry on `quotes#words-in-a-ledger-on-the-ref` is added. The authority fact and its options are untouched.
+
+On the viability of the options: The diff adds one new viable, recommended option to the answer fact and touches no other option's viability; nothing in the diff withdraws or contradicts an existing option. The defect is not in viability but in the fence: the recommended option's own full text (the `## Recommendation` block) is an incompletely-migrated copy of the old recommended node, so what would become the node's `## Answer` and `## Rationale` under this option is internally inconsistent as written.
+
+Strongest counter-argument (strong): One could read the account's own description — that this is a mechanical migration applying specific old/new text pairs from an external source document to the prior recommended text — as meaning the untouched paragraphs were simply not among the pairs that document specified, so the omission is a known, bounded step in a multi-step migration rather than a defect of judgment. That reading does not survive contact with the text itself: the fence as it stands would go to the author as 'the whole recommended node' under a ruling, and it currently asserts in one paragraph that matching is no longer by the option's `ref` and, two paragraphs later, evaluates the very same rows by whether their `ref` resolves to an entry — a contradiction inside the one document the author is asked to confirm, not merely an unfinished measurement.
+
+The session's reply: Validated on the main thread: the amendment of b95923d7 applied two quoted pairs to the recommended text and left the paragraphs written for matching by date, so the fence contradicted its own opening. Repaired in the commit that follows this reading: the entry is now a ledger entry addressed by date and ordinal, the mismatch paragraph is written for a reference that resolves to no entry, the coverage figure is marked as taken under the by-date rule and owed a re-measurement under the reference rule, the rationale argues the reference both ways, and the fact's case against carries the risk the option concedes, that a word the AI omitted to reference is a word the page does not show.

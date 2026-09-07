@@ -1,7 +1,7 @@
 ---
 question: What does an option's row carry at the first level?
 form: rule
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -69,10 +69,11 @@ facts:
     against: "Layout is reversible and cheap to get wrong, so deferred would let the recommendation act on the row while the author works the rest of the frontier; and a ratified ruling here stops any delegation from ever reaching the page's presentation, which is most of what this subtree decides."
 review:
   verdict: forward
-  strength: none
+  strength: weak
   date: 2026-09-07
-  of: 76904185c4740a91851f800c31a0ea71cb6e9ab2
-  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
+  of: 262fc5f533ed9beffd16a456f6dc58a181374812
+  commit: 35d110afbf61cdbb8b6d91fa3ffdb2c61c5626ba
+  against: "The fact-level lead paragraph (\"Recommended because every settlement on it is the author's words applied where they fall...\") was not touched by this diff and argues only for the marks arrangement, without saying why the accumulation-layer option is now recommended over the plain `three-marks-and-the-case-against` it is built on; the option's own added prose (AI support/divergence) carries that argument instead, which is a defensible split but leaves the fact's summary line silent on the actual recommended option. Separately, `a-term-is-its-own-sentence` rests on an unverified claim about `vocabulary-option-summary` and a node count neither this diff nor the previous reading established. Neither point was visible to the last reading since both are new to this diff, but neither is a false statement, a broken pin, or a contradiction this node's own text shows — they are gaps for the neighbourhood to close, not defects in the amendment itself."
   survey:
     date: 2026-09-07
     of: b89922c46f615f7d2ba8814aeeb6b8d431e50670
@@ -1186,3 +1187,19 @@ Strongest counter-argument (weak): The state this answer asks the author to rati
 ### Option adopted, 2026-09-07
 
 One option recorded from `dialogue`'s recommended encoding, on the author's refinement of 2026-09-07 quoted under `## Disposition`; the first level is unchanged and the details grow. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `three-marks-and-the-case-against`; The text `three-marks-and-the-case-against` stands in this node's `## Answer`, which the new option's fence amends and which the migration under the author's grant of 2026-09-07 carries as that option's content. The stage returns to review and the amendment owes a reading.
+
+### Clean-context re-reading, 2026-09-07, of 262fc5f5
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-details-carry-the-three-accumulations`.
+
+Findings:
+
+- Facts > answer > a-term-is-its-own-sentence (new to this diff): the option's prose reads "Raised by `commons.systems/disposition-graph/vocabulary-option-summary`, whose recommended answer leads a vocabulary row with the term and puts the gloss one step down, and which would otherwise print on three rows of each of the 134 nodes carrying the authority fact a lead this answer's own words call a defect to be found." This is a new claim about another node's recommended answer and a headcount ("134 nodes") that this delta reading's scope (the diff plus the previous reading's findings) has no way to check; it should be verified against `vocabulary-option-summary` at the node's next full reading or by the survey before the author rules.
+
+On the facts and what they recommend: The diff touches only the answer fact's option list and recommendation: it adds two options, `a-term-is-its-own-sentence` (source `vocabulary-option-summary`, 2026-09-07) and `the-details-carry-the-three-accumulations` (source `dialogue`, 2026-09-07), and moves `recommends` from `three-marks-and-the-case-against` to `the-details-carry-the-three-accumulations`, boldness unchanged at moderate. `stands` is untouched (`three-marks-and-the-case-against`), so a `## Recommendation` fence now appears where none stood before (recommends and stands now differ). The `against` prose on the answer fact, the whole `authority` fact (still recommends `ratified`, low, unchanged fence), and the earlier `## Answer`/`## Rationale` prose are otherwise untouched except one citation edit (a stale line-number pointer into `project.mjs` was generalized to the bare file path).
+
+On the viability of the options: Every option already on the list keeps its prior status (the three passed-over options remain passed with their reasons intact); the two new options each carry an argued case rather than a bare assertion, and the newly recommended `the-details-carry-the-three-accumulations` is explicit that it leaves the row's three first-level marks unchanged and only grows the drill-down, so it does not conflict with the fact-level rationale paragraph that argues for the marks arrangement. Nothing in the diff leaves an option ambiguous or contradicts the viable list.
+
+Strongest counter-argument (weak): The fact-level lead paragraph ("Recommended because every settlement on it is the author's words applied where they fall...") was not touched by this diff and argues only for the marks arrangement, without saying why the accumulation-layer option is now recommended over the plain `three-marks-and-the-case-against` it is built on; the option's own added prose (AI support/divergence) carries that argument instead, which is a defensible split but leaves the fact's summary line silent on the actual recommended option. Separately, `a-term-is-its-own-sentence` rests on an unverified claim about `vocabulary-option-summary` and a node count neither this diff nor the previous reading established. Neither point was visible to the last reading since both are new to this diff, but neither is a false statement, a broken pin, or a contradiction this node's own text shows — they are gaps for the neighbourhood to close, not defects in the amendment itself.
