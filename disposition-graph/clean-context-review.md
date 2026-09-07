@@ -89,6 +89,9 @@ facts:
       - name: identical-prefix-across-a-waves-briefs
         source: review
         ref: "2026-09-07"
+      - name: the-unreached-line-is-conditioned-by-frontier-consistency
+        source: commons.systems/disposition-graph/frontier-consistency
+        ref: "2026-09-07"
     recommends: wave-membership-derived-from-the-record
     boldness: high
     against: "The wave buys bytes and spends attention, and attention is the quantity this subtree has already said is the scarce one. `review-cost` now recommends that \"Token efficiency and context management are bounds on what a reading is given; attention is what the reading does with it, and it is not the same quantity\", and a wave halves the bytes while quartering what any one object gets of the reader: the brief is fifty-six percent smaller, but each of the four drafts is now judged by a reader holding three other drafts, three other neighbourhoods of options, and three other verdicts it must also write. Deriving the wave's membership and bounding its brief settle who is in it and how large it may be, and neither touches that: on the record's own accounting a wave is a rise in cost per unit of attention and not a fall, and it is invisible to the measurement the case is built on, which counts only bytes. The deeper objection is that the saving and the loss fall on different parties: the bytes are the record's, the independence is the author's, and the author is the one the review exists to protect. And the loss is hedged only by the survey, which this node's own rationale still records as one \"no sitting has yet generated\" and which runs for the first time in the sitting that recommends the wave."
@@ -306,6 +309,17 @@ For it: it keeps the four independent judgments every wave option spends, which 
 Viable and not adopted: its saving rests on a fact about the harness's caching that this record has never measured, so adopting it would put the record's only economy here on an unmeasured property of a tool. That is the reason to put it to the author rather than to assume it; where the caching is what it is assumed to be, this option dominates the wave outright, since it buys the bytes and gives up no independence.
 
 Raised at the clean-context reading of 2026-09-07, in its viability paragraph.
+
+#### the-unreached-line-is-conditioned-by-frontier-consistency
+
+Everything `wave-membership-derived-from-the-record` says, with the survey
+paragraph's restatement of what is read of an unjudged node struck and replaced
+by a citation of `frontier-consistency`, which now conditions the one-line class
+on the node's text as the last survey read it and which this paragraph copies
+unconditioned, "of a node no judged node reaches, its question alone, on one
+line with its id and its file", while saying in the same sentence that it does
+not restate it. Raised by the clean-context reading of `frontier-consistency` on
+2026-09-07, which found the copy stale the moment that node is ruled.
 
 ### authority
 
