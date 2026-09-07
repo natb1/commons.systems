@@ -42,6 +42,10 @@ bears:
     fact: answer
     option: per-fact-after-two-readings
     relation: adopted
+  - node: commons.systems/disposition-graph/which-facts-are-listed
+    fact: answer
+    option: every-node-carries-four-facts
+    relation: diverged
 ---
 ## Answer
 

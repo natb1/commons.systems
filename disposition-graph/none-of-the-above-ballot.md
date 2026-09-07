@@ -25,6 +25,10 @@ bears:
   - fact: answer
     option: every-fact-every-option
     relation: adopted
+  - node: commons.systems/disposition-graph/when-the-kickback-feedback-shows
+    fact: answer
+    option: revealed-with-the-choice
+    relation: adopted
 ---
 ## Answer
 

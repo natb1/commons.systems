@@ -73,6 +73,10 @@ bears:
     fact: answer
     option: four-form-draft
     relation: diverged
+  - node: commons.systems/disposition-graph/how-a-fact-is-headed
+    fact: answer
+    option: name-linked-to-the-definer
+    relation: adopted
 depends:
   - commons.systems/disposition-graph/viable-options
 ---

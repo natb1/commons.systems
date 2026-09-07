@@ -25,6 +25,10 @@ bears:
   - fact: answer
     option: authority-fact-on-every-node
     relation: adopted
+  - node: commons.systems/disposition-graph/which-facts-are-listed
+    fact: answer
+    option: all-four-listed-two-derived
+    relation: adopted
 ---
 ## Answer
 

@@ -47,6 +47,10 @@ bears:
   - fact: answer
     option: every-fact-every-option
     relation: adopted
+  - node: commons.systems/disposition-graph/vocabulary-option-summary
+    fact: answer
+    option: term-at-the-first-level
+    relation: adopted
 ---
 ## Answer
 
