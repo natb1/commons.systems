@@ -1,6 +1,6 @@
 ---
 question: When is an open question a probe, an option, or a node?
-stage: review
+stage: maieutic
 probes:
   - id: a-delegable-review-finding-question
     asks: >-
@@ -79,12 +79,12 @@ facts:
     recommends: keep
     boldness: low
 review:
-  verdict: forward
+  verdict: kickback
   strength: moderate
   date: 2026-09-07
-  of: 7bd00f2a353005aebe5c3a8f16a0a381deb8ebe6
-  commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
-  against: "The four tests that answer the author's actual 2026-09-04 request still wait behind a `depends` on `graph-topology`, itself only at the review stage, so the substance of this node is still gated on a sibling node's ruling; and the interim this amendment adds is honoured on trust in the pruning session's own account of which of the author's words reached a given prune, with no fact or ruling checking that account until `graph-topology` is ruled."
+  of: 0bd3f8b12c7f2214d25551acc35285a4dae3be8c
+  commit: 75100da28b6ee06711a08c4399abd6cb11596ca5
+  against: "The amendment renames the citation from a miscited grant to a not-yet-ruled standing-direction option but keeps the exact 'wherever it was given, in the dialogue or at the node's row' language the survey flagged as carrying a grant over from an earlier grant, and now explicitly concedes that reading lacks 'by right' standing while still describing it as applied today -- the substance the survey objected to (a general direction pruning nodes now, on no ruling) is unchanged, only its stated justification moved."
   survey:
     date: 2026-09-07
     of: 7bd00f2a353005aebe5c3a8f16a0a381deb8ebe6
@@ -726,3 +726,19 @@ Recorded as an option on commons.systems/disposition-graph/what-acts-during-boot
 ### Amended after the frontier survey, 2026-09-07
 
 The survey's finding, validated at its locus on the main thread, the same finding as on graph-topology: the interim cited a grant for a class of act. The fence's clause now names the direction for what it is and rests on `what-acts-during-bootstrap#a-standing-direction-acts-by-right`, entered in `depends`. The amended recommendation owes its re-reading, whose object is this repair.
+
+### Clean-context re-reading, 2026-09-07, of 0bd3f8b1
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `interim-follows-the-authors-word`.
+
+Findings:
+
+- ## Answer (identically in the ## Recommendation fence), independence-test paragraph: the repair replaces "since a grant given in the author's words acts by right while nothing in the record is ratified" with "...as a standing direction of the author's about a class of act, which acts by right only if the what-acts-during-bootstrap node's option `a-standing-direction-acts-by-right` is ruled, the grant that node defines reaching one named reconciliation and no class, and which is applied meanwhile as the author's words of 2026-09-05 directed." This does not close the survey's cross-reference finding, it relocates it: the sentence still opens with "a prune of a node no ruling reaches that the author has directed in their own words is taken on that word wherever it was given, in the dialogue or at the node's row" -- unchanged from the pre-amendment text and exactly the phrase the survey objected to, since a grant under what-acts-during-bootstrap's own definition reaches "one named reconciliation of one unanswered node" and is "never carried over from an earlier grant." The repair now admits in the same breath that this broader, standing-direction reading only "acts by right only if" a new option is ruled (it is not; it is merely recorded as viable, per the node's own account), while asserting the direction "is applied meanwhile" regardless. That is a new, self-contradictory clause the previous reading had no chance to catch, since it read the pre-amendment text that (wrongly, but coherently) claimed the interim already acted by right via a grant: the amended text instead states outright that the standing-direction reading lacks "by right" standing pending a ruling, and then describes it being applied anyway. Suggested edit: either narrow the opening clause to the single 2026-09-05 reconciliation ("taken on that word for the node it was given about" rather than "wherever it was given"), which would make the interim a proper grant needing no further ruling, matching the survey's second proposed remedy; or, if the broader standing-direction reading is intended, drop "and which is applied meanwhile as the author's words of 2026-09-05 directed" so the text does not describe present application of an authority it just said is conditional on an unmet ruling.
+
+On the facts and what they recommend: The diff touches only frontmatter (review.of/review.commit/review.against advanced to the prior reading's pin, and a survey:{date,of} block added), depends (gaining commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right), and the independence-test paragraph's wording in both `## Answer` and the `## Recommendation` fence, where the interim's grounding moves from a miscited grant to a named-but-unruled standing-direction option while the same 'wherever it was given' phrase and present-tense application survive unchanged. No fact's recommends, boldness, or stands changes; the answer fact's own `against` text is untouched by this repair and does not yet reflect the new standing-direction framing.
+
+On the viability of the options: Unaffected by this diff: no option is added or struck, `interim-follows-the-authors-word` remains the sole recommended and viable option on the answer fact, and the authority/existence facts are untouched.
+
+Strongest counter-argument (moderate): The amendment renames the citation from a miscited grant to a not-yet-ruled standing-direction option but keeps the exact 'wherever it was given, in the dialogue or at the node's row' language the survey flagged as carrying a grant over from an earlier grant, and now explicitly concedes that reading lacks 'by right' standing while still describing it as applied today -- the substance the survey objected to (a general direction pruning nodes now, on no ruling) is unchanged, only its stated justification moved.
