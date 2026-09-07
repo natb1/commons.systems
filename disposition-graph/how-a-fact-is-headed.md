@@ -1,6 +1,6 @@
 ---
 question: How is a fact's section headed on the alignment page?
-stage: review
+stage: ruling
 form: rule
 facts:
   - name: answer
@@ -58,9 +58,9 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-07
-  of: 5306f2c9d0bd3979aa2ae7cf50cc45f3b530bab7
-  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
-  against: "The author's stated ground for the change is repetition -- the answer prose fact \"doesn't need to restate the question as its title\" -- and that ground is exact on the answer fact alone, where the column prints the node's question two lines above. On the three reserved facts the page today prints no repetition at all: it prints the gloss of the term, or the definer's question, neither of which the reader has already met. So on three of the four headings this answer replaces a sentence that says something with a category word that says less, on a ground that does not reach them, and it does so on every one of the 134 nodes that carry facts. Where the link resolves the loss is recovered by a click; where it does not -- on `answer` and `persistence`, which is the most frequent heading and one other -- the author is left with a bare category and the record's own reasoning under `aspects-are-nodes`, that a decision labelled with a category tells the author nothing about what is being asked, stands whole with nothing answering it. The answer's reply is that the absence becomes a finding on another node, which is a promise about a future ruling rather than anything the author gets on the page they are looking at."
+  of: ffc2656dd3a15f8511154e684286ae01dfdb8027
+  commit: f146f8f44b295c64e47a13bff338748035183d87
+  against: "All five findings of the previous reading are answered, each verified at its locus: the false 'nothing in the record defines the term answer' claim is replaced with an accurate account of the bare entry at node.md:65; the passed-over reason and the fact's `against` on `heading-is-the-name-and-a-link` are corrected to the same effect; the fallback-to-dialogue clause is removed entirely rather than patched, since the new recommendation needs no fallback; every stale project.mjs/derive.mjs line citation is now given by function name; and the Account no longer calls the periagogic question a probe, instead correctly routing it through the fact's own options under `probe-or-node`. Question two also turns up nothing false: the new design (glossing `answer` and `persistence` on `dialogue` and releasing the bare entries on `node` and `transience`) is a genuinely new decision beyond what the previous reading's own suggested missing option sketched (which touched only two nodes, `node` and `transience`, by glossing them directly rather than writing to `dialogue`), but it is drawn from cited evidence (`glossary`/`definerIndex` both take the first definer and ignore later ones) and its cost is stated plainly in the fact's own `against`, so it reads as a defensible design choice made in the open rather than an unexamined addition."
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -480,3 +480,20 @@ fact's own options put, and the `### answer` subsection, the fence and the
 Rationale are redrawn for the option that now stands. The amended answer owes its
 re-reading, and the recommendation having moved, the node returns to the review
 stage.
+
+### Clean-context re-reading, 2026-09-07, of ffc2656d
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `glosses-written-with-this-ruling`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff moves the answer fact's `recommends` from `name-linked-to-the-definer` to `glosses-written-with-this-ruling` (a new option, source review, ref 2026-09-07), keeping boldness moderate; the `against` on both the answer and authority facts is rewritten to argue against the new recommended option rather than the old one, and the authority fact keeps `recommends: ratified` at low boldness with an `against` updated to match. No `stands` on the answer fact, so the `## Recommendation` fence remains present and is fully redrawn for the new option; no existence or persistence fact is added.
+
+On the viability of the options: Every option remains viable after the diff. `name-linked-to-the-definer` is downgraded from recommended to viable-and-not-adopted with an accurate account of what it now gives up (the fallback, refused by the new recommendation). The new option `glosses-written-with-this-ruling` is confirmed viable: I verified against `disposition/disposition-graph/dialogue.md` that the option `dialogue-glosses-the-four-fact-names` (source `how-a-fact-is-headed`, ref 2026-09-07) is in fact drafted there as a viable, not-yet-adopted option on dialogue's own answer fact, and that `dialogue` already glosses `existence` and that `authority` is glossed on the `authority` node exactly as claimed. The two bare `defines` entries the amendment cites, `disposition/disposition-graph/node.md:65` (`answer`) and `disposition/disposition-graph/transience.md:76` (`persistence`), are exact at those lines. All `packages/disposition/project.mjs` and `packages/disposition/derive.mjs` citations in the amended text now name functions (`factLabel`, `definerIndex`, `renderFact`, `glossary`) without stale line numbers, and I confirmed each function exists in the file named.
+
+Strongest counter-argument (moderate): All five findings of the previous reading are answered, each verified at its locus: the false 'nothing in the record defines the term answer' claim is replaced with an accurate account of the bare entry at node.md:65; the passed-over reason and the fact's `against` on `heading-is-the-name-and-a-link` are corrected to the same effect; the fallback-to-dialogue clause is removed entirely rather than patched, since the new recommendation needs no fallback; every stale project.mjs/derive.mjs line citation is now given by function name; and the Account no longer calls the periagogic question a probe, instead correctly routing it through the fact's own options under `probe-or-node`. Question two also turns up nothing false: the new design (glossing `answer` and `persistence` on `dialogue` and releasing the bare entries on `node` and `transience`) is a genuinely new decision beyond what the previous reading's own suggested missing option sketched (which touched only two nodes, `node` and `transience`, by glossing them directly rather than writing to `dialogue`), but it is drawn from cited evidence (`glossary`/`definerIndex` both take the first definer and ignore later ones) and its cost is stated plainly in the fact's own `against`, so it reads as a defensible design choice made in the open rather than an unexamined addition.
+
+The session's reply: Forwarded with no finding; the counter-argument, that the recommendation now writes on dialogue as well as node and transience, is the cost the fact's own case against states, and it stands on the row at moderate strength. Nothing on the node changes.

@@ -1,6 +1,6 @@
 ---
 question: Which facts does the alignment page list on a node?
-stage: review
+stage: ruling
 form: rule
 facts:
   - name: answer
@@ -57,11 +57,10 @@ facts:
     against: "This is which rows a projector prints, undone by re-projecting the page, and the author has already said in their own words that they want all of them; ratifying it spends their scarcest act on a sentence that transcribes them and freezes the derived row's form against every later reading of it. Deferred would let the rows act while the question the answer defers to, how many names the record reserves, is still open on the dialogue node."
 review:
   verdict: forward
-  strength: moderate
+  strength: none
   date: 2026-09-07
-  of: 7c9f6943bd7c91287f9acc3c9c8ddbbbb0930fc6
-  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
-  against: "The tradition this answer adopts is the one that cuts against it. `special-verdict-form` holds that \"a special verdict puts each question the judgment needs to the decider separately, so the answers can be read apart, and a question that was never put was never answered\", and the derived row is exactly a question printed and not put: on 123 of the 134 nodes carrying facts the author will read the names of two decisions beside two sentences telling them nothing is being asked. `unanswered` names \"the node's existence\" among the decisions a ruling asks with no condition on it, so what the page declines to ask is a decision the record says a ruling covers, and the answer's ground for declining -- that the page's scope is the final confirmation of what is recommended -- is the same shape of argument the fold used, that the recommending party decides which decisions reach the decider, now applied to two facts rather than to the low-boldness ones. The author's directive was \"list all facts - even if options have not yet been established\", and its natural reading is that a fact listed is a fact available to rule on; what this answer delivers on almost every node is two rulings and two notices, which is the fold's silence given a heading."
+  of: 49cbcabd7a9eed31b29063d6b2c11d46a17fda10
+  commit: f146f8f44b295c64e47a13bff338748035183d87
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -531,3 +530,20 @@ parent's unmarked facts clause, which the reading named, is marked by the parent
 own amendment of this sitting rather than left as this node's finding.
 
 The amended answer owes its re-reading, and the node returns to the review stage.
+
+### Clean-context re-reading, 2026-09-07, of 49cbcabd
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `all-four-listed-two-derived`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff adds one new viable option to the answer fact, `existence-asked-persistence-derived` (source review, ref 2026-09-07), without changing `recommends` (still `all-four-listed-two-derived`), boldness (still moderate), or `stands`. The authority fact is unchanged (`recommends: ratified`, boldness low); a `review` block is newly recorded in frontmatter carrying the previous reading's verdict, strength, pin and `against`.
+
+On the viability of the options: Every option remains viable. The new option `existence-asked-persistence-derived` is recorded viable-and-not-adopted with the reasoning the previous reading itself supplied (a live existence radio on 123 nodes would ask a decision no one has recommended, which the author's 2026-09-06 scope rule keeps off the page), which I hold sound; I verified the quoted rule against `disposition/disposition-graph/alignment-page.md:315` and it is exact.
+
+The review found no strong counter-argument.
+
+The session's reply: Forwarded with no finding. Nothing on the node changes.

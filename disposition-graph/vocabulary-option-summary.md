@@ -1,6 +1,6 @@
 ---
 question: What does an option's summary say on a fact whose options are the record's own vocabulary?
-stage: review
+stage: ruling
 form: rule
 facts:
   - name: answer
@@ -47,11 +47,10 @@ facts:
     against: "The author asked for exactly this in their own words, so ratifying it spends their scarcest act on a transcription, and it freezes the row's text against `vocabulary-view`, which asks how a defined term is presented and linked wherever it appears and has not been held. Deferred would let the row act while that question is open, which is where the contested part of this lives."
 review:
   verdict: forward
-  strength: moderate
+  strength: none
   date: 2026-09-07
-  of: 2535cb586769897a9a2e59e9d39bd70550723ce9
-  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
-  against: "The author's sentence -- \"Text summary for each authority option is just the name of the authority level\" -- was one sentence about one fact, given while reading one node, and this answer generalises it into a rule for a class of facts on every node the record holds. What it takes off the row is the only text on the page that says what confirming `delegated` would do, and that is the most consequential ruling in the record: it is the act by which the AI's recommendation begins to act below a node without the author being asked again. The record's whole guard against capture is that the author reads what they are conferring at the moment they confer it, and this answer's reply -- that the author already knows -- is a claim about one reader on one day, not a property of the record; the answer itself concedes as much in its `against`. The two things it puts in the gap are real but both are one click away, and the nearer of the two, the linked heading, is not yet ruled and belongs to a sibling whose own recommendation leaves two of four headings unlinked."
+  of: 01059350d1d2da037d38b5ada9e1e5e49463203f
+  commit: f146f8f44b295c64e47a13bff338748035183d87
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
@@ -466,3 +465,20 @@ counter-argument is the reader's words and is not edited; the change is recorded
 here, where the author reads it beside the row.
 
 The amended answer owes its re-reading, and the node returns to the review stage.
+
+### Clean-context re-reading, 2026-09-07, of 01059350
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `term-at-the-first-level`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff adds one new viable option to the answer fact, `term-with-the-gloss-on-the-first-node-only` (source review, ref 2026-09-07), without changing `recommends` (still `term-at-the-first-level`), boldness (still low), or `stands`; the answer fact's `against` text is unchanged in substance. The authority fact is untouched: still `recommends: ratified`, boldness low, with a `review` block newly recorded in frontmatter carrying the previous reading's verdict, strength, pin and its own `against`. No existence or persistence fact, unchanged.
+
+On the viability of the options: Every option remains viable. The new option `term-with-the-gloss-on-the-first-node-only` is recorded viable-and-not-adopted with the reasoning the previous reading itself supplied (it is not a fact of the record which node is first in a sitting, and the linked heading already serves the first reading), which I hold sound.
+
+The review found no strong counter-argument.
+
+The session's reply: Forwarded with no finding. Nothing on the node changes.
