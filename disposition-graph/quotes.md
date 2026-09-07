@@ -1,6 +1,6 @@
 ---
 question: How are the author's words retained when a ruling is recorded?
-stage: maieutic
+stage: review
 review:
   verdict: kickback
   strength: moderate
@@ -35,9 +35,13 @@ facts:
       - name: fence-carries-the-ruling
         source: review
         ref: "2026-09-03"
+        status: passed
+        reason: "a fence is one option's content and carries no ruling; the ruling is recorded on the option, as the viable-options node has it, and the words it rests on are referenced from there"
       - name: one-ruling-for-the-unquoted-stamp
         source: review
         ref: "2026-09-03"
+        status: passed
+        reason: "there is no stamp to rule for: the class is read off the rulings, and a ruling whose words are not in the record is invalid, so an unquoted ruling is not a class of ruling the record has"
       - name: words-in-a-ledger-on-the-ref
         source: author
         ref: "2026-09-07"
@@ -46,6 +50,9 @@ facts:
         ref: "2026-09-07"
       - name: the-quotation-is-copied-onto-every-option
         source: ai
+        ref: "2026-09-07"
+      - name: words-in-a-ledger-on-its-own-ref
+        source: review
         ref: "2026-09-07"
     recommends: words-in-a-ledger-on-the-ref
     boldness: moderate
@@ -134,6 +141,14 @@ Each option carries the quotation itself, concatenated in date order, with no le
 **AI support.** It is the plainest reading of the author's phrase that the author's response is concatenated quotation, it needs no resolver, and every option is legible with nothing else open.
 
 **AI divergence.** It multiplies the duplication already measured by the number of options that cite an entry rather than reducing it, so the 28% becomes the smaller share of a larger number; and the record's cure for one text in two places is a check that the copies agree, which is the update anomaly answered rather than avoided. Where the author prefers the copy, this option takes it and the check comes with it.
+
+#### words-in-a-ledger-on-its-own-ref
+
+The ledger lives on a ref of its own beside the disposition ref, and options reference it across refs.
+
+**AI support.** It keeps the disposition ref carrying the graphs and only the graphs, as its rule stands, and the words, which no ruling reaches, out of the ref where rulings are recorded.
+
+**AI divergence.** A reference across refs is not resolvable from a checkout of one, so every reader, the validator first, would need two checkouts at pinned commits to validate a node, and a landing on one ref could not be checked against the other in one commit; the record's own rule that every part a ruling needs is in the record in one place puts the words on the ref the rulings are on.
 
 ## Recommendation
 
@@ -366,3 +381,7 @@ On the facts and what they recommend: The diff moves the answer fact's `recommen
 On the viability of the options: Not fully settled by the diff: two of the three options the last reading argued were dominated remain live with no passed status or stated reason, and the alternative option the last reading proposed and drafted in full, a ledger on a ref of its own, was not added to the list and its omission is not explained, so an author reading the node cannot rule on an option that was found viable and not dominated.
 
 Strongest counter-argument (moderate): The repair's silence on the other two flagged options and on the proposed 'own ref' alternative may be a deliberate judgment rather than an oversight: the recommended option's own recorded divergence already argues the trade the alternative option would avoid, and `fence-carries-the-ruling` may have been left live because the round's shape (no `## Recommendation` fence on ratified nodes) is itself only a proposal, not yet a settled fact, so passing it over would be premature. But the amendment states neither reason, and the account describes only one of the three edits the last reading asked for, so the node as it stands cannot show the author which of these is true.
+
+### Repaired after the re-reading, 2026-09-07
+
+The re-reading's four items, validated on the main thread: `fence-carries-the-ruling` and `one-ruling-for-the-unquoted-stamp` are passed over with the clause saying why; the alternative the first reading named, `words-in-a-ledger-on-its-own-ref`, is recorded and not adopted, with its support and divergence; the `dialogue` fence's self-contradiction is being rewritten on that node, whose reading of 2026-09-07 found it, and this node's answer does not depend on which sentence of that fence survives; and the `commit` key in the review block is the reader's sixth draft key at implementation commit feaaac1b, missing from the brief template's own listing, which is a defect of the brief and is on the reconciliation list. Pin-neutral; the node returns to review for the re-reading a kickback owes.
