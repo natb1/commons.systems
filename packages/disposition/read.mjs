@@ -23,9 +23,13 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { applyStrict } from './patch.mjs';
+import { readWords, resolveReference, unreferencedEntries } from './words.mjs';
+
 import {
   blobSha1,
   canonicalizeId,
+  confirmedOption,
   deriveAncestors,
   deriveCeiling,
   deriveChildren,
@@ -43,6 +47,7 @@ import {
   factByName,
   factMoved,
   moved,
+  nodeEncoding,
   onFrontier,
   PER_NODE_FACTS,
   proposal,
@@ -50,6 +55,12 @@ import {
   ruledOption,
   VOCABULARY_FACTS,
 } from './derive.mjs';
+
+// Which encoding a node is written in, and which option its rulings confirm,
+// are derivations like any other and live in `derive.mjs`, where the hashes
+// need them; they are re-exported here so a consumer that reads the graph
+// through this module has them under one import.
+export { confirmedOption, nodeEncoding };
 
 // ---------------------------------------------------------------------------
 // vocabulary
@@ -78,7 +89,16 @@ export const FACT_NAMES = ['answer', 'authority', 'existence', 'persistence'];
 // written when the recommendation is recorded, so a reader sees the argument
 // the recommendation had to beat rather than only the argument for it.
 export const FACT_KEYS = ['name', 'options', 'recommends', 'boldness', 'against', 'stands'];
-export const OPTION_KEYS = ['name', 'source', 'ref', 'status', 'reason', 'ruling'];
+// `supports` and `diverges` are the content encoding's: the addresses of the
+// author's words, in the ledger under `<rootDir>/words/`, that support this
+// option or diverge from it, so that one quotation is kept once and
+// referenced rather than copied onto every option that carries it
+// (commons.systems/disposition-graph/quotes, `words-in-a-ledger-on-the-ref`).
+export const OPTION_KEYS = ['name', 'source', 'ref', 'status', 'reason', 'ruling', 'supports', 'diverges'];
+// The two ledger-reference lists an option may carry, and the shape of an
+// address in them.
+export const OPTION_WORDS_KEYS = ['supports', 'diverges'];
+export const WORDS_REFERENCE_RE = /^words\/\d{4}-\d{2}-\d{2}\/\d+$/;
 // `reason` is the author's own reason for the ruling, in their words and
 // optional, so that what they said when they chose has somewhere in the
 // record to land (commons.systems/disposition-graph/dialogue,
@@ -135,6 +155,15 @@ export const REVIEW_SURVEY_KEYS = ['date', 'of'];
 // consistency with itself is what the author is about to rule on.
 export const SURVEY_STAGES = ['review', 'ruling'];
 export const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Facts', 'Recommendation', 'Account'];
+// The two encodings a node file may be written in, and the four sections the
+// content encoding struck: a node carrying none of them, and no `stands`, is
+// in the content encoding, where the answer is the resolved content of the
+// confirmed option and the sections above have moved onto the options
+// (`nodeEncoding`). `SECTION_ORDER` is the legacy encoding's; what a content
+// node may carry is `## Facts` and `## Account`, which is what is left of it.
+export const ENCODINGS = ['legacy', 'content'];
+export const STRUCK_SECTIONS = ['Answer', 'Rationale', 'Recommendation', 'Disposition'];
+export const CONTENT_SECTIONS = ['Facts', 'Account'];
 export const SHIM_KEYS = ['artifact', 'liquidation', 'declared', 'for'];
 // A `probes` entry: a question the AI needs the author to answer before it
 // can recommend, whose answer is not itself a disposition
@@ -443,8 +472,25 @@ function readFacts(raw, problems) {
           of: o.ruling.of,
           reason: isAbsent(o.ruling.reason) ? null : o.ruling.reason,
         },
+      // The ledger addresses of the author's words on this option. Their own
+      // shape is checked below, one message per malformed list, so that the
+      // combined shape message above stays about the option's own fields;
+      // whether an address resolves needs the ledger and is `readGraph`'s.
+      supports: isAbsent(o.supports) ? [] : o.supports,
+      diverges: isAbsent(o.diverges) ? [] : o.diverges,
       // filled in from '## Facts' once the body is parsed
       prose: '',
+      // the content encoding's, parsed out of `prose` by
+      // `parseOptionSubsection` once the encoding is known. `resolved` is
+      // the whole text `content` resolves to, written here once so that
+      // every reader of the option -- the hashes included -- shares one
+      // resolution; null where there is no content, or where resolving it
+      // failed, which is a problem reported on the node.
+      sentence: '',
+      aiSupport: null,
+      aiDivergence: null,
+      content: null,
+      resolved: null,
       readings: [],
     })),
     recommends: isAbsent(entry.recommends) ? null : entry.recommends,
@@ -483,6 +529,24 @@ function readFacts(raw, problems) {
         ok = false;
       }
       seenOptions.add(name);
+    }
+
+    // `supports` and `diverges`: each a list of ledger addresses, checked
+    // here for their own shape only. A reference that is well-formed but
+    // names no entry needs the ledger and is checked by `readGraph`.
+    for (const option of entry.options) {
+      for (const key of OPTION_WORDS_KEYS) {
+        const list = option[key];
+        const listOk = Array.isArray(list) && list.every((r) => typeof r === 'string' && WORDS_REFERENCE_RE.test(r));
+        if (!listOk) {
+          problems.push(
+            `fact '${entry.name}' option '${option.name}' has a malformed '${key}': `
+            + 'it must be a list of ledger addresses of the form words/<YYYY-MM-DD>/<n>',
+          );
+          ok = false;
+          option[key] = [];
+        }
+      }
     }
 
     if (entry.name === ANSWER_FACT) {
@@ -571,6 +635,24 @@ function readFacts(raw, problems) {
       ok = false;
     }
     entry.ruled = ruledOptions.length === 1 ? ruledOptions[0].name : null;
+
+    // The confirmed option is the one carrying the most recent confirming
+    // ruling, so two of them on one date leave nothing to read it off. The
+    // one-ruling-per-fact rule above already forbids the case; this is here
+    // so that `confirmedOption`'s contract holds by a check of its own and
+    // not by another rule's side effect.
+    const confirmed = ruledOptions.filter((o) => o.ruling.response === 'confirm');
+    if (confirmed.length > 1) {
+      const latest = confirmed.reduce((a, b) => (b.ruling.date > a.ruling.date ? b : a));
+      const tied = confirmed.filter((o) => o.ruling.date === latest.ruling.date);
+      if (tied.length > 1) {
+        problems.push(
+          `fact '${entry.name}' carries confirming rulings dated ${latest.ruling.date} on `
+          + `${tied.map((o) => `'${o.name}'`).join(' and ')}; nothing says which option is confirmed`,
+        );
+        ok = false;
+      }
+    }
 
     if (entry.stands !== null) {
       if (entry.name !== ANSWER_FACT) {
@@ -875,6 +957,8 @@ function fail(relPath, problemList) {
  * @param {string[]} problems
  * @returns {string|null} the fence's inner lines, joined by '\n'.
  */
+const FENCE_LABEL = { display: "'## Recommendation'", path: '## Recommendation' };
+
 function extractFence(sectionText, problems) {
   const fail1 = () => {
     problems.push("'## Recommendation' must hold exactly one fenced markdown block");
@@ -969,34 +1053,39 @@ function parseFrontmatter(text, relPath) {
  * @param {{id: string, graph: string, slug: string, path: string}} ctx - the
  *   enclosing node's own location, for attributing a nested parse error.
  * @param {string[]} problems
+ * @param {{display: string, path: string}} [label] - what to call the fence
+ *   in a message and in a nested parse error's path. The default names the
+ *   `## Recommendation` section; the content encoding names the option whose
+ *   content the fence holds, since a node there carries one such fence per
+ *   option rather than one for the whole node.
  * @returns {{raw: string, question: string|null, frontmatter: object, sections: object}|null}
  */
-function parseFence(fenceText, question, ctx, problems) {
-  const fencePath = `${ctx.path} (## Recommendation)`;
+function parseFence(fenceText, question, ctx, problems, label = FENCE_LABEL) {
+  const fencePath = `${ctx.path} (${label.path})`;
   let fm;
   let bodyText;
   try {
     ({ fm, bodyText } = parseFrontmatter(fenceText, fencePath));
   } catch (err) {
-    problems.push(`'## Recommendation' does not parse as a node: ${err.message}`);
+    problems.push(`${label.display} does not parse as a node: ${err.message}`);
     return null;
   }
   const bodyProblems = [];
   const sections = parseBody(bodyText, bodyProblems);
   if (bodyProblems.length > 0) {
-    problems.push(`'## Recommendation' does not parse as a node: ${fail(fencePath, bodyProblems).message}`);
+    problems.push(`${label.display} does not parse as a node: ${fail(fencePath, bodyProblems).message}`);
     return null;
   }
   if (fm.question !== question) {
-    problems.push("'## Recommendation' answers a different question");
+    problems.push(`${label.display} answers a different question`);
   }
   for (const key of FENCE_FORBIDDEN_KEYS) {
     if (!isAbsent(fm[key])) {
-      problems.push(`'## Recommendation' carries '${key}', which belongs to the node and not to the text it would stand on`);
+      problems.push(`${label.display} carries '${key}', which belongs to the node and not to the text it would stand on`);
     }
   }
   if (sections.Facts !== null) {
-    problems.push("'## Recommendation' carries a '## Facts' section, which belongs to the node and not to the text it would stand on");
+    problems.push(`${label.display} carries a '## Facts' section, which belongs to the node and not to the text it would stand on`);
   }
   return {
     raw: fenceText,
@@ -1004,6 +1093,214 @@ function parseFence(fenceText, question, ctx, problems) {
     frontmatter: { ...fm },
     sections: { ...sections },
   };
+}
+
+// ---------------------------------------------------------------------------
+// the content encoding: what one `#### <option>` subsection holds
+// ---------------------------------------------------------------------------
+
+const AI_SUPPORT_RE = /^\*\*AI support\.\*\*/;
+const AI_DIVERGENCE_RE = /^\*\*AI divergence\.\*\*/;
+const CONTENT_MARKER_RE = /^\*\*Content\.\*\*/;
+const FROM_RE = /^From:[ \t]*(\S.*?)[ \t]*$/;
+const CONTENT_FENCE_RE = /^```(markdown|diff)[ \t]*$/;
+const CLOSING_FENCE_RE = /^```[ \t]*$/;
+
+/**
+ * The whole text one option's content resolves to: its own fence where it
+ * carries the content whole, and otherwise the strict application of its
+ * hunks to the resolved content of the option its `From:` line names.
+ *
+ * Throws, with the node, fact and option named, on a fact or an option that
+ * is not there, an option carrying no content at all, a base that is not an
+ * option of the same fact, a cycle in the `From:` chain, or a hunk that does
+ * not apply -- `applyStrict`'s own message, which names the hunk and the
+ * line it failed at. The validator turns each into a problem on the node.
+ *
+ * @param {object} node - a node as `parseNode` shapes it.
+ * @param {string} factName
+ * @param {string} optionName
+ * @returns {string}
+ */
+export function resolveOptionContent(node, factName, optionName) {
+  const where = `${node?.id ?? '(node)'}: fact '${factName}'`;
+  const fact = factByName(node, factName);
+  if (fact === null) throw new Error(`${where} is not a fact on this node`);
+
+  const seen = [];
+  const resolve = (name) => {
+    if (seen.includes(name)) {
+      throw new Error(`${where} option '${name}' resolves through a cycle: ${[...seen, name].join(' -> ')}`);
+    }
+    seen.push(name);
+    const option = (fact.options ?? []).find((o) => o && o.name === name) ?? null;
+    if (option === null) throw new Error(`${where} has no option '${name}'`);
+    const content = option.content ?? null;
+    if (content === null) throw new Error(`${where} option '${name}' carries no content`);
+    if (content.form === 'whole') return content.text;
+    const base = resolve(content.from);
+    try {
+      return applyStrict(base, content.diff);
+    } catch (err) {
+      throw new Error(`${where} option '${name}' does not apply to '${content.from}': ${err.message}`);
+    }
+  };
+  return resolve(optionName);
+}
+
+/**
+ * Split one `#### <option>` subsection of a node in the content encoding
+ * into the four things it holds, in the order it holds them: the sentence
+ * (all prose before the first marker), an optional `**AI support.**`
+ * paragraph, an optional `**AI divergence.**` paragraph -- either may run
+ * over several paragraphs, each ending where the next marker, the content,
+ * or the subsection does -- and the content, whole or as a named change.
+ *
+ * The content may open with a `**Content.**` marker paragraph and reads the
+ * same without one. Whole content is a ` ```markdown ` block holding the
+ * node as it would stand under this option; a named change is a `From: <option
+ * name>` line and a ` ```diff ` block of unified-diff hunks against that
+ * option's resolved content. Nothing but blank lines may follow the block.
+ *
+ * Every problem is pushed with `label` naming the option, and the field it
+ * could not read comes back null, so one malformed subsection does not stop
+ * the rest of the node from being checked.
+ *
+ * @param {string} text - the subsection's text, as `parseFactsSection` cut it.
+ * @param {string} label - `fact 'answer' option 'x'`, for the messages.
+ * @param {string[]} problems
+ * @returns {{sentence: string, aiSupport: string|null, aiDivergence: string|null,
+ *   content: {form: 'whole', text: string}|{form: 'change', from: string, diff: string}|null}}
+ */
+export function parseOptionSubsection(text, label, problems) {
+  const lines = String(text).split('\n');
+  const empty = { sentence: '', aiSupport: null, aiDivergence: null, content: null };
+
+  // The markers, each at its first occurrence outside a fenced block: the
+  // content's own fence is the only fence a subsection has, and it comes
+  // last, but the scan is fence-aware so that a sentence quoting a marker
+  // inside a code block is not read as one.
+  let support = -1;
+  let divergence = -1;
+  let content = -1;
+  let fenceChar = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const fence = lines[i].match(/^[ \t]*(`{3,}|~{3,})/);
+    if (fence) {
+      if (fenceChar === null) {
+        fenceChar = fence[1][0];
+        if (content === -1 && CONTENT_FENCE_RE.test(lines[i])) content = i;
+      } else if (fence[1][0] === fenceChar) {
+        fenceChar = null;
+      }
+      continue;
+    }
+    if (fenceChar !== null) continue;
+    if (support === -1 && AI_SUPPORT_RE.test(lines[i])) support = i;
+    else if (divergence === -1 && AI_DIVERGENCE_RE.test(lines[i])) divergence = i;
+    else if (content === -1 && (CONTENT_MARKER_RE.test(lines[i]) || FROM_RE.test(lines[i]))) content = i;
+  }
+
+  const marks = [support, divergence, content].filter((i) => i !== -1);
+  const firstMark = marks.length > 0 ? Math.min(...marks) : lines.length;
+  const ordered = [support, divergence, content].filter((i) => i !== -1);
+  for (let i = 1; i < ordered.length; i += 1) {
+    if (ordered[i] < ordered[i - 1]) {
+      problems.push(
+        `${label} states its parts out of order: the sentence, then '**AI support.**', `
+        + "then '**AI divergence.**', then the content",
+      );
+      return empty;
+    }
+  }
+
+  const until = (start) => {
+    const after = [support, divergence, content].filter((i) => i > start);
+    return after.length > 0 ? Math.min(...after) : lines.length;
+  };
+  const strip = (start, re) => lines.slice(start, until(start)).join('\n').replace(re, '').trim();
+
+  const sentence = lines.slice(0, firstMark).join('\n').trim();
+  const aiSupport = support === -1 ? null : strip(support, AI_SUPPORT_RE);
+  const aiDivergence = divergence === -1 ? null : strip(divergence, AI_DIVERGENCE_RE);
+  if (content === -1) return { sentence, aiSupport, aiDivergence, content: null };
+
+  return {
+    sentence,
+    aiSupport,
+    aiDivergence,
+    content: parseOptionContent(lines.slice(content), label, problems),
+  };
+}
+
+/**
+ * The content half of one `#### <option>` subsection: the lines from its
+ * first marker on. Returns null, with a message, on anything that is not one
+ * of the two forms exactly.
+ *
+ * @param {string[]} lines
+ * @param {string} label
+ * @param {string[]} problems
+ * @returns {{form: 'whole', text: string}|{form: 'change', from: string, diff: string}|null}
+ */
+function parseOptionContent(lines, label, problems) {
+  const shapeFail = (why) => {
+    problems.push(`${label} content ${why}`);
+    return null;
+  };
+  let i = 0;
+  const skipBlank = () => { while (i < lines.length && lines[i].trim() === '') i += 1; };
+  skipBlank();
+  if (i < lines.length && CONTENT_MARKER_RE.test(lines[i])) {
+    // A '**Content.**' paragraph may head the content and says nothing the
+    // fence does not; a line of prose beside it would, and is refused.
+    if (lines[i].replace(CONTENT_MARKER_RE, '').trim() !== '') {
+      return shapeFail("carries prose beside its '**Content.**' heading");
+    }
+    i += 1;
+    skipBlank();
+  }
+
+  let from = null;
+  const fromMatch = i < lines.length ? lines[i].match(FROM_RE) : null;
+  if (fromMatch) {
+    from = fromMatch[1];
+    i += 1;
+    skipBlank();
+  }
+
+  const opener = i < lines.length ? lines[i].match(CONTENT_FENCE_RE) : null;
+  if (opener === null) {
+    return shapeFail(
+      from === null
+        ? 'must be one fenced ```markdown block holding the node as it would stand, or a `From: <option>` line and one fenced ```diff block'
+        : `names '${from}' as its base and must follow it with one fenced \`\`\`diff block`,
+    );
+  }
+  const language = opener[1];
+  if (from === null && language !== 'markdown') {
+    return shapeFail('is held whole and must be fenced ```markdown, not ```diff');
+  }
+  if (from !== null && language !== 'diff') {
+    return shapeFail(`is a named change against '${from}' and must be fenced \`\`\`diff, not \`\`\`markdown`);
+  }
+
+  i += 1;
+  const body = [];
+  while (i < lines.length && !CLOSING_FENCE_RE.test(lines[i])) {
+    body.push(lines[i]);
+    i += 1;
+  }
+  if (i >= lines.length) return shapeFail('opens a fenced block that is never closed');
+  i += 1;
+  for (; i < lines.length; i += 1) {
+    if (lines[i].trim() !== '') return shapeFail('carries text beside its fenced block');
+  }
+
+  // Every content in this record ends in a newline: the hunks are line
+  // oriented and `applyStrict` refuses a base that does not.
+  const text = `${body.join('\n').replace(/\n+$/, '')}\n`;
+  return from === null ? { form: 'whole', text } : { form: 'change', from, diff: text };
 }
 
 // ---------------------------------------------------------------------------
@@ -1097,6 +1394,99 @@ export function surveyJudges(graph) {
 // ---------------------------------------------------------------------------
 // one node file
 // ---------------------------------------------------------------------------
+
+/**
+ * Read every `#### <option>` subsection of a node in the content encoding
+ * and check what the encoding requires of it: every option of the answer
+ * fact says its own sentence; from the review stage on, every one of them
+ * carries its content; content held whole parses as a node answering the
+ * same question, carrying none of the dialogue's own keys and no
+ * `## Facts`; a named change names another option of the same fact; and the
+ * whole resolution is acyclic with every hunk applying exactly.
+ *
+ * Mutates each option of the per-node facts with what it read; pushes one
+ * message per problem.
+ *
+ * @param {Array<object>} facts - the parsed facts, prose already attached.
+ * @param {{id: string, graph: string, slug: string, path: string}} ctx
+ * @param {string|null} question - the node's own question.
+ * @param {string|null} stage
+ * @param {string[]} problems
+ */
+function parseContentOptions(facts, ctx, question, stage, problems) {
+  for (const fact of facts) {
+    if (!PER_NODE_FACT_SET.has(fact.name)) continue;
+    for (const option of fact.options) {
+      const label = `fact '${fact.name}' option '${option.name}'`;
+      const parsed = parseOptionSubsection(option.prose, label, problems);
+      option.sentence = parsed.sentence;
+      option.aiSupport = parsed.aiSupport;
+      option.aiDivergence = parsed.aiDivergence;
+      option.content = parsed.content;
+    }
+  }
+
+  const answerFact = facts.find((f) => f.name === ANSWER_FACT) ?? null;
+  if (answerFact !== null) {
+    for (const option of answerFact.options) {
+      const label = `fact 'answer' option '${option.name}'`;
+      if (option.sentence.trim() === '') {
+        problems.push(`${label} states no sentence of its own in its '#### ${option.name}' subsection`);
+      }
+      // Content is owed from the review stage on, which is where a reading
+      // reads what each option would make the node say; below it an option
+      // may still be a name and a sentence.
+      if ((stage === 'review' || stage === 'ruling') && option.content === null) {
+        problems.push(
+          `stage ${stage} requires every answer option to carry its content; ${label} carries none`,
+        );
+      }
+    }
+  }
+
+  // Content held whole is a node, and is parsed as one -- structurally only,
+  // exactly as a '## Recommendation' fence is, since a draft may be invalid
+  // under the doctrine of the day. A named change names an option of the
+  // same fact, and the resolution it opens is walked below.
+  const unresolvable = new Set();
+  for (const fact of facts) {
+    if (!PER_NODE_FACT_SET.has(fact.name)) continue;
+    for (const option of fact.options) {
+      const content = option.content;
+      if (content === null) continue;
+      const label = `fact '${fact.name}' option '${option.name}'`;
+      if (content.form === 'whole') {
+        parseFence(content.text, question, ctx, problems, {
+          display: `${label} content`,
+          path: `${fact.name}/${option.name}`,
+        });
+      } else if (!fact.options.some((o) => o.name === content.from)) {
+        problems.push(
+          `${label} content is a change from '${content.from}', which is not an option of the '${fact.name}' fact`,
+        );
+        unresolvable.add(`${fact.name}\n${option.name}`);
+      }
+    }
+  }
+
+  // The resolution itself, walked once per option and written onto it: a
+  // cycle, a base carrying no content of its own, or a hunk that does not
+  // apply is a problem naming the option it was found on. An option whose
+  // base is not an option at all is left alone -- the message above already
+  // says so, and saying it twice is not a second defect.
+  const resolvable = { id: ctx.id, facts };
+  for (const fact of facts) {
+    if (!PER_NODE_FACT_SET.has(fact.name)) continue;
+    for (const option of fact.options) {
+      if (option.content === null || unresolvable.has(`${fact.name}\n${option.name}`)) continue;
+      try {
+        option.resolved = resolveOptionContent(resolvable, fact.name, option.name);
+      } catch (err) {
+        problems.push(err.message.replace(`${ctx.id}: `, ''));
+      }
+    }
+  }
+}
 
 /**
  * Parse and validate a single node file's text (frontmatter + body).
@@ -1521,6 +1911,35 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     }
   }
 
+  // Which encoding this node is written in, and -- in the content encoding
+  // -- what each option's subsection holds. `nodeEncoding` reads the four
+  // struck sections and `stands` off the node, so it is asked here, once the
+  // body has been parsed and before anything is hashed.
+  const encoding = nodeEncoding({
+    answer: sections.Answer,
+    rationale: sections.Rationale,
+    disposition: sections.Disposition,
+    fence: hasFenceSection ? {} : null,
+    facts,
+  });
+  if (encoding === 'content') {
+    parseContentOptions(facts, { id, graph, slug, path: relPath }, question, stage, problems);
+  } else {
+    // `stands` is the legacy encoding's, and a node with none of the four
+    // struck sections is otherwise in the content encoding, so a `stands`
+    // there is the one thing keeping it in an encoding it has left. It is
+    // named as such rather than only reported as a `## Answer` that is
+    // missing, which is what the legacy rule below sees.
+    const struck = STRUCK_SECTIONS.every((name) => sections[name] === null);
+    const standing = facts.find((f) => f.stands !== null) ?? null;
+    if (struck && standing !== null) {
+      problems.push(
+        `fact '${standing.name}' carries 'stands', which the content encoding struck: this node carries none of `
+        + `${STRUCK_SECTIONS.map((n) => `'## ${n}'`).join(', ')}, and there the confirmed option is read off the rulings`,
+      );
+    }
+  }
+
   if (hasAnswer && form === null) {
     problems.push("'form' is required when the body has an '## Answer' section");
   }
@@ -1562,7 +1981,13 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   }
   const recommends = answerFact === null ? null : answerFact.recommends;
   const stands = answerFact === null ? null : answerFact.stands;
-  const fenceExpected = recommends !== null && (stands === null || stands !== recommends);
+  // The fence is the legacy encoding's: there, one section holds the whole
+  // recommended node where the recommended option is not the standing one.
+  // In the content encoding every option carries its own content and no
+  // option's text has a privileged place, so a recommendation asks for no
+  // section of its own -- which is what struck '## Recommendation'.
+  const fenceExpected = encoding === 'legacy'
+    && recommends !== null && (stands === null || stands !== recommends);
   if (fenceExpected && !hasFenceSection) {
     problems.push(
       stands === null
@@ -1622,9 +2047,13 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   // its fact's recommendation hash and a review pins the node's, so both
   // are computed from the same parts the node itself exposes.
   const hashParts = {
+    id,
+    question,
+    encoding,
     fmText,
     answer: sections.Answer,
     rationale: sections.Rationale,
+    disposition: sections.Disposition,
     fence: fenceText === null ? null : { raw: fenceText },
     facts,
     review,
@@ -1671,6 +2100,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     answerFact,
     probes,
     review,
+    encoding,
     // A `review` carrying only the survey's pin has no draft verdict for a
     // move to overtake, so `reviewStale` is asked only where a draft review
     // was actually recorded; `surveyStale` is its counterpart on the other
@@ -1693,6 +2123,76 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     account: sections.Account,
     disposition: sections.Disposition,
   };
+}
+
+// ---------------------------------------------------------------------------
+// the answer, in either encoding
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip whole top-level keys from a node file's raw frontmatter text, by
+ * line: the named key and every line nested under it. Operates on the source
+ * text rather than the parsed mapping so that what a node wrote -- its key
+ * order, its quoting, its wrapping -- survives.
+ *
+ * @param {string} fmText
+ * @param {string[]} keys
+ * @returns {string}
+ */
+function stripFrontmatterKeys(fmText, keys) {
+  const keyRe = new RegExp(`^(${keys.join('|')}):`);
+  let skipping = false;
+  return String(fmText)
+    .split('\n')
+    .filter((line) => {
+      if (/^\S/.test(line)) {
+        skipping = keyRe.test(line);
+        return !skipping;
+      }
+      return !skipping;
+    })
+    .join('\n')
+    .replace(/\n+$/, '');
+}
+
+/**
+ * The node as its answer would have it stand, whole: frontmatter, its
+ * `## Answer`, and, where it has one, its `## Rationale`.
+ *
+ * In the content encoding that is the resolved content of the confirmed
+ * option -- the option carrying the most recent confirming ruling -- and,
+ * where none is confirmed, of the option the answer fact recommends. In the
+ * legacy encoding it is the `## Recommendation` fence's text where the
+ * recommendation differs from what stands, and otherwise the standing node
+ * as a fence would hold it: the frontmatter without the dialogue's own keys
+ * (`FENCE_FORBIDDEN_KEYS`) and without the facts, then the two sections.
+ *
+ * Null where the node has no answer at all, which is the state of most of
+ * this record: no confirmed and no recommended option in the content
+ * encoding, and no `## Answer` in the legacy one.
+ *
+ * @param {object} node - a node as `parseNode`/`readGraph` returns it.
+ * @returns {string|null}
+ */
+export function answerText(node) {
+  if ((node?.encoding ?? nodeEncoding(node)) === 'content') {
+    const fact = factByName(node, ANSWER_FACT);
+    if (fact === null) return null;
+    const name = confirmedOption(node, ANSWER_FACT) ?? fact.recommends;
+    if (name === null || name === undefined) return null;
+    const option = fact.options.find((o) => o.name === name) ?? null;
+    if (option === null || option.content === null) return null;
+    return resolveOptionContent(node, ANSWER_FACT, name);
+  }
+
+  if (node?.fence && typeof node.fence.raw === 'string') return node.fence.raw;
+  if (node?.answer === null || node?.answer === undefined) return null;
+  const fm = stripFrontmatterKeys(node.fmText ?? '', FENCE_FORBIDDEN_KEYS);
+  const parts = [`---\n${fm}\n---`, `## Answer\n\n${node.answer}`];
+  if (node.rationale !== null && node.rationale !== undefined) {
+    parts.push(`## Rationale\n\n${node.rationale}`);
+  }
+  return `${parts.join('\n\n')}\n`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1817,15 +2317,31 @@ function authorBlockquotes(text) {
 export function deriveMechanicalFindings(node, byId = null) {
   const findings = [];
 
+  // A node built by hand, rather than read from a file, carries no
+  // `encoding` and is read as legacy, which is what it has always been.
+  const encoding = node.encoding === 'content' ? 'content' : 'legacy';
+
   for (const fact of node.facts || []) {
     for (const option of fact.options || []) {
       if (option.status === 'passed' && !option.reason) {
         findings.push(`fact '${fact.name}' option '${option.name}' carries status: passed with no reason`);
       }
-      if (option.prose && /passed over/i.test(option.prose) && option.status !== 'passed') {
+      // The option's own sentence, which in the content encoding is the
+      // prose before the first marker and not the whole subsection: what
+      // follows it there is the AI's support and divergence and the option's
+      // content, where "passed over" may be quoted rather than claimed.
+      const said = encoding === 'content' ? option.sentence : option.prose;
+      if (said && /passed over/i.test(said) && option.status !== 'passed') {
         findings.push(`fact '${fact.name}' option '${option.name}' prose says "passed over", but the option carries no status: passed`);
       }
-      if (option.source === 'author' && option.ref) {
+      if (option.source === 'author' && encoding === 'content') {
+        // The content encoding's analogue of the '## Disposition' check
+        // below: the author's words are in the ledger, and an option they
+        // raised carries the address of the entry that raised it.
+        if ((option.supports || []).length === 0 && (option.diverges || []).length === 0) {
+          findings.push(`fact '${fact.name}' option '${option.name}' is source: author but carries neither 'supports' nor 'diverges', so no words of the author's reach it`);
+        }
+      } else if (option.source === 'author' && option.ref) {
         if (COMMIT_HASH_RE.test(option.ref)) {
           findings.push(`fact '${fact.name}' option '${option.name}' is source: author with ref ${option.ref}, a graph commit hash rather than the date '## Disposition' quotes the author under`);
         } else if (!authorEntries(node.disposition).some((e) => e.date === option.ref)) {
@@ -2077,6 +2593,46 @@ export async function readGraph(rootDir) {
     }
   }
 
+  // The ledger of the author's words: one entry per quotation, kept once
+  // under `<rootDir>/words/` and referenced from the options it supports or
+  // diverges from (commons.systems/disposition-graph/quotes). A graph whose
+  // options reference no entry needs no ledger; one whose options do
+  // reference entries needs every reference to resolve.
+  let words = new Map();
+  const ledgerDir = path.join(rootDir, 'words');
+  const hasLedger = await pathIsDirectory(ledgerDir);
+  if (hasLedger) {
+    try {
+      words = await readWords(rootDir);
+    } catch (err) {
+      problems.push(`words/: ${err.message}`);
+    }
+  }
+  const referenced = new Set();
+  for (const node of parsed) {
+    for (const fact of node.facts) {
+      for (const option of fact.options) {
+        for (const key of OPTION_WORDS_KEYS) {
+          for (const ref of option[key]) {
+            referenced.add(ref);
+            if (!hasLedger) {
+              problems.push(
+                `${node.path}: fact '${fact.name}' option '${option.name}' ${key} names ${ref}, `
+                + "but this graph has no 'words/' ledger",
+              );
+              continue;
+            }
+            try {
+              resolveReference(words, ref);
+            } catch (err) {
+              problems.push(`${node.path}: fact '${fact.name}' option '${option.name}' ${key}: ${err.message}`);
+            }
+          }
+        }
+      }
+    }
+  }
+
   // The class a node's rulings confer decides whether it owes the dialogue a
   // stage: an unanswered node carries the whole dialogue, a deferred node
   // stays on the alignment frontier until the author returns to it, and a
@@ -2207,11 +2763,21 @@ export async function readGraph(rootDir) {
     })
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
+  // An entry no option anywhere references is a finding and not a problem:
+  // the ledger is append-only and an entry waits in it, addressable, until a
+  // sitting attaches it to an option (commons.systems/disposition-graph/quotes,
+  // the retention rule). Reported on the graph rather than on a node, since
+  // it is on no node that the entry is missing.
+  const findings = unreferencedEntries(words, referenced)
+    .map((entry) => `the ledger entry ${entry.address} is referenced by no option`);
+
   return {
     module: manifest.module,
     ref: isAbsent(manifest.ref) ? null : manifest.ref,
     graphs: manifest.graphs,
     nodes,
+    words,
+    findings,
   };
 }
 

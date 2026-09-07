@@ -4,8 +4,12 @@
 // CLI: node packages/disposition/validate.mjs [rootDir] [--strict]
 //
 // Validates the disposition graph rooted at rootDir (default: cwd). Exits 0
-// and prints "ok: N nodes" to stdout on success, followed by one
-// `finding: <node id>: <text>` line per mechanical finding any node carries
+// and prints "ok: N nodes" to stdout on success, then one
+// "encodings: legacy L, content C" line saying how many node files are
+// written in each of the two encodings the reader accepts (`nodeEncoding`),
+// followed by one `finding: <node id>: <text>` line per mechanical finding
+// any node carries, and one `finding: <text>` line per finding the graph
+// itself carries (an unreferenced entry of the ledger of the author's words)
 // (`read.mjs`'s `deriveMechanicalFindings` -- never a parse error, so a node
 // with one still validates); on a graph that does not parse, prints every
 // validation problem to stderr and exits 1. `--strict` turns a run that
@@ -30,9 +34,21 @@ export async function validate(rootDir) {
         findings.push(`finding: ${node.id}: ${text}`);
       }
     }
-    return { ok: true, message: `ok: ${graph.nodes.length} nodes`, findings };
+    // The graph's own findings carry no node: an unreferenced ledger entry
+    // is missing from every option and belongs to none.
+    for (const text of graph.findings || []) {
+      findings.push(`finding: ${text}`);
+    }
+    const legacy = graph.nodes.filter((n) => n.encoding !== 'content').length;
+    const content = graph.nodes.length - legacy;
+    return {
+      ok: true,
+      message: `ok: ${graph.nodes.length} nodes`,
+      encodings: `encodings: legacy ${legacy}, content ${content}`,
+      findings,
+    };
   } catch (err) {
-    return { ok: false, message: err.message, findings: [] };
+    return { ok: false, message: err.message, encodings: null, findings: [] };
   }
 }
 
@@ -48,10 +64,12 @@ if (isMain) {
     process.exitCode = 1;
   } else if (strict && result.findings.length > 0) {
     console.error(result.message);
+    console.error(result.encodings);
     for (const line of result.findings) console.error(line);
     process.exitCode = 1;
   } else {
     console.log(result.message);
+    console.log(result.encodings);
     for (const line of result.findings) console.log(line);
     process.exitCode = 0;
   }

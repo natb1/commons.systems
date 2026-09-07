@@ -1,0 +1,5 @@
+module: example.test
+ref: disposition
+graphs:
+  main:
+    about: fixtures for the content encoding, beside one node in the legacy one

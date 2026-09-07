@@ -35,7 +35,9 @@ import {
 } from './derive.mjs';
 import { glossary, optionText } from './derive.mjs';
 import {
-  defineTerms, deriveMechanicalFindings, parseNode, readGraph, readyToRule, surveyJudges, surveyOwed, surveyStale,
+  answerText, confirmedOption, defineTerms, deriveMechanicalFindings, nodeEncoding, parseNode,
+  parseOptionSubsection, readGraph, readyToRule, resolveOptionContent, surveyJudges, surveyOwed,
+  surveyStale,
 } from './read.mjs';
 import { validate } from './validate.mjs';
 
@@ -2218,8 +2220,9 @@ describe('validate.mjs', () => {
     assert.equal(status, 0);
     const lines = stdout.trim().split('\n');
     assert.equal(lines[0], 'ok: 8 nodes');
-    assert.equal(lines.length, 2);
-    assert.match(lines[1], /^finding: example\.test\/main\/root-b:/);
+    assert.equal(lines[1], 'encodings: legacy 8, content 0');
+    assert.equal(lines.length, 3);
+    assert.match(lines[2], /^finding: example\.test\/main\/root-b:/);
   });
 
   test('CLI exits 1 and prints problems to stderr on an invalid fixture', () => {
@@ -2233,8 +2236,9 @@ describe('validate.mjs', () => {
     assert.equal(status, 0);
     const lines = stdout.trim().split('\n');
     assert.equal(lines[0], 'ok: 6 nodes');
-    assert.equal(lines.length, 7, 'one "ok" line plus six finding lines');
-    assert.ok(lines.slice(1).every((l) => l.startsWith('finding: example.test/main/')));
+    assert.equal(lines[1], 'encodings: legacy 6, content 0');
+    assert.equal(lines.length, 8, 'one "ok" line, one encodings line, and six finding lines');
+    assert.ok(lines.slice(2).every((l) => l.startsWith('finding: example.test/main/')));
   });
 
   test('CLI --strict exits 1 and prints "ok" plus every finding on stderr when any finding stands', () => {
@@ -2243,19 +2247,20 @@ describe('validate.mjs', () => {
     assert.equal(stdout, '');
     const lines = stderr.trim().split('\n');
     assert.equal(lines[0], 'ok: 6 nodes');
-    assert.equal(lines.length, 7);
+    assert.equal(lines[1], 'encodings: legacy 6, content 0');
+    assert.equal(lines.length, 8);
   });
 
   test('CLI --strict exits 1 on the valid fixture too: its one finding is still a finding', () => {
     const { stderr, status } = runCli(VALIDATE_MJS, [VALID_DIR, '--strict']);
     assert.equal(status, 1);
-    assert.match(stderr, /^ok: 8 nodes\nfinding: example\.test\/main\/root-b:/);
+    assert.match(stderr, /^ok: 8 nodes\nencodings: legacy 8, content 0\nfinding: example\.test\/main\/root-b:/);
   });
 
   test('CLI --strict exits 0 on a graph with no findings at all', () => {
     const { stdout, status } = runCli(VALIDATE_MJS, [path.join(FIXTURES, 'valid-order'), '--strict']);
     assert.equal(status, 0);
-    assert.match(stdout, /^ok: \d+ nodes\n?$/);
+    assert.match(stdout, /^ok: \d+ nodes\nencodings: legacy \d+, content \d+\n?$/);
   });
 
   test('CLI --strict never turns a parse failure into anything but the ordinary exit 1', () => {
@@ -2278,3 +2283,363 @@ describe('read.mjs CLI', () => {
     assert.equal(graph.module, 'example.test');
   });
 });
+
+// ---------------------------------------------------------------------------
+// the content encoding
+//
+// The encoding of 2026-09-07, which the reader accepts beside the legacy one
+// until the migration has run: every option of the answer fact carries its
+// own content, whole or as a named change against another option's resolved
+// content, and `## Answer`, `## Recommendation`, `## Rationale`,
+// `## Disposition` and `stands` are struck.
+// ---------------------------------------------------------------------------
+
+const CONTENT_DIR = path.join(FIXTURES, 'content');
+
+describe('nodeEncoding', () => {
+  test('content is the absence of the four struck sections and of stands', () => {
+    assert.equal(nodeEncoding({ facts: [] }), 'content');
+    assert.equal(nodeEncoding({ facts: [{ name: 'answer', options: [], stands: null }] }), 'content');
+  });
+
+  test('any one of the five puts the node in the legacy encoding', () => {
+    assert.equal(nodeEncoding({ answer: 'Ans.', facts: [] }), 'legacy');
+    assert.equal(nodeEncoding({ rationale: 'Because.', facts: [] }), 'legacy');
+    assert.equal(nodeEncoding({ disposition: 'The author, 2026-09-07: ...', facts: [] }), 'legacy');
+    assert.equal(nodeEncoding({ fence: { raw: 'FENCE' }, facts: [] }), 'legacy');
+    assert.equal(nodeEncoding({ facts: [{ name: 'answer', options: [], stands: 'standing' }] }), 'legacy');
+  });
+});
+
+describe('parseOptionSubsection', () => {
+  const problems = [];
+
+  test('the sentence is everything before the first marker, and each accumulation may run over paragraphs', () => {
+    const parsed = parseOptionSubsection([
+      'The option, in one sentence.',
+      '',
+      'Still the sentence, in a second paragraph.',
+      '',
+      '**AI support.** Measured at 28%.',
+      '',
+      'And a second paragraph of support.',
+      '',
+      '**AI divergence.** It costs a resolution.',
+    ].join('\n'), "fact 'answer' option 'x'", problems);
+    assert.deepEqual(problems, []);
+    assert.equal(parsed.sentence, 'The option, in one sentence.\n\nStill the sentence, in a second paragraph.');
+    assert.equal(parsed.aiSupport, 'Measured at 28%.\n\nAnd a second paragraph of support.');
+    assert.equal(parsed.aiDivergence, 'It costs a resolution.');
+    assert.equal(parsed.content, null);
+  });
+
+  test('a sentence alone is a whole subsection', () => {
+    const parsed = parseOptionSubsection('Just the sentence.', "fact 'answer' option 'x'", problems);
+    assert.deepEqual(problems, []);
+    assert.deepEqual(parsed, {
+      sentence: 'Just the sentence.', aiSupport: null, aiDivergence: null, content: null,
+    });
+  });
+
+  test('the parts out of order are refused rather than re-ordered', () => {
+    const found = [];
+    const parsed = parseOptionSubsection([
+      'The sentence.',
+      '',
+      '**AI divergence.** First.',
+      '',
+      '**AI support.** Second.',
+    ].join('\n'), "fact 'answer' option 'x'", found);
+    assert.equal(found.length, 1);
+    assert.match(found[0], /states its parts out of order/);
+    assert.equal(parsed.content, null);
+  });
+
+  test('a change is fenced diff and a whole is fenced markdown, never the other way round', () => {
+    const found = [];
+    parseOptionSubsection([
+      'The sentence.', '', 'From: base', '', '```markdown', 'text', '```',
+    ].join('\n'), "fact 'answer' option 'x'", found);
+    assert.equal(found.length, 1);
+    assert.match(found[0], /is a named change against 'base' and must be fenced ```diff/);
+
+    const found2 = [];
+    parseOptionSubsection([
+      'The sentence.', '', '**Content.**', '', '```diff', '@@ -1 +1 @@', '-a', '+b', '```',
+    ].join('\n'), "fact 'answer' option 'x'", found2);
+    assert.equal(found2.length, 1);
+    assert.match(found2[0], /is held whole and must be fenced ```markdown/);
+  });
+
+  test('a fence that is never closed, and text beside a closed one', () => {
+    const unclosed = [];
+    parseOptionSubsection(['S.', '', '```markdown', 'text'].join('\n'), 'o', unclosed);
+    assert.match(unclosed[0], /opens a fenced block that is never closed/);
+
+    const beside = [];
+    parseOptionSubsection(['S.', '', '```markdown', 'text', '```', '', 'and more prose'].join('\n'), 'o', beside);
+    assert.match(beside[0], /carries text beside its fenced block/);
+  });
+});
+
+describe('the content fixture graph', () => {
+  test('reads four nodes, three in the content encoding and one beside them in the legacy one', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    assert.equal(graph.nodes.length, 4);
+    const encodings = Object.fromEntries(graph.nodes.map((n) => [n.slug, n.encoding]));
+    assert.deepEqual(encodings, {
+      confirmed: 'content', ladder: 'content', 'legacy-beside': 'legacy', 'two-wholes': 'content',
+    });
+  });
+
+  test('an option parses into its sentence, its two accumulations, and its content', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    const node = graph.nodes.find((n) => n.slug === 'two-wholes');
+    const [ledger, copies] = node.facts[0].options;
+
+    assert.match(ledger.sentence, /^One ledger of the author's words on the ref/);
+    assert.match(ledger.aiSupport, /^Measured over the record, 28%/);
+    assert.match(ledger.aiDivergence, /^It puts a second kind of file/);
+    assert.equal(ledger.content.form, 'whole');
+    assert.match(ledger.content.text, /^---\nquestion: Where are the author's words kept\?/);
+    assert.ok(ledger.content.text.endsWith('\n'), 'every content ends in a newline');
+
+    assert.equal(copies.aiSupport, null, 'an option may record divergence and no support');
+    assert.match(copies.aiDivergence, /^It multiplies the duplication/);
+    assert.deepEqual(ledger.supports, ['words/2026-09-07/1']);
+    assert.deepEqual(ledger.diverges, []);
+    assert.deepEqual(copies.diverges, ['words/2026-09-07/1']);
+  });
+
+  test('a ladder of three resolves rung by rung, each hunk applying exactly', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    const node = graph.nodes.find((n) => n.slug === 'ladder');
+    const [first, second, third] = node.facts[0].options;
+    assert.equal(first.content.form, 'whole');
+    assert.equal(second.content.form, 'change');
+    assert.equal(second.content.from, 'the-judged-node-is-carried-once');
+    assert.equal(third.content.from, 'the-mechanical-tier-gates-the-launch');
+
+    const one = resolveOptionContent(node, 'answer', first.name);
+    const two = resolveOptionContent(node, 'answer', second.name);
+    const three = resolveOptionContent(node, 'answer', third.name);
+    assert.ok(two.startsWith(one.replace(/\n$/, '')), 'the second rung is the first plus a clause');
+    assert.ok(three.startsWith(two.replace(/\n$/, '')), 'the third is the second plus a clause');
+    assert.match(three, /The mechanical tier runs before the reading/);
+    assert.match(three, /The survey judges what has moved since it last pinned the node/);
+    assert.equal(third.resolved, three, 'the reader resolves each option once and writes it onto the option');
+  });
+
+  test('confirmedOption and answerText read the answer off the rulings, not off the recommendation', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    const node = graph.nodes.find((n) => n.slug === 'confirmed');
+    assert.equal(confirmedOption(node, 'answer'), 'the-confirmed-one');
+    assert.equal(node.facts[0].recommends, 'the-recommended-one');
+    assert.match(answerText(node), /From the option carrying the most recent confirming ruling/);
+    assert.equal(answerText(node), resolveOptionContent(node, 'answer', 'the-confirmed-one'));
+    assert.equal(confirmedOption(node, 'authority'), null, 'no ruling on the authority fact confirms anything');
+  });
+
+  test('with nothing confirmed the answer is the recommended option, and with neither it is null', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    const ladder = graph.nodes.find((n) => n.slug === 'ladder');
+    assert.equal(confirmedOption(ladder, 'answer'), null);
+    assert.equal(answerText(ladder), resolveOptionContent(ladder, 'answer', 'the-delta-survey'));
+
+    const nothing = { encoding: 'content', facts: [{ name: 'answer', options: [], recommends: null }] };
+    assert.equal(answerText(nothing), null);
+  });
+
+  test('a legacy node beside them keeps its own behaviour: prose, stands, and the standing text', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    const node = graph.nodes.find((n) => n.slug === 'legacy-beside');
+    assert.equal(node.encoding, 'legacy');
+    assert.equal(node.facts[0].stands, 'read-it-as-it-stands');
+    assert.equal(node.facts[0].options[0].content, null, 'a legacy option carries no content');
+    assert.equal(node.facts[0].options[0].sentence, '', 'a legacy option says itself in prose');
+
+    const text = answerText(node);
+    assert.match(text, /^---\nquestion: What does the reader do with a node written the old way\?/);
+    assert.match(text, /\n## Answer\n\nIt reads it as it stands/);
+    assert.ok(!text.includes('facts:'), 'the facts are not part of the text that would stand');
+    assert.ok(!text.includes('stage:'), "nor is the dialogue's own state");
+  });
+
+  test("answerText on a legacy node with a fence is the fence's own text", async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-sentences'));
+    const node = graph.nodes.find((n) => n.fence !== null);
+    assert.ok(node, 'the fixture carries a node whose recommendation differs from what stands');
+    assert.equal(answerText(node), node.fence.raw);
+  });
+
+  test('the mechanical finding on an author-sourced option is the ledger one in the content encoding', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    const ladder = graph.nodes.find((n) => n.slug === 'ladder');
+    assert.deepEqual(ladder.findings, [
+      "fact 'answer' option 'the-delta-survey' is source: author but carries neither 'supports' nor 'diverges', so no words of the author's reach it",
+    ]);
+    const wholes = graph.nodes.find((n) => n.slug === 'two-wholes');
+    assert.deepEqual(wholes.findings, [], 'an author-sourced option that cites the ledger raises none');
+  });
+
+  test('the ledger is loaded onto the graph, and an entry no option references is a finding', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    assert.equal(graph.words.size, 2);
+    assert.match(graph.words.get('words/2026-09-07/1').text, /kept in a ledger outside the graph/);
+    assert.deepEqual(graph.findings, ['the ledger entry words/2026-09-07/2 is referenced by no option']);
+  });
+
+  test('validate prints the encodings line and both kinds of finding', async () => {
+    const result = await validate(CONTENT_DIR);
+    assert.equal(result.ok, true);
+    assert.equal(result.message, 'ok: 4 nodes');
+    assert.equal(result.encodings, 'encodings: legacy 1, content 3');
+    assert.deepEqual(result.findings, [
+      "finding: example.test/main/ladder: fact 'answer' option 'the-delta-survey' is source: author but carries neither 'supports' nor 'diverges', so no words of the author's reach it",
+      'finding: the ledger entry words/2026-09-07/2 is referenced by no option',
+    ]);
+  });
+});
+
+describe('the content encoding: what the pin covers', () => {
+  test('editing a base the recommended option resolves through moves the pin; editing AI support does not', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    const node = graph.nodes.find((n) => n.slug === 'ladder');
+    const before = deriveRecommendationHash(node);
+    const factBefore = deriveFactRecommendationHash(node, node.facts[0]);
+
+    node.facts[0].options[2].aiSupport = 'Rewritten, at length, and it weighs the same option the same way.';
+    node.facts[0].prose = 'The reason for the recommendation, rewritten.';
+    node.facts[0].options[0].aiDivergence = 'A divergence recorded on a rung nobody recommends.';
+    assert.equal(deriveRecommendationHash(node), before, 'the accumulations and the reason are not the recommendation');
+    assert.equal(deriveFactRecommendationHash(node, node.facts[0]), factBefore);
+
+    // The base of the base: the recommended option resolves through it, so
+    // its content is part of what the recommendation says.
+    const base = node.facts[0].options[0];
+    base.content.text = base.content.text.replace('form: rule', 'form: assumption');
+    for (const option of node.facts[0].options) {
+      option.resolved = resolveOptionContent(node, 'answer', option.name);
+    }
+    assert.notEqual(deriveRecommendationHash(node), before, 'the recommended content changed with its base');
+  });
+
+  test('a ruling is no part of the content encoding\'s pin', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    const node = graph.nodes.find((n) => n.slug === 'confirmed');
+    const before = deriveFactRecommendationHash(node, node.facts[0]);
+    assert.equal(node.facts[0].options[0].ruling.of, before, "the fixture's own ruling pins what stands");
+    node.facts[0].options[0].ruling = null;
+    assert.equal(deriveFactRecommendationHash(node, node.facts[0]), before);
+  });
+});
+
+describe('the content encoding: what the validator refuses', () => {
+  const cases = [
+    ['invalid-content-cycle', /fact 'answer' option 'first' resolves through a cycle: first -> second -> first/],
+    ['invalid-content-missing-base', /fact 'answer' option 'only-option' content is a change from 'no-such-option', which is not an option of the 'answer' fact/],
+    ['invalid-content-hunk', /fact 'answer' option 'change' does not apply to 'base': applyStrict: hunk 1, base line 5:/],
+    ['invalid-content-words-unresolved', /fact 'answer' option 'only-option' supports: unresolved words reference 'words\/2026-09-07\/9'/],
+    ['invalid-content-stands', /fact 'answer' carries 'stands', which the content encoding struck/],
+  ];
+
+  for (const [dirName, pattern] of cases) {
+    test(`${dirName} fails validation with a path-prefixed message`, async () => {
+      await assert.rejects(readGraph(path.join(FIXTURES, dirName)), (err) => {
+        assert.match(err.message, pattern);
+        for (const line of err.message.split('\n')) {
+          assert.match(line, /^main\/[\w.-]+\.md: /);
+        }
+        return true;
+      });
+    });
+  }
+
+  test('every answer option says its own sentence, and carries its content from the review stage on', () => {
+    const head = [
+      '---',
+      'question: What?',
+      'facts:',
+      '  - name: answer',
+      '    options:',
+      '      - name: first',
+      '        source: ai',
+      '        ref: "2026-09-07"',
+      '    recommends: first',
+      '    boldness: low',
+      '  - name: authority',
+      '    options:',
+      '      - name: ratified',
+      '      - name: delegated',
+      '    recommends: ratified',
+      '    boldness: low',
+    ];
+    const silent = [...head, 'stage: maieutic', '---', '', '## Facts', '', '### answer', '', 'Why.', '', '#### first', '', '## Account', '', 'Open.', ''].join('\n');
+    assert.throws(() => parseNode(silent, loc2), /fact 'answer' option 'first' states no sentence of its own/);
+
+    const noContent = [...head, 'stage: review', '---', '', '## Facts', '', '### answer', '', 'Why.', '', '#### first', '', 'The one option, said in a sentence.', '', '## Account', '', 'Open.', ''].join('\n');
+    assert.throws(
+      () => parseNode(noContent, loc2),
+      /stage review requires every answer option to carry its content; fact 'answer' option 'first' carries none/,
+    );
+  });
+
+  test('content held whole is parsed as a node: same question, no dialogue keys, no facts', () => {
+    const build = (fence) => [
+      '---',
+      'question: What?',
+      'stage: maieutic',
+      'facts:',
+      '  - name: answer',
+      '    options:',
+      '      - name: first',
+      '        source: ai',
+      '        ref: "2026-09-07"',
+      '  - name: authority',
+      '    options:',
+      '      - name: ratified',
+      '      - name: delegated',
+      '---',
+      '',
+      '## Facts',
+      '',
+      '### answer',
+      '',
+      'Why.',
+      '',
+      '#### first',
+      '',
+      'The one option, said in a sentence.',
+      '',
+      '**Content.**',
+      '',
+      '```markdown',
+      ...fence,
+      '```',
+      '',
+      '## Account',
+      '',
+      'Open.',
+      '',
+    ].join('\n');
+
+    assert.throws(
+      () => parseNode(build(['---', 'question: Something else?', '---', '## Answer', '', 'Text.']), loc2),
+      /fact 'answer' option 'first' content answers a different question/,
+    );
+    assert.throws(
+      () => parseNode(build(['---', 'question: What?', 'stage: review', '---', '## Answer', '', 'Text.']), loc2),
+      /fact 'answer' option 'first' content carries 'stage', which belongs to the node/,
+    );
+    assert.throws(
+      () => parseNode(build(['---', 'question: What?', '---', '## Answer', '', 'Text.', '', '## Facts', '', '### answer']), loc2),
+      /fact 'answer' option 'first' content carries a '## Facts' section/,
+    );
+    // The same text, with none of the three, parses.
+    const ok = parseNode(build(['---', 'question: What?', '---', '## Answer', '', 'Text.']), loc2);
+    assert.equal(ok.encoding, 'content');
+    assert.equal(ok.facts[0].options[0].resolved, '---\nquestion: What?\n---\n## Answer\n\nText.\n');
+  });
+});
+
+const loc2 = { id: 'm/g/s', graph: 'g', slug: 's', path: 'g/s.md' };

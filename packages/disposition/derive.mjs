@@ -40,6 +40,21 @@ import { createHash } from 'node:crypto';
  * @property {string|null} reason - why it was passed over; carried exactly
  *   where `status` is.
  * @property {string} prose - the option's `#### <name>` subsection text.
+ * @property {string[]} supports - the ledger addresses of the author's words
+ *   that support this option (`words/<YYYY-MM-DD>/<n>`); empty where none.
+ * @property {string[]} diverges - the ledger addresses of the author's words
+ *   that diverge from it.
+ * @property {string} sentence - content encoding: the option's own sentence,
+ *   the prose of its `#### ` subsection before the first marker. '' on a
+ *   legacy node, whose option sentence is `prose`.
+ * @property {string|null} aiSupport - content encoding: the `**AI support.**`
+ *   paragraphs, the marker removed.
+ * @property {string|null} aiDivergence - content encoding: the same for
+ *   `**AI divergence.**`.
+ * @property {{form: 'whole', text: string}|{form: 'change', from: string,
+ *   diff: string}|null} content - content encoding: the node as it would
+ *   stand under this option, whole or as a named change against another
+ *   option of the same fact.
  */
 
 /**
@@ -89,6 +104,14 @@ const PER_NODE_FACT_SET = new Set(PER_NODE_FACTS);
  *   `## Answer` section, or null when it has none.
  * @property {string|null} [rationale]
  * @property {{raw: string}|null} [fence] - the `## Recommendation` fence.
+ * @property {string|null} [disposition] - raw `## Disposition` text; read
+ *   only by `nodeEncoding`, which counts it as one of the four struck
+ *   sections.
+ * @property {string} [question]
+ * @property {'legacy'|'content'} [encoding] - which encoding the node file
+ *   is written in, as `parseNode` derives it with `nodeEncoding`. Absent is
+ *   read as `legacy`, so a node object built by hand keeps the behaviour it
+ *   has always had.
  * @property {string|null} [stage]
  */
 
@@ -507,6 +530,84 @@ export function deriveCeiling(nodeId, nodesById) {
 }
 
 // ---------------------------------------------------------------------------
+// the two encodings
+//
+// A node file is written in one of two encodings, and the reader accepts
+// both until the migration has run.
+//
+// `legacy` is the encoding of 2026-09-04: the node's answer is the
+// `## Answer` section, the option it belongs to is named by the answer
+// fact's `stands`, a recommendation that differs from it is held whole in a
+// `## Recommendation` fence, its argument is `## Rationale`, and the
+// author's words are `## Disposition`.
+//
+// `content` is the encoding of 2026-09-07
+// (commons.systems/disposition-graph/dialogue, the option
+// `an-option-carries-its-content-its-words-and-its-case`): every option of
+// the answer fact carries its own content, whole or as a named change
+// against another option's resolved content, in its `#### <option>`
+// subsection under `## Facts`; the four sections above are struck, `stands`
+// with them, and the answer is the resolved content of the confirmed
+// option, where none is confirmed of the option the fact recommends.
+// ---------------------------------------------------------------------------
+
+/**
+ * Which encoding a node is written in: `content` when it carries none of
+ * the four sections the content encoding struck (`## Answer`,
+ * `## Recommendation`, `## Rationale`, `## Disposition`) and no fact carries
+ * `stands`, and `legacy` otherwise. Read off the node itself, never stored
+ * in the file: the encoding is a fact about the shape a node already has.
+ *
+ * A `## Recommendation` section is read here as `fence`, which `parseNode`
+ * fills exactly where that section is present.
+ *
+ * @param {DeriveNode & {disposition?: string|null}} node
+ * @returns {'legacy'|'content'}
+ */
+export function nodeEncoding(node) {
+  const present = (v) => v !== null && v !== undefined;
+  if (present(node?.answer) || present(node?.rationale)) return 'legacy';
+  if (present(node?.disposition) || present(node?.fence)) return 'legacy';
+  if ((node?.facts ?? []).some((f) => present(f?.stands))) return 'legacy';
+  return 'content';
+}
+
+/* The encoding the *hashes* and the mechanical findings work under. It reads
+ * the `encoding` field `parseNode` writes rather than re-deriving it, so
+ * that a node object built by hand -- a caller's, a test's -- keeps the
+ * legacy behaviour it has always had unless it says otherwise. Every node
+ * that came through the reader carries the field. */
+function encodingOf(node) {
+  return node?.encoding === 'content' ? 'content' : 'legacy';
+}
+
+/**
+ * The option one fact's rulings confirm: the one carrying the most recent
+ * `ruling` whose `response` is `confirm`, by the ruling's own date, or null
+ * where no ruling on the fact confirms anything. Nothing is stored for it --
+ * the confirmed option is read off the rulings, as the class is
+ * (commons.systems/disposition-graph/authority).
+ *
+ * Two confirmations on one date are a validator problem, not a tie broken
+ * here; this returns the first of them in the fact's own option order.
+ *
+ * @param {DeriveNode} node
+ * @param {string} factName
+ * @returns {string|null}
+ */
+export function confirmedOption(node, factName) {
+  const fact = factByName(node, factName);
+  if (fact === null) return null;
+  let best = null;
+  for (const option of fact.options ?? []) {
+    const ruling = option?.ruling ?? null;
+    if (ruling === null || ruling.response !== 'confirm') continue;
+    if (best === null || String(ruling.date) > String(best.ruling.date)) best = option;
+  }
+  return best === null ? null : best.name;
+}
+
+// ---------------------------------------------------------------------------
 // the hashes: what stands, and what is recommended
 // ---------------------------------------------------------------------------
 
@@ -602,8 +703,60 @@ export function deriveStandingHash(node) {
  * @param {Fact} fact
  * @returns {string} 40-hex sha1, or '' when `recommends` is absent.
  */
+/**
+ * The hash one fact's ruling pins on a node in the *content* encoding: the
+ * node's question; the fact's name, `recommends`, `boldness` and `against`;
+ * every option's name, source, ref, status, reason, `supports` and
+ * `diverges`, in the fact's option order and rulings excluded; and, on the
+ * answer and persistence facts, the recommended option's sentence and its
+ * resolved content.
+ *
+ * What that leaves out is what the pin must not move for: an option's AI
+ * support or divergence, the fact's own reason prose, the account, and the
+ * content of any option the fact does not recommend. What it reaches through
+ * is the resolution -- editing a base option the recommended option resolves
+ * through changes the recommended content, so the pin moves.
+ *
+ * @param {DeriveNode} node
+ * @param {Fact} fact
+ * @returns {string} 40-hex sha1
+ */
+function contentFactRecommendationHash(node, fact) {
+  const parts = [
+    node?.question ?? '',
+    fact.name,
+    fact.recommends,
+    fact.boldness ?? '',
+    fact.against ?? '',
+  ];
+  for (const option of fact.options ?? []) {
+    parts.push(
+      option?.name ?? '',
+      option?.source ?? '',
+      option?.ref ?? '',
+      option?.status ?? '',
+      option?.reason ?? '',
+      (option?.supports ?? []).join(','),
+      (option?.diverges ?? []).join(','),
+    );
+  }
+  if (PER_NODE_FACT_SET.has(fact.name)) {
+    const recommended = (fact.options ?? []).find((o) => o && o.name === fact.recommends) ?? null;
+    parts.push(recommended ? (recommended.sentence ?? '') : '');
+    // The content the recommended option resolves to, which `read.mjs`
+    // resolved once and wrote onto the option: hashing the resolution and
+    // not the hunks is what makes an edit to a base option that the
+    // recommended option resolves through move this pin. A resolution that
+    // failed is a validator problem on the node and leaves `resolved` null,
+    // which hashes as the empty string.
+    parts.push(recommended ? (recommended.resolved ?? '') : '');
+  }
+  return sha1(parts.join('\n'));
+}
+
 export function deriveFactRecommendationHash(node, fact) {
   if (!fact || fact.recommends === null || fact.recommends === undefined) return '';
+  if (encodingOf(node) === 'content') return contentFactRecommendationHash(node, fact);
   const recommended = (fact.options ?? []).find((o) => o && o.name === fact.recommends) ?? null;
   const parts = [
     fact.name,
@@ -629,7 +782,13 @@ export function deriveFactRecommendationHash(node, fact) {
  */
 export function deriveRecommendationHash(node) {
   const facts = node?.facts ?? [];
-  return sha1(facts.map((f) => `${f.name}\n${deriveFactRecommendationHash(node, f)}`).join('\n'));
+  const lines = facts.map((f) => `${f.name}\n${deriveFactRecommendationHash(node, f)}`);
+  // In the content encoding the question is part of what is recommended --
+  // an option's content answers it, and a fact that recommends nothing
+  // folds no question in -- so it is hashed here, where every node has one,
+  // rather than only inside each fact's own hash.
+  if (encodingOf(node) === 'content') return sha1([`question\n${node?.question ?? ''}`, ...lines].join('\n'));
+  return sha1(lines.join('\n'));
 }
 
 /**
