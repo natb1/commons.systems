@@ -246,7 +246,9 @@ with no line at the first level at all.
 
 ### answer
 
-Recommended because every settlement on it is the author's words applied where
+`the-details-carry-the-three-accumulations` is recommended since 2026-09-07: it is `three-marks-and-the-case-against` with the confirmed mark read as the derived label and the expanded details given their three accumulations and the preview beneath them, on the author's refinement of that day quoted under `## Disposition`; the first level is unchanged. Its own support and divergence are under its subsection, and what follows is the reason the text it amends was recommended on, which the amendment carries except where it says otherwise.
+
+`three-marks-and-the-case-against` was recommended because every settlement on it is the author's words applied where
 they fall, except one clause, which is the readings' and is named as theirs. The
 three marks are the author's list of 2026-09-04 with their answer of 2026-09-06
 in place of the chip it discharges. The merge of the standing and ruled marks is

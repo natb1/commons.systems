@@ -54,7 +54,7 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: moderate
-    against: "Delegated is live: the relations are the AI's readings, every reading on the record recommends delegated for itself, and the author may hold the rule of how tradition binds the record as loosely."
+    against: "Delegated is live: the relations are the AI's readings, each reading node recommends its own class for itself, and the author may hold the rule of how tradition binds the record as loosely."
 form: rule
 under:
   - commons.systems/disposition-graph/model
@@ -104,7 +104,9 @@ Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on t
 
 ### answer
 
-`relation-per-option` is recommended because it is the author's words of 2026-09-04, quoted above, it is what the reader and the fifty-nine readings on the record already carry, and it is what makes chosen over derivable rather than stored. Boldness moderate: the relation per option is the author's, while the derivation of chosen over, the reading as a node with its own class, and the deferral of the mount to the traditions-home node are the AI's. The case against is twofold. A reading per node multiplies files, and the queue effect of that is the cost the author will feel: every reading is a node with a stage, and the frontier grows by the readings owed. And the per-option relation binds a tradition's verdict to option names, which are the AI's handles and move under it as options are added, renamed, and composed, so that the option the author confirms can show no tradition beside it while a rival shows one; the answer meets that with the duty to re-point on every move and the review's finding where a recommended option stands unread.
+`the-relation-is-projected-onto-the-option-as-one-of-three` is recommended since 2026-09-07: it is `relation-per-option` with one sentence extended, that the derived inverse of what the readings bear is what the projections show on the option as the traditions' support and divergence, one of the three accumulations the author's words of that day require, `bears` staying on the reading. Its own support and divergence are under its subsection, and what follows is the reason the text it amends was recommended on, which the amendment carries except where it says otherwise.
+
+`relation-per-option` was recommended before the amendment because it is the author's words of 2026-09-04, quoted above, it is what the reader and the fifty-nine readings on the record already carry, and it is what makes chosen over derivable rather than stored. Boldness moderate: the relation per option is the author's, while the derivation of chosen over, the reading as a node with its own class, and the deferral of the mount to the traditions-home node are the AI's. The case against is twofold. A reading per node multiplies files, and the queue effect of that is the cost the author will feel: every reading is a node with a stage, and the frontier grows by the readings owed. And the per-option relation binds a tradition's verdict to option names, which are the AI's handles and move under it as options are added, renamed, and composed, so that the option the author confirms can show no tradition beside it while a rival shows one; the answer meets that with the duty to re-point on every move and the review's finding where a recommended option stands unread.
 
 #### relation-on-the-node
 
@@ -542,3 +544,7 @@ On the facts and what they recommend: The diff moves the `answer` fact's `recomm
 On the viability of the options: The three newly added options are each independently viable and reasoned against the record as it stands; nothing existing is invalidated. The one open defect is structural rather than viability-of-content: the `relation-per-option` subsection under Facts still violates the standing-option-omits-subsection rule the survey flagged, left unresolved pending `dialogue`'s ruling (finding 4), and the `incomplete-enumeration-in-facts` option's own text now conflicts with the redundancy finding's proposed remedy (finding 3).
 
 Strongest counter-argument (moderate): The amendment answers all ten of the previous reading's findings individually, with dated re-measurements and corrected prose, and adds a well-reasoned option responsive to the author's 2026-09-07 words about three-way accumulation; on that count it is thorough. The remaining gaps are narrow: two are drafting lag from the very last edit (the facts prose and against not yet updated to the new `recommends`), one is a pre-existing sentence the survey flagged but that this amendment's scope did not touch, and one is explicitly blocked on another node's ruling. None of them touches the substance of `## Answer`, which is what the author actually rules on, so a case exists for forwarding with these four as findings for the next amendment rather than a further kickback.
+
+### Repaired after the re-reading, 2026-09-07
+
+Two of the re-reading's four findings repaired on the main thread: the answer fact's reason names the option recommended since 2026-09-07, and the authority fact's case against no longer claims that every reading on the record recommends delegated for itself, the census the survey of 2026-09-07 found false. The two left open are the record's, not this amendment's: the hand counts the survey asked to be derived rather than written, which the concordance `survey-selection` calls for is the instrument of, and the subsection for the option that stands, which leaves with the encoding `dialogue` now recommends.

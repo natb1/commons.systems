@@ -50,6 +50,9 @@ facts:
         source: review
         ref: "2026-09-07"
 
+      - name: a-node-file-is-facts-and-account
+        source: review
+        ref: "2026-09-07"
     recommends: four-form-draft
     boldness: moderate
     stands: standing
@@ -146,6 +149,14 @@ The recommended `four-form-draft` says a proposal "is the alternative that arose
 #### answer-gloss-released-to-dialogue
 
 Everything the recommendation says, with this node's bare `defines` entry for `answer` released, so that the term is defined once, on `dialogue`, the node that reserves the four fact names and would carry the gloss. It is on the table because how-a-fact-is-headed's recommended answer requires the release by name — the bare entry here "does not qualify" as the target of a fact heading's link, and `definerIndex` takes the first definer it meets — so a ruling there writes on this node's `defines` list, and this is where the author rules on that. It acts on nothing until that node is ruled.
+
+#### a-node-file-is-facts-and-account
+
+A node is one question and the options its facts carry, each answer option holding the node as it would stand under it; its file is frontmatter, `## Facts` and `## Account`, and the sentence that a rationale says why and which alternatives were rejected is answered by the options' support and divergence.
+
+**AI support.** It is what `dialogue`'s recommended encoding of 2026-09-07 makes a node, raised by the clean-context reading of that node the same day as a finding on this one, since this node's answer and that one answer the same question two ways.
+
+**AI divergence.** This node defines a node for every graph and `dialogue` encodes an unanswered one; whether a node keeps its options' content after the confirmation is the recording node's, and this option reaches past it.
 
 ## Recommendation
 

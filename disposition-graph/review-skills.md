@@ -105,7 +105,9 @@ The author, 2026-09-07, on the sitting's units and the skills that carry them, s
 
 ### answer
 
-`two-skills-one-package` is recommended because it is the only option on the
+`the-survey-skill-launches-a-selected-reading` is recommended since 2026-09-07: it is `two-skills-one-package` with the survey skill's brief and launch steps amended for `survey-selection`, the tier gate, `--whole`, the frozen set and the pairs with their keys. Its own support and divergence are under its subsection, and what follows is the reason the text it amends was recommended on, which the amendment carries except where it says otherwise.
+
+`two-skills-one-package` was recommended before the amendment because it is the only option on the
 list that honours the author's words as they stand, two skills so that the
 telemetry tells the readings apart, and answers the question the author
 attached to them, how the common instructions avoid drift, without stating a

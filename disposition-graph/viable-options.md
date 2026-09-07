@@ -179,7 +179,9 @@ Why a projection and not a stamp: the record already stores the ruling on a fact
 
 ### answer
 
-`passed-over-options-stay` is recommended because the reason the author gave
+`confirmed-is-a-derived-label-and-every-option-carries-its-content` is recommended since 2026-09-07: it is `passed-over-options-stay` with two passages amended for the encoding `dialogue` now recommends, on the author's refinement and three answers of that day quoted under `## Disposition`: an option carries its content, its references to the author's words each way and the AI's accumulated support and divergence, the recommendation is the weighing of them, and the confirmed choice is a derived label, nothing being confirmed where no ruling confirms. Its own support and divergence are under its subsection, and what follows is the reason the text it amends was recommended on, which the amendment carries except where it says otherwise.
+
+`passed-over-options-stay` was recommended before the amendment because the reason the author gave
 for persisting options at all, regression, is the reason not to drop the
 dominated ones: a later session is at least as likely to re-propose a
 candidate the AI rejected as one it still holds viable, and version control is
