@@ -1,6 +1,6 @@
 ---
 question: How does the graph grow?
-stage: maieutic
+stage: review
 review:
   verdict: forward
   strength: strong

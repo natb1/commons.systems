@@ -33,6 +33,10 @@ bears:
     fact: answer
     option: per-fact-after-two-readings
     relation: adopted
+  - node: commons.systems/disposition-graph/where-a-change-request-goes
+    fact: answer
+    option: change-requests-go-to-the-kick-back
+    relation: diverged
 ---
 ## Answer
 

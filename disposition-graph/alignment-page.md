@@ -1,6 +1,6 @@
 ---
 question: What does the author read to rule?
-stage: maieutic
+stage: review
 probes:
   - id: unit-of-a-ruling
     asks: >-

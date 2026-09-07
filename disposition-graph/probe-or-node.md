@@ -1,6 +1,6 @@
 ---
 question: When is an open question a probe, an option, or a node?
-stage: maieutic
+stage: review
 probes:
   - id: a-delegable-review-finding-question
     asks: >-
@@ -30,6 +30,8 @@ probes:
       answered, since doubt resolves downward.
     source: ai
     raised: 2026-09-04
+    status: discharged
+    reason: the author answered it on 2026-09-07, under `## Disposition`, sending the question back to this node's own ruling test and holding that an intent which is a persistent disposition takes a node of its own
 facts:
   - name: answer
     options:
@@ -100,6 +102,10 @@ The author, 2026-09-06, making the prune grant standing rather than a grant give
 > - anything from the author (such as quotes) must be transferred to another node before prune
 >
 > Otherwise, pruning authority is granted to AI under general delegation of graph topology.
+
+The author, 2026-09-07, asked the open probe on this node as an edge case, a maieutic probe whose answer would be a delegation, and where that delegation is recorded:
+
+> what does the current disposition with guidance about recording meiutic probe vs. new node have to say about this (what is the AI recommendation)? That guidance probably answers this. If author's intent is a peristent disposition, then it may require a new node to be reconciled into the alignment skill.
 
 ## Answer
 
@@ -345,3 +351,17 @@ gives. Nothing else in the four tests moves. The node stays at the maieutic
 stage, a reading of the recommendation as it now stands is owed, and the gap the
 option names, which node holds the general delegation of graph topology, is
 still open.
+
+### The probe discharged on the author's words, 2026-09-07
+
+The probe `a-delegable-review-finding-question` was put to the author as an edge
+case: a maieutic probe whose answer is "do it your way, and do not ask me
+again", which is a delegation, and a delegation is a ruling on a fact that a
+probe does not have. The author sent the question back to this node's own
+rule, the ruling test, and added that an intent which is a persistent
+disposition may take a node of its own, to be reconciled into the alignment
+skill. That answers the probe's `why`: their words of 2026-09-04 on the review
+node, that review-finding questions are maieutic, were about where such a
+question is asked, the interview, and not a bar on the node that a delegation
+needs to land on. The recommendation does not move, since the ruling test
+already says so, and the probe is discharged with their words.
