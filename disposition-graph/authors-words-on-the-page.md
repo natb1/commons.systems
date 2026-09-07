@@ -1,7 +1,7 @@
 ---
 question: Where does the alignment page show the author's recorded words?
 form: rule
-stage: maieutic
+stage: review
 facts:
   - name: answer
     options:
@@ -76,9 +76,9 @@ review:
   verdict: kickback
   strength: strong
   date: 2026-09-07
-  of: 15f43f2819a6cd817ae1e61b943427f1bba75629
-  commit: b95923d74ddfae71ace27fae2a831f4e278e57c1
-  against: "One could read the account's own description — that this is a mechanical migration applying specific old/new text pairs from an external source document to the prior recommended text — as meaning the untouched paragraphs were simply not among the pairs that document specified, so the omission is a known, bounded step in a multi-step migration rather than a defect of judgment. That reading does not survive contact with the text itself: the fence as it stands would go to the author as 'the whole recommended node' under a ruling, and it currently asserts in one paragraph that matching is no longer by the option's `ref` and, two paragraphs later, evaluates the very same rows by whether their `ref` resolves to an entry — a contradiction inside the one document the author is asked to confirm, not merely an unfinished measurement."
+  of: 9dc9e687c066d9b5f6045c383e1be36951f7dc16
+  commit: d35b0014367874f0376fea8e271f1737b798857c
+  against: "One could read the account's framing of this as an ongoing, grant-authorized migration — the top-level Answer was rewritten to the new ledger/reference vocabulary and one Rationale paragraph was added arguing the new mechanism — as evidence that the remaining old-mechanism paragraphs inside the fence are simply the next, not-yet-reached step of a bounded multi-step edit, not a live defect. That does not survive contact with the text: the fence is what would be presented to the author as 'the whole recommended node' under a ruling, and it still opens by declaring the match 'not... by the option's `ref`' while, two paragraphs later, testing and describing behavior keyed on 'a `ref` names no entry' and reporting a coverage figure taken under that same superseded rule with no caveat — the exact contradiction the previous reading found, present in the document verbatim and unresolved by this repair."
   survey:
     date: 2026-09-07
     of: b41bd908254e08cdd52e3dd02a06a241d83a429c
@@ -128,12 +128,35 @@ periagogic movement "does not need to be played back in the alignment artifact
 expect as quotes supporting or refuting fact options", and a quotation on the row
 of the option it supports or refutes is the one form those words name.
 
-An entry is an entry of the ledger the quotes node keeps, `words/<date>/<n>`, the quotation verbatim with its date and one line of context, stored once on the ref; the projector's rule of a dated paragraph beginning "The author, <date>" under `## Disposition` (`AUTHOR_ENTRY_RE`, `authorEntries`, at implementation commit cb0e02c6) is what the migration under the author's grant of 2026-09-07 reads the ledger from and then retires.
+An entry is a dated paragraph beginning "The author, <date>" together with
+everything beneath it up to the next such paragraph, which is the projector's own
+rule (`AUTHOR_ENTRY_RE`,
+`packages/disposition/project.mjs:1405`, applied by `authorEntries` at `:1407`,
+at implementation commit cb0e02c6).
 An option's `ref` is the date the words were given, and the match is by that date
 alone: where a date carries more than one entry the row shows all of them, in the
-order of their dates and ordinals. The match `authorWordsFor` makes today (`packages/disposition/project.mjs` at cb0e02c6) is by the option's `ref` date alone, which is coarse — on this page's own parent fourteen of the twenty-five entries, at graph commit `ca46f7ff`, are dated 2026-09-04, so an option referring to that date carried all fourteen — and the reference is what refines it. What an option's `source`, `ref`, `supports` and `diverges` are is `commons.systems/disposition-graph/dialogue`'s question; this answer reads them and adds nothing to them.
+order the section keeps them, which is what `authorWordsFor` does today
+(`packages/disposition/project.mjs:1421-1427` at cb0e02c6). That is coarse and this answer
+does not refine it — on this page's own parent fourteen of the twenty-five
+entries, at graph commit `ca46f7ff`, are dated 2026-09-04, so an option referring
+to that date carries all fourteen. What an option's `source` and `ref` are is
+`commons.systems/disposition-graph/dialogue`'s question; this answer reads them
+and adds nothing to them. On this node the recommended option's own reference
+resolves to one entry, so the row the author rules on carries the sentence it
+rests on and nothing besides.
 
-Where a reference resolves to no entry of the ledger the row carries nothing for it, and the mismatch is a finding on the option rather than an occasion to quote; an option with no reference either way carries no words, and that is a fact the row shows and not a gap the page fills. The fallback the projector runs today goes with it: at `packages/disposition/project.mjs:1425` at cb0e02c6 a date matching nothing returns the whole `## Disposition`, which, shown under the label the row gives it, asserts as the ground of one option words that may bear on another option on the same fact — the whole-section playback the author's sentence releases the page from, wearing a per-option label — and converts a broken reference into a plausible render. The finding is raised by the graph's validator, which resolves every `supports` and `diverges` reference against the ledger, beside the check that already requires a `ref` on every option of an answer fact (`packages/disposition/read.mjs:496-499` at cb0e02c6), and it is listed by the frontier on the node that carries it. It is a finding and not a parse error, so the graph still
+Where a `ref` names no entry the row carries nothing for the author's words, and
+the mismatch is a finding on the option rather than an occasion to quote. The
+fallback the projector runs today goes with it: at
+`packages/disposition/project.mjs:1425` at cb0e02c6 a date matching nothing returns the whole
+`## Disposition`, which, shown under the label the row gives it, asserts as the
+ground of one option words that may bear on another option on the same fact —
+the whole-section playback the author's sentence releases the page from, wearing
+a per-option label — and converts a broken reference into a plausible render. The
+finding is raised by the graph's validator, beside the check that already
+requires a `ref` on every option of an answer fact
+(`packages/disposition/read.mjs:496-499` at cb0e02c6), and it is listed by the frontier on the
+node that carries it. It is a finding and not a parse error, so the graph still
 reads and still projects while the eleven are outstanding, on the reader's own
 principle that an attention rule never turns into one
 (`packages/disposition/read.mjs:1391-1394` at cb0e02c6). Both were owed when this answer was
@@ -143,9 +166,12 @@ what it raises. The direction is
 `commons.systems/disposition-graph/viable-options`' recommended text, which no
 ruling has reached and which this answer reads as direction rather than as
 doctrine: an option sourced to the author "carrying a graph commit where the date
-of the words should be is a finding and not a fact". A reference resolving to no entry is that same defect wearing the right shape, and a page that fills the gap with the whole section makes it unfindable. The converse defect is the one this option concedes: an entry that bears on an option and that no option references is a word the page does not show, and only the coverage query the quotes node's ledger makes possible, the entries no option anywhere references, brings it to a sitting's attention.
+of the words should be is a finding and not a fact". A reference resolving to no
+entry is that same defect wearing the right shape, and a page that fills the gap
+with the whole section makes it unfindable.
 
-What this costs was measured under the by-date match, at graph commit `62121b69`, re-taken there by the reading of 2026-09-07 from the measurement first made at `ec6e2300`, and is owed a re-measurement under the reference both ways once the migration has seeded the references from the `ref` dates, since the figures below count matches by date and not references. Of 143
+What this costs is measured, at graph commit `62121b69`, re-taken there by the
+reading of 2026-09-07 from the measurement first made at `ec6e2300`. Of 143
 nodes, 71 carry a `## Disposition`, holding 255 dated entries; 56 options are
 sourced to the author, of which 45 carry a reference naming at least one entry
 and 11 name none; the references reach 113 of the entries and miss 142, and reach
@@ -153,7 +179,10 @@ none at all on 39 of the 71 nodes. So on the
 day this answer is projected the page carries a minority of what the author has
 said to the record, and eleven rows carry nothing where a quotation is owed. That
 is the cost, and it is the reconciliation this answer owes rather than a reason
-to show the section. Three things discharge it: the eleven references are written; an entry that bears on a fact the record asks and that no option names is recorded as an option on that fact, sourced to the author and referencing the entry, which is the recording rule the author gave on 2026-09-07, which is what puts it on the page at the place it decides something; and an
+to show the section. Three things discharge it: the eleven references are
+written; an entry that bears on a fact the record asks and that no option names is
+recorded as an option on that fact, sourced to the author and referenced by its
+date, which is what puts it on the page at the place it decides something; and an
 entry that bears on no fact is left in the record, where the browser may yet
 render it. What the record does not do is show every entry beside every option to
 cure the arithmetic.
@@ -526,34 +555,11 @@ periagogic movement "does not need to be played back in the alignment artifact
 expect as quotes supporting or refuting fact options", and a quotation on the row
 of the option it supports or refutes is the one form those words name.
 
-An entry is a dated paragraph beginning "The author, <date>" together with
-everything beneath it up to the next such paragraph, which is the projector's own
-rule (`AUTHOR_ENTRY_RE`,
-`packages/disposition/project.mjs:1405`, applied by `authorEntries` at `:1407`,
-at implementation commit cb0e02c6).
+An entry is an entry of the ledger the quotes node keeps, `words/<date>/<n>`, the quotation verbatim with its date and one line of context, stored once on the ref; the projector's rule of a dated paragraph beginning "The author, <date>" under `## Disposition` (`AUTHOR_ENTRY_RE`, `authorEntries`, at implementation commit cb0e02c6) is what the migration under the author's grant of 2026-09-07 reads the ledger from and then retires.
 An option's references name the ledger entry and not the date alone, by the entry's ordinal within its date, so that a date carrying more than one entry is addressed entry by entry and one entry may be referenced by several options and by options on several nodes, in the
-order the section keeps them, which is what `authorWordsFor` does today
-(`packages/disposition/project.mjs:1421-1427` at cb0e02c6). That is coarse and this answer
-does not refine it — on this page's own parent fourteen of the twenty-five
-entries, at graph commit `ca46f7ff`, are dated 2026-09-04, so an option referring
-to that date carries all fourteen. What an option's `source` and `ref` are is
-`commons.systems/disposition-graph/dialogue`'s question; this answer reads them
-and adds nothing to them. On this node the recommended option's own reference
-resolves to one entry, so the row the author rules on carries the sentence it
-rests on and nothing besides.
+order of their dates and ordinals. The match `authorWordsFor` makes today (`packages/disposition/project.mjs` at cb0e02c6) is by the option's `ref` date alone, which is coarse — on this page's own parent fourteen of the twenty-five entries, at graph commit `ca46f7ff`, are dated 2026-09-04, so an option referring to that date carried all fourteen — and the reference is what refines it. What an option's `source`, `ref`, `supports` and `diverges` are is `commons.systems/disposition-graph/dialogue`'s question; this answer reads them and adds nothing to them.
 
-Where a `ref` names no entry the row carries nothing for the author's words, and
-the mismatch is a finding on the option rather than an occasion to quote. The
-fallback the projector runs today goes with it: at
-`packages/disposition/project.mjs:1425` at cb0e02c6 a date matching nothing returns the whole
-`## Disposition`, which, shown under the label the row gives it, asserts as the
-ground of one option words that may bear on another option on the same fact —
-the whole-section playback the author's sentence releases the page from, wearing
-a per-option label — and converts a broken reference into a plausible render. The
-finding is raised by the graph's validator, beside the check that already
-requires a `ref` on every option of an answer fact
-(`packages/disposition/read.mjs:496-499` at cb0e02c6), and it is listed by the frontier on the
-node that carries it. It is a finding and not a parse error, so the graph still
+Where a reference resolves to no entry of the ledger the row carries nothing for it, and the mismatch is a finding on the option rather than an occasion to quote; an option with no reference either way carries no words, and that is a fact the row shows and not a gap the page fills. The fallback the projector runs today goes with it: at `packages/disposition/project.mjs:1425` at cb0e02c6 a date matching nothing returns the whole `## Disposition`, which, shown under the label the row gives it, asserts as the ground of one option words that may bear on another option on the same fact — the whole-section playback the author's sentence releases the page from, wearing a per-option label — and converts a broken reference into a plausible render. The finding is raised by the graph's validator, which resolves every `supports` and `diverges` reference against the ledger, beside the check that already requires a `ref` on every option of an answer fact (`packages/disposition/read.mjs:496-499` at cb0e02c6), and it is listed by the frontier on the node that carries it. It is a finding and not a parse error, so the graph still
 reads and still projects while the eleven are outstanding, on the reader's own
 principle that an attention rule never turns into one
 (`packages/disposition/read.mjs:1391-1394` at cb0e02c6). Both were owed when this answer was
@@ -563,12 +569,9 @@ what it raises. The direction is
 `commons.systems/disposition-graph/viable-options`' recommended text, which no
 ruling has reached and which this answer reads as direction rather than as
 doctrine: an option sourced to the author "carrying a graph commit where the date
-of the words should be is a finding and not a fact". A reference resolving to no
-entry is that same defect wearing the right shape, and a page that fills the gap
-with the whole section makes it unfindable.
+of the words should be is a finding and not a fact". A reference resolving to no entry is that same defect wearing the right shape, and a page that fills the gap with the whole section makes it unfindable. The converse defect is the one this option concedes: an entry that bears on an option and that no option references is a word the page does not show, and only the coverage query the quotes node's ledger makes possible, the entries no option anywhere references, brings it to a sitting's attention.
 
-What this costs is measured, at graph commit `62121b69`, re-taken there by the
-reading of 2026-09-07 from the measurement first made at `ec6e2300`. Of 143
+What this costs was measured under the by-date match, at graph commit `62121b69`, re-taken there by the reading of 2026-09-07 from the measurement first made at `ec6e2300`, and is owed a re-measurement under the reference both ways once the migration has seeded the references from the `ref` dates, since the figures below count matches by date and not references. Of 143
 nodes, 71 carry a `## Disposition`, holding 255 dated entries; 56 options are
 sourced to the author, of which 45 carry a reference naming at least one entry
 and 11 name none; the references reach 113 of the entries and miss 142, and reach
@@ -576,10 +579,7 @@ none at all on 39 of the 71 nodes. So on the
 day this answer is projected the page carries a minority of what the author has
 said to the record, and eleven rows carry nothing where a quotation is owed. That
 is the cost, and it is the reconciliation this answer owes rather than a reason
-to show the section. Three things discharge it: the eleven references are
-written; an entry that bears on a fact the record asks and that no option names is
-recorded as an option on that fact, sourced to the author and referenced by its
-date, which is what puts it on the page at the place it decides something; and an
+to show the section. Three things discharge it: the eleven references are written; an entry that bears on a fact the record asks and that no option names is recorded as an option on that fact, sourced to the author and referencing the entry, which is the recording rule the author gave on 2026-09-07, which is what puts it on the page at the place it decides something; and an
 entry that bears on no fact is left in the record, where the browser may yet
 render it. What the record does not do is show every entry beside every option to
 cure the arithmetic.
@@ -598,88 +598,7 @@ words are retained, rolled up and dated is
 
 ## Rationale
 
-Recorded on the author's disposition of 2026-09-04, queued from the sitting on
-`commons.systems/disposition-graph/author-questions` and carried under
-`## Disposition`:
-
-> Whatever response is provided in periagoge it does not need to be played back
-> in the alignment artifact expect as quotes supporting or refuting fact options.
-
-The sentence releases the page from playing the author's response back and names
-one exception to the release, and this answer is that sentence with nothing added
-to either half. The exception is where the author's words live on the page:
-quotes, on options, supporting or refuting them. Its narrowing work is done by
-"supporting or refuting fact options" — the words the row shows are the words
-that bear on the option the row is, which is what fixes the quotation to the
-entries the reference names and leaves the row silent where it names none. The
-earlier draft kept the whole section on the page under a distinction between a
-playback and the record shown once at one remove; that distinction is the AI's
-word set against the author's, and on the author's own question about the author's
-own words it is not a ground.
-
-The later rule cuts the same way. On 2026-09-06 the author fixed the page's
-scope: "The scope of alignment artifact is limited to final confirmation and
-previews/read only indicators of other phases of the dialogue. All other
-information from the author is done via the `/align` session interview." That is a
-rule about what the page does with the author, and its direction is inward: the
-confirmation stays, and everything else about the author goes to the interview.
-Reading out of it a permission for the page to carry more of the author's words
-than their own sentence of 2026-09-04 allowed inverts it. Nothing is lost in the
-narrowing that a session cannot restore: the words stay in the node, unaltered,
-and the interview the rule names is where they are read whole.
-
-The coverage measurement is the strongest thing said against this answer, and it
-argues for the other remedy. That 121 of 222 entries are named by no option is a
-fact about the references and the options rather than about the page: an entry
-that bears on a fact the record asks and that no option names is an option the
-record has not yet recorded, and eleven references naming no entry are eleven
-defects this answer itself makes findable. Curing them by showing the section
-entire makes the projection the place to make up what the encoding has not done,
-which is the error `commons.systems/disposition-graph/evaluation` exists to catch,
-an incumbent fact doing the work of a design constraint: the section would be on
-the page because the references are thin, and it would still be on the page after
-they were thick. The cure the record's own machinery gives is cheap where the
-display is not — a reference is a date and an option is a sentence with a source —
-and it puts each of the author's words at the place where they decide something
-rather than in a column of prose the author scrolls past.
-
-Two traditions were surfaced and each is recorded as a reading bearing on this
-fact. `commons.systems/disposition-graph/bentham-publicity` is why the finding is
-part of this answer and not an accessory to it: publicity's rule, as that reading
-takes it, is against a recommender that "publishes some of its decisions and
-withholds others by its own measure", and under this answer it is the AI's
-references that decide which of the author's words the author sees, so the
-selection itself must be published — a reference naming no entry is a finding on
-the frontier and never a silent row. The reading is adopted on this option for
-that reason, and adopted on `section-folded-and-quotation-narrowed` too, that
-option being disclosure of another kind; the principle supports both and does not
-choose between them, and marking the option the recommendation left as a
-divergence would recruit the tradition for a choice made on the author's words.
-`commons.systems/disposition-graph/hansard-verbatim-record` supports this option
-in terms, within the scope it records, which is the option's row: "The first
-level is the option's sentence, its status and the mark on the recommendation …
-the second level, one step under it, is the full text of the fact, the author's
-words, the AI's case". This answer puts the author's words exactly there and
-nowhere else. The earlier draft read that reading's guard, that the second level
-is always present and one step away, at a node-level drill-down the reading never
-read; the extension is not made here, and the reading is cited only for what it
-says. Within that scope the answer departs from the reading's substitute guard in
-one case and says so: on an author-sourced option whose reference names no entry,
-the eleven at `ca46f7ff`, the author's words exist on the node and appear at
-neither level, by choice, the finding standing in place of a plausible render, so
-the omission is discoverable on the frontier and not on the row; the entry on
-that reading stays adopted on the rule and the departure is recorded here.
-
-The reach is bounded by where authority lies. The parent devolved this question
-and marks both clauses a ruling here reaches as standing only until this node
-rules; the account half of the same sentence is the parent's own, the right-hand
-column's reserve is the parent's and untouched, the browser is `projection`'s,
-and what a `source` and a `ref` mean is `dialogue`'s. In the parent's recommended
-text this answer narrows one clause, the option drill-down's third item, to the
-entries the reference names and no others, and strikes one, the author's words as
-a drill-down of the column.
-
-The reference both ways, in place of the match by date, is the author's refinement of 2026-09-07: the expanded details of an option show the history of the author's quotes that support and that contradict it, before and after confirmation, one quote referenced by several options. A match by date could show only what the option's `ref` names, on the one side, on the options whose source is the author; the reference names the entry, carries its side, and is written on any option, which is the only reading of the refinement under which a word against an option the AI recommends reaches the page at the row where it bears. The entries live in the ledger the quotes node recommends and are resolved from it, so that one quotation referenced from eight nodes is stored once; and the migration seeds the references from the `ref` dates, so that nothing the page shows today is lost on the day the match changes.
+The author's sentence of 2026-09-04 releases the page from playing the periagogic response back except as quotes supporting or refuting fact options, and their refinement of 2026-09-07 says what that exception is: the expanded details of an option show the history of the author's quotes that support and that contradict it, before and after confirmation, one quote referenced by several options, and anything that does not support the dialogue or the artifact is subject to accumulation. So the words are on the option rows and nowhere else, and each row shows both sides. The match is by reference and not by date because a match by date could show only what the option's `ref` names, on one side, on the options whose source is the author: the reference names the entry, carries its side, and is written on any option, which is the only reading of the refinement under which a word against an option the AI recommends reaches the page at the row where it bears. The entries live in the ledger the quotes node recommends and are resolved from it, so that one quotation referenced from eight nodes is stored once, and the migration seeds the references from the `ref` dates, so that nothing the page shows today is lost on the day the match changes. What this costs is stated in the answer: a reference is a claim the AI writes about the author's words, a word not referenced is a word not shown, and the coverage query is the only instrument that surfaces it. The alternative the record held before, a folded drill-down of the whole section, is passed over for the reason the standing text gives, that a section shown beside no control is a playback the author's sentence releases the page from.
 
 ```
 
@@ -987,3 +906,27 @@ On the viability of the options: The diff adds one new viable, recommended optio
 Strongest counter-argument (strong): One could read the account's own description — that this is a mechanical migration applying specific old/new text pairs from an external source document to the prior recommended text — as meaning the untouched paragraphs were simply not among the pairs that document specified, so the omission is a known, bounded step in a multi-step migration rather than a defect of judgment. That reading does not survive contact with the text itself: the fence as it stands would go to the author as 'the whole recommended node' under a ruling, and it currently asserts in one paragraph that matching is no longer by the option's `ref` and, two paragraphs later, evaluates the very same rows by whether their `ref` resolves to an entry — a contradiction inside the one document the author is asked to confirm, not merely an unfinished measurement.
 
 The session's reply: Validated on the main thread: the amendment of b95923d7 applied two quoted pairs to the recommended text and left the paragraphs written for matching by date, so the fence contradicted its own opening. Repaired in the commit that follows this reading: the entry is now a ledger entry addressed by date and ordinal, the mismatch paragraph is written for a reference that resolves to no entry, the coverage figure is marked as taken under the by-date rule and owed a re-measurement under the reference rule, the rationale argues the reference both ways, and the fact's case against carries the risk the option concedes, that a word the AI omitted to reference is a word the page does not show.
+
+### Clean-context re-reading, 2026-09-07, of 9dc9e687
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `the-words-are-referenced-both-ways-and-not-matched-by-date`.
+
+Findings:
+
+- ## Recommendation (fenced text): the previous reading's finding that the fence's opening paragraph ('It is not matched by the option's `ref` and not conditioned on the option's source being the author, which between them could show only words that support and only on an option the author raised, while the author's words of 2026-09-07 ask for the history both ways on every option.') contradicts the paragraphs that follow it is unanswered. The diff touches only the fence's closing Rationale paragraph; the fence's own '## Answer' body still reads, verbatim and unrevised: 'An entry is a dated paragraph beginning "The author, <date>" together with everything beneath it up to the next such paragraph, which is the projector's own rule (`AUTHOR_ENTRY_RE`, `packages/disposition/project.mjs:1405`, applied by `authorEntries` at `:1407`, at implementation commit cb0e02c6).' and 'Where a `ref` names no entry the row carries nothing for the author's words, and the mismatch is a finding on the option rather than an occasion to quote. The fallback the projector runs today goes with it: at `packages/disposition/project.mjs:1425` at cb0e02c6 a date matching nothing returns the whole `## Disposition`...'. This is exactly the contradiction the previous reading quoted; the amendment updated the same paragraphs in the top-level (non-fenced) '## Answer' section (to ledger-entry and reference language) but left the fenced Recommendation's copy on the superseded per-`ref`-date wording. The fence is the document that goes to the author as 'the whole recommended node'; as it stands it still asserts two incompatible mechanisms in one text.
+- ## Recommendation (fenced text), cost measurement: unanswered. The fence still reads 'What this costs is measured, at graph commit `62121b69`, re-taken there by the reading of 2026-09-07 from the measurement first made at `ec6e2300`. Of 143 nodes, 71 carry a `## Disposition`, holding 255 dated entries; 56 options are sourced to the author, of which 45 carry a reference naming at least one entry and 11 name none; the references reach 113 of the entries and miss 142, and reach none at all on 39 of the 71 nodes.' with no caveat that this is a by-date-`ref` measurement inherited from the superseded design. The caveat the amendment added ('What this costs was measured under the by-date match ... and is owed a re-measurement under the reference both ways once the migration has seeded the references from the `ref` dates, since the figures below count matches by date and not references.') was written only into the top-level '## Answer' section; the fence's copy of the same paragraph was left exactly as the previous reading quoted it.
+- ## Recommendation (fenced text), Rationale: only partially answered. One paragraph was appended at the very end of the fenced '## Rationale' ('The reference both ways, in place of the match by date, is the author's refinement of 2026-09-07: ... and the migration seeds the references from the `ref` dates, so that nothing the page shows today is lost on the day the match changes.'), and it does argue for the by-reference, both-ways design. But everything before it in the same fenced Rationale is still verbatim the old argument for `per-option-only` (by-date matching, support only) over `section-folded-and-quotation-narrowed`, unreconciled with the appended paragraph and with the fence's own unrevised '## Answer' body (finding above): the Rationale that would go to the author still argues for a mechanism the fence's own opening sentence says has been replaced.
+
+On the facts and what they recommend: The diff folds the conceded risk ('a reference is a claim the AI writes about the author's words, so a word the AI omitted to reference is a word the page does not show, and a word filed on the wrong side misrepresents the author to the author on the surface where they rule, which no validator can catch and only the coverage query surfaces') into the answer fact's `against`, answering the previous reading's fourth finding in full. It rewrites the top-level '## Answer' and its cost-measurement paragraph to ledger/reference language with an explicit re-measurement caveat, and appends one paragraph to the recommendation fence's Rationale arguing the by-reference design — but leaves the fence's own '## Answer' body and cost-measurement paragraph, and the bulk of its Rationale, as the unrevised per-`ref`-date text the previous reading quoted. `recommends`, `stands` (`per-option-only`), and boldness (`moderate`) are unchanged by this diff; the `review` block was rewritten to record the previous reading's actual verdict (kickback/strong) rather than the stale forward/none it carried mid-repair.
+
+On the viability of the options: The diff withdraws no option and adds none; the answer fact's viable options are the same set as before this repair, and the authority fact and its options are untouched, matching the previous reading's own assessment. The defect remains in the fence's internal consistency, not in what options are on the table.
+
+Strongest counter-argument (strong): One could read the account's framing of this as an ongoing, grant-authorized migration — the top-level Answer was rewritten to the new ledger/reference vocabulary and one Rationale paragraph was added arguing the new mechanism — as evidence that the remaining old-mechanism paragraphs inside the fence are simply the next, not-yet-reached step of a bounded multi-step edit, not a live defect. That does not survive contact with the text: the fence is what would be presented to the author as 'the whole recommended node' under a ruling, and it still opens by declaring the match 'not... by the option's `ref`' while, two paragraphs later, testing and describing behavior keyed on 'a `ref` names no entry' and reporting a coverage figure taken under that same superseded rule with no caveat — the exact contradiction the previous reading found, present in the document verbatim and unresolved by this repair.
+
+The session's reply: Validated on the main thread, and the finding is exactly right about the cause: the repair of d35b0014 replaced the first occurrence of each by-date passage, which on this node is the standing `## Answer`, the text of `per-option-only`, and not the fence, so the fence kept the old wording and the standing option's text was altered instead. Repaired in the commit that follows this reading: the standing `## Answer` and `## Rationale` restored to their text at b95923d7, and the reference-based passages written into the fence, whose rationale is now written whole for the option it recommends.
+
+### Repaired after the second re-reading, 2026-09-07
+
+The repair of d35b0014 had replaced the first occurrence of each by-date passage, which on this node is the standing `## Answer`, the text of `per-option-only`, and not the fence. Restored on the main thread: the standing `## Answer` and `## Rationale` as at b95923d7, and the reference-based passages written into the fence, whose rationale is written whole for the option it recommends. The node returns to review for the re-reading a kickback owes.
