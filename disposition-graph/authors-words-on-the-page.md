@@ -1,7 +1,7 @@
 ---
 question: Where does the alignment page show the author's recorded words?
 form: rule
-stage: maieutic
+stage: review
 facts:
   - name: answer
     options:
