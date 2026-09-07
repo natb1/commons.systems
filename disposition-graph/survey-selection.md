@@ -48,6 +48,7 @@ review:
   strength: weak
   date: 2026-09-07
   of: 5b7146faad57c25c3df6cb60385e71e93e559d50
+  commit: abb15a3e8dbf6291b4a07db98466c158ac0acbbe
   against: "The previous reading's own weak counter-argument -- that a delta reading of this node's file alone is never given the four newly minted reading-node files themselves, so a defect internal to one of them (a `bears` entry on the wrong option, or too thin a gloss to count as recording a tradition under `evaluation`'s rule) would not surface here -- still holds after this amendment: this reading, like the last, was given only survey-selection.md's own diff and text, not the minted reading nodes' content, and the newly added option's citation of `regression-test-selection`'s repaired reading is likewise unverifiable at this reading's scope. It is carried forward rather than re-raised as a new finding, since the amendment does not purport to close it."
 under:
   - commons.systems/disposition-graph/review-cost
