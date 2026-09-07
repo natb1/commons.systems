@@ -76,6 +76,9 @@ facts:
       - name: state-what-does-not-move-and-cite-review-cost
         source: review
         ref: "2026-09-05"
+      - name: counter-argument-per-fact
+        source: commons.systems/disposition-graph/what-an-option-row-carries
+        ref: "2026-09-06"
     recommends: pointers-for-what-grows-with-the-record
     boldness: moderate
     stands: standing
@@ -229,6 +232,21 @@ read whole, and the division of ownership this option draws puts the part a
 reader most needs on the node that prices it rather than on the node that
 defines the reading. Raised as the counter-argument of the readings of
 2026-09-05, twice, and recorded on the fact at the second.
+
+
+#### counter-argument-per-fact
+
+Everything the recommended option says, with a reading asked to return one
+counter-argument per fact rather than one for the node. Raised on
+`what-an-option-row-carries`, 2026-09-06, and moved here because what a reading
+returns is this node's shape and not the page's. Today a reading returns one
+counter-argument, which `caseAgainst` in the projector substitutes on the answer
+fact alone, so on every other fact of every node the row falls back to the AI's
+own line; a page rule that says the reader writes the first-level objection is
+therefore true of one row per node and false everywhere else. Against it: a
+reading asked for a line on every fact is a reading asked to argue where it may
+have nothing to say, and the price is paid on every fact of every node in a
+brief this node's own answer is trying to keep small.
 
 ### authority
 

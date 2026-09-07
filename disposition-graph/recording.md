@@ -93,6 +93,9 @@ facts:
       - name: earlier-stage-words-come-from-the-interview
         source: author
         ref: "2026-09-06"
+      - name: unopposed-sentence-versus-an-against-on-every-fact
+        source: commons.systems/disposition-graph/what-an-option-row-carries
+        ref: "2026-09-06"
     recommends: per-fact-after-two-readings
     boldness: moderate
     against: "Both readings must pin the recommendation as it stands before the author may answer a single row, so every ruling waits on two readings of the AI's own drafting, while the one judgment no instrument can check, whether a denial is about the options or about the ground, is made by the party the denial was aimed at."
@@ -329,6 +332,34 @@ rest of this answer's subject.
 Recorded and not applied: the conflict is with the author's words and the
 recommendation on this fact has not moved, so the node stays at the maieutic
 stage and the clause stands until this node's own sitting takes it.
+
+#### unopposed-sentence-versus-an-against-on-every-fact
+
+Everything the recommended option says, with one contradiction resolved that the
+record currently holds both sides of. This node's rule is that a recommendation
+going to the author unopposed must say that it does, and `alignment-page`
+projects it: "when the review found none the line says so, since the recording
+node requires a recommendation that goes alone to say that it does". But
+`dialogue`'s recommended text requires `against` on every recommendation, the
+AI's own case against it in one line, written when the recommendation is
+recorded. If that holds, no recommendation is ever unopposed in the record's own
+terms and the sentence can never truthfully fire; if the sentence is right, then
+`against` is not always owed.
+
+Raised by the sitting on `what-an-option-row-carries`, 2026-09-06, whose draft
+resolved it by calling the sentence false. That was a child ruling on a parent's
+doctrine and was withdrawn; the conflict is recorded here instead, on the node
+whose rule it is, and acts on nothing until the author rules. Measured the same
+day: 48 `against` fields stand against 237 recorded recommendations, which is
+back-fill debt against `dialogue`'s recommended text rather than evidence that
+the requirement is not meant.
+
+Three resolutions are visible and this option prefers none: the sentence means
+that no reader's counter-argument was returned, and says so in those words rather
+than claiming the recommendation is unopposed; or `against` is owed only where
+the AI has an objection it holds worth the author's time, and its absence is what
+the sentence reports; or the sentence goes, and the row simply carries whichever
+line exists.
 ### authority
 
 Ratified, at low boldness. This is the node that says what a ruling is and where it is written, so an error here is an error in every ruling the record will ever hold: a response mis-classified confers a class the author did not confer, a ruling recorded on the wrong option records a choice they did not make, and a recording that drops the wrong field loses the reason a question was closed. That is expensive, irreversible in the way a mis-recorded ruling is irreversible, and capture-shaped, which is the test the authority node's answer now states for escalating toward ratified, absorbed there on 2026-09-05 from the option this node sourced on 2026-09-04, and which the frontier applies across the nodes below it. Delegated would let the recommendation act on how the author's own words are read, which is the one thing a delegation cannot cover; deferred is on the fact because the record's classes are three and the author's third exit stays open, and it is what the author takes if they want the recommendation to act while the question stays before them. Boldness low because the class follows that test, stated in the skill and applied across the frontier, rather than the AI's judgment of this node alone.

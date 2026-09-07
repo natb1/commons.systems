@@ -1,7 +1,7 @@
 ---
 question: What does an option's row carry at the first level?
 form: rule
-stage: review
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -14,8 +14,13 @@ facts:
       - name: ai-case-against-on-the-row
         source: ai
         ref: "2026-09-06"
-      - name: counter-argument-per-fact
+      - name: unread-mark-where-no-reading-has-run
         source: review
+        ref: "2026-09-06"
+        status: passed
+        reason: "it is what the recommended option now does, having been folded into the answer rather than kept beside it"
+      - name: ai-line-until-a-reading-returns
+        source: ai
         ref: "2026-09-06"
       - name: keep-the-four-pills
         source: ai
@@ -35,7 +40,7 @@ facts:
         ref: "2026-09-06"
     recommends: three-marks-and-the-case-against
     boldness: moderate
-    against: "The line at the first level is then written by a party that has not read the node when the AI records its recommendation, so between the recording and the reading every recommendation on the page stands unopposed at the level the eye reads; the answer relies on `recording` forbidding a ruling in that window, which is a rule about when the author may act and not about what the page shows them while they wait."
+    against: "The row is then written by three different parties depending on the state of a reading, the reader where one returned a line, the parent's unresolved rule where a reading returned none, and this answer where no reading has run, and a reader of the page cannot tell which of the three they are looking at without knowing the node's stage; a single author, the AI, with its own case against always at the first level, is the one arrangement that is legible at a glance, and it is the arrangement the author's placement of the AI's reasoning happens to forbid."
     stands: three-marks-and-the-case-against
   - name: authority
     options:
@@ -53,10 +58,11 @@ facts:
     against: "Layout is reversible and cheap to get wrong, so deferred would let the recommendation act on the row while the author works the rest of the frontier; and a ratified ruling here stops any delegation from ever reaching the page's presentation, which is most of what this subtree decides."
 review:
   verdict: kickback
-  strength: strong
+  strength: moderate
   date: 2026-09-06
-  of: 9d5ee0ea9e49d0bf109ef9eb0bab9659cfc81e77
-  against: "The amendment answers the first and heaviest finding in the Answer and the Rationale and nowhere in the part of the node that a ruling executes. Sections 4.1 to 4.3 and 4.7 are the amendment to the parent that a ruling here carries out, and 4.2 there still says the node \"rules that they do not reach this line\", the exact contrary of the answer now standing, while the answer fact's own stated reason still reads \"What rests on the AI is the case against on the row\". So on the fact and in the executable sections the superseded answer is still the one recorded, and a reader who took the Answer's prose for the whole amendment would forward a node that would land the position it had just abandoned. Against the kickback: every failure but one is carry-through of an answer whose substance is right and well argued, and the one that is not — the authority paragraph — is a single phrase; the fix is drafting and not rethinking, which is why the stage is maieutic and why I would not have the answer itself redrawn."
+  of: f3108f0305303472ab87a158e8d4a4896b6bf866
+  commit: a86b9399a1b76e703f22a35aa45e01a6950b1881
+  against: "The answer's central move is that the AI never writes the first-level line where a reader's line is available, and the record can supply a reader's line on exactly one row of one fact per node: `caseAgainst` at packages/disposition/project.mjs:1381-1388 substitutes `review.against` only where `fact.name === \"answer\"`, and the review returns one counter-argument for the node. So the author's placement, which the answer says is \"honoured whole\", is honoured on one row per node and on no other, and on this node's own authority row the AI's words stay at the first level under an answer written to remove them. On the one row where the substitution does bite, what is removed is the recommending party's own admission of the weakness of its recommendation -- the argument it had to beat -- and what replaces it is a reader's objection that may bear on a different aspect entirely; `chenery-reasoned-decision`, that a decision stands on the reason its decider gave and not another's, and `bentham-publicity`, that a recommender withholding its own reasoning defeats publicity at the source, both cut against moving it out of first view. `scholastic-articulus`, which the answer leans on, says the substitution \"is weaker than the tradition's guarantee and the record should not pretend otherwise\", which is a warning about the reader's line and not a licence to drop the AI's."
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
@@ -143,18 +149,22 @@ place is the clean-context review's.
 Which line that is depends on what the reading returned for that fact, and the
 answer says so rather than leaving it to the projector. Where a reading has
 returned a counter-argument bearing on the fact, that is the line, with its
-strength and its date. Where it has not, the AI's own case against stands there
-after all, and it must: the alternative is a row that shows a recommendation the
-record holds a written objection to and either says nothing or says the
-recommendation goes unopposed, and the second of those is false in the record's
-own terms. So the rule is not that the AI never writes the line; it is that the
-AI never writes it where a reader's line is available, which is where the
-author's instruction bites, and that a recommendation the record has an objection
-to is never presented as though it had none. Today the reading returns one
-counter-argument for a node, attached to the answer, so in practice the answer
-fact carries the reader's line and every other fact carries the AI's; whether a
-reading should return one per fact is a question for the review's own cost and is
-recorded as the option `counter-argument-per-fact` rather than settled here.
+strength and its date. Where the reading has run and returned none, what the row
+says is not this node's to settle: `alignment-page` and `recording` prescribe a
+sentence saying the recommendation goes to the author unopposed, and `dialogue`'s
+recommended text requires an `against` on every recommendation, so a
+recommendation is never unopposed in the record's own terms and that sentence
+could never truthfully fire. The conflict is the parent's and is recorded as an
+option on `recording`, whose rule it is; this answer takes neither side and says
+only that whatever that sentence resolves to belongs at the first level, because
+the level the eye reads is where a case against does its work.
+
+Where no reading has run yet the row says that, and says nothing else: an unread
+mark, which is a fact about the node's stage and not an argument. That is the
+one case the answer settles for itself, and it settles it because the alternative
+is a row that either prints the AI's objection where the author placed it in the
+details or prints silence where the record has run no check at all, and silence
+there is the anchoring the parent's own paragraph exists to prevent.
 
 So the first level is never advocacy without opposition and the author's
 placement is honoured whole, which the answer this node first drafted could not
@@ -276,21 +286,27 @@ objection written by the recommending party has lost the guarantee the tradition
 gave it, so the line it keeps at the first level is the weaker of the two
 available.
 
-#### counter-argument-per-fact
+#### unread-mark-where-no-reading-has-run
 
-Everything the recommended option says, with the reading asked for one
-counter-argument per fact rather than one per node, so that the line at the first
-level is the reader's on every fact and never the AI's. Raised by the reading of
-2026-09-06, which found that `caseAgainst` substitutes the review's line only
-where the fact is the answer and falls back to the AI's on every other, so that
-this node's own authority row carries the AI's words at the first level under an
-answer that would forbid them. Viable and not adopted here, because what a
-reading returns is not this node's to decide: it is `clean-context-review`'s
-shape and `review-cost`'s price, and a reading asked for a line on every fact of
-every node is a reading asked to argue where it may have nothing to say. It is
-recorded so that a ruling for it here is available to the author, and so that the
-cardinality this answer works around is visible rather than buried in the
-projector.
+Everything the recommended option says, kept as a separate option rather than
+folded in: where no reading has run on the node, the recommended row carries a
+mark saying so and no argument. Passed over because the answer now says it, and
+an option that restates the recommendation is not a candidate the author chooses
+between; it is listed because the reading of 2026-09-06 raised it as the viable
+third answer the draft was missing, and a candidate the record considered does not
+leave the list silently.
+
+#### ai-line-until-a-reading-returns
+
+Everything the recommended option says, with the AI's own case against standing at
+the first level on any fact whose reading has not returned a line, instead of the
+unread mark, and giving way to the reader's line when one arrives. It is the only
+arrangement under which a row never shows a recommendation with nothing said
+against it, and it is legible without knowing the node's stage, which is the case
+this fact's `against` makes. Against it: the author placed the AI's reasoning in
+the details twice, and a rule that puts it back at the first level for the whole
+period before a reading returns puts it back for most of a node's life, since a
+recommendation is recorded before its reading is run.
 
 #### keep-the-four-pills
 
@@ -611,13 +627,17 @@ cardinality would be ruled, and it belongs to `clean-context-review` and
 
 #### 4.3 The drill-down paragraph, line 497
 
-Amended again on 2026-09-06, after the re-reading: the details list gains the
-thing this answer newly sends down. The AI's own case against joins the source
-and reference and the passed-over clause there, on every fact whose reader
-returned a counter-argument, and the drill-down says which of the two the row is
-carrying so that a reader who wants the AI's argument knows where it went. Where
-no reader's line exists the AI's stays at the first level and is not repeated
-below.
+Amended again on 2026-09-06, after the second reading. The preamble alone was not
+enough: the After text below must carry the addition, and the addition is that the
+details list gains the AI's own case against. Insert into the list of what the
+drill-down holds, after the passed-over clause, the words "and the AI's own case
+against the recommendation, in one line and at full strength, wherever the row's
+first level is not carrying it"; and add to the paragraph's close, "so that the
+AI's argument against its own recommendation is always in the record's projection
+and its place is decided by whether a reader's line has displaced it, never by
+whether it is shown at all." Without that insertion a ruling here would take the
+AI's line off the row and put it nowhere, which is what the reading found and
+which `hansard-verbatim-record` cuts against.
 
 **Before, line 497 (first sentence, the details list):**
 
@@ -690,9 +710,15 @@ node's answer fact: it moved on 2026-09-06 to
 `commons.systems/disposition-graph/where-the-unconfirmed-indication-goes`, with
 the question it answers, and a ruling there and not here is what would touch that
 paragraph. No other node is
-amended. `commons.systems/disposition-graph/dialogue` is satisfied as it stands,
-its rule that a projection show the confirmed choice first and say that it keeps
-its authority being what the confirmed mark discharges;
+amended. `commons.systems/disposition-graph/dialogue` is satisfied only if the confirmed
+mark says what that node requires said, and as drafted it did not: a mark reading
+"confirmed, <response>, <date>" records the ruling and says nothing about the
+choice keeping its authority, which is the very requirement on which
+`confirmed-mark-struck` is passed over. So the mark's text is fixed here and not
+left to the projector: it reads that this is the confirmed disposition and keeps
+its authority until the author rules for another, with the response and the date.
+That is one line, it is the sentence `dialogue` asks for, and it appears only
+where an option carries a ruling;
 `commons.systems/disposition-graph/viable-options` says the projections show the
 other options "with their status" and fixes no level for it, and its unmet
 requirement that a status be shown by the defining node's gloss travels with the
@@ -713,8 +739,10 @@ its fallback to `fact.against` elsewhere, and what the amendment adds is that th
 AI's line, where it is not shown at the first level, is rendered in the
 drill-down instead of dropped. The bare-name fallback in `renderOption` is
 untouched, since the parent's clause provides for the option the record holds no
-sentence for. In `packages/disposition/alignment-template.html` two pill classes go and
-one is renamed. The divergence the parent records at "The row's pills: the
+sentence for. In `packages/disposition/alignment-template.html` three pill classes go,
+`.pill.alt-src`, `.pill.alt-passed` and `.pill.alt-stands` at lines 201 to 205,
+of which the first two are re-declared for the drill-down rather than deleted
+outright, and `.pill.alt-ruled` is kept and carries the confirmed mark. The divergence the parent records at "The row's pills: the
 account of 2026-09-05 misread the fence" is closed by this ruling, not by the
 reconciliation that opened it.
 
@@ -870,3 +898,68 @@ locus; the ungrammatical prefix; and the missing subsection break.
 A kickback is a new answer, so this one owes a reading of its own, and it is the
 first of the two that answer gets. The two spent on the answer it replaces are
 spent.
+
+### Clean-context review, 2026-09-06, of f3108f03
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `three-marks-and-the-case-against`.
+
+Findings:
+
+- Answer, the fallback paragraph against the window paragraph (validation 1; the two contradict each other, and the fact's `against` argues from the loser). The fallback rule reads "Which line that is depends on what the reading returned for that fact... Where it has not, the AI's own case against stands there after all, and it must" (what-an-option-row-carries.md:143-147). The next paragraph reads "The window the answer relies on is named rather than hidden: between the moment a recommendation is recorded and the moment its reading returns, the row carries no line, and what makes that safe is that `recording` takes no ruling while a reading is owed" (:165-168). Under the fallback rule there is no such window: in that interval no reading has returned a counter-argument for the fact, so the AI's own case against is exactly what the row carries. The answer fact's `against` is the same superseded argument -- "between the recording and the reading every recommendation on the page stands unopposed at the level the eye reads; the answer relies on `recording` forbidding a ruling in that window" -- and it is the line the page prints at the first level against this very recommendation, so the objection the author would read is one the answer already refutes. This is the residue of the pre-amendment position, which the sweep of 2026-09-06 did not reach. Suggested edit: strike the window paragraph, and replace the fact's `against` with the case against the answer as it now stands -- that the AI's line survives at the first level on every fact but one, so the author's placement is honoured on one row per node and nowhere else.
+- Answer, the case-against paragraph against the fallback paragraph, and against `recording` (validation 2, doctrine, divergence not recorded). The first says the first level carries "the counter-argument the clean-context review returned, with the strength that reading gave it, and where the reading found none, the sentence saying the recommendation goes to the author unopposed" (:131-134), quoting the parent for it. The second says that where a reading "has not" returned a counter-argument bearing on the fact, "the AI's own case against stands there after all... the alternative is a row that shows a recommendation the record holds a written objection to and either says nothing or says the recommendation goes unopposed, and the second of those is false in the record's own terms" (:146-150). The two prescribe opposite things for the same case, and the second strikes a rule the record states twice: `recording`'s standing answer, "when the review found no strong counter-argument, the recommendation goes alone and says so", and its recommended text, "where the reading found none worth the author's time the row says so, because a recommendation that goes to the author unopposed must say that it goes unopposed". Since `dialogue`'s recommended text makes `against` a part of every fact, the AI's line is always available and the unopposed sentence could never appear on any row. Yet section 4.6 says "No other node is amended". Suggested edit: distinguish the two cases in the Answer -- a reading that has returned and found no counter-argument worth the author's time, where the unopposed sentence stands, from a reading not yet returned -- and where the AI's line displaces the unopposed sentence, record the divergence as an option on `commons.systems/disposition-graph/recording` rather than settling it here.
+- "What a ruling here would do to the parent's recommended text", 4.3, and the Account's claim that 4.3 was swept (validation 3, a claim about the node's own text; the re-reading's fifth finding not applied). 4.3's preamble says "the details list gains the thing this answer newly sends down. The AI's own case against joins the source and reference and the passed-over clause there... and the drill-down says which of the two the row is carrying so that a reader who wants the AI's argument knows where it went" (:614-620). The After text that follows (:636-647) gains the source and reference, the passed-over clause and the ruling's particulars, and does not gain the AI's case against: it still carries only the Before's "the AI's reason for recommending it, or for recommending another over it, and its reply to the case against", and says nothing about which of the two lines the row is carrying. The split sentence's After (:659-664) likewise still reads a bare "the case against" without saying whose, which the re-reading asked to be qualified. The Account nevertheless records the sweep as done: "the rest were carry-through and are swept: ... §4.3, whose details list gains the AI's case against, the thing the amendment newly sends down". Sections 4.1 to 4.3 are what a ruling executes, so as encoded a ruling here amends the parent to send the AI's case against off the row with no rule putting it anywhere -- dropped, not moved -- which is what the Answer forbids ("it goes down with the source and the passed-over clause and the rest of the explanation", :129-131), what 4.7 promises ("the AI's line, where it is not shown at the first level, is rendered in the drill-down instead of dropped"), and what the sibling reading `hansard-verbatim-record` sets as the test the second level must meet, that nothing folded is lost. Suggested edit: add to 4.3's After, in the details list, the AI's own case against on a fact whose first level carries the reader's line, with the clause saying which of the two the row shows; and qualify the split sentence's "the case against" as the reader's line where a reading returned one and the AI's where none has.
+- Answer, the confirmed mark, against `dialogue`, and section 4.6 (validation 2, doctrine). The mark is specified as "where the author has ruled for it, that it is the confirmed disposition, with the response and the date" (:89-90), and the row carries "three marks and no others". `dialogue`'s answer, standing and recommended alike, requires that the projections "show the choice first and beneath it the recommendation, the other options, and what each tradition says, and say that the choice keeps its authority until the author rules for another". The draft reads that requirement strictly against the rival option -- "The dialogue node has every projection show the confirmed choice first *and say* that the choice keeps its authority until the author rules for another, and a row distinguished from its neighbours only by being above them says neither" (:105-108) -- and passes `confirmed-mark-struck` over on it, but the mark it keeps says only that a ruling happened and its date, not that the choice keeps its authority. Section 4.6 then asserts that `dialogue` "is satisfied as it stands, its rule that a projection show the confirmed choice first and say that it keeps its authority being what the confirmed mark discharges", which the mark's own content does not support. Suggested edit: either make the mark say what the rule requires -- the confirmed disposition, with the response and the date, kept until the author rules for another -- or name where else on the page that sentence is said, and where neither, record the divergence from `dialogue` as an option on that node.
+- Facts, `### answer`, `#### counter-argument-per-fact` (validation 15, merge; a question carried on this node's dialogue). The option asks for "the reading asked for one counter-argument per fact rather than one per node", and its own prose says "what a reading returns is not this node's to decide: it is `clean-context-review`'s shape and `review-cost`'s price", while adding "It is recorded so that a ruling for it here is available to the author". Those two sentences cannot both hold: an author ruling for it on this node's answer fact would settle what a reading returns, which is another node's question reached sideways -- the same fault the fourth finding of 2026-09-06 closed when it took `where-the-unconfirmed-indication-goes` out of this node, and which the Answer names again at :153-157. Suggested edit (a finding about another node, proposed and not made): record the option on `commons.systems/disposition-graph/clean-context-review`'s answer fact as `counter-argument-per-fact`, source `commons.systems/disposition-graph/what-an-option-row-carries`, ref 2026-09-06, prose: "Everything the recommended option says, with the review of a draft returning one counter-argument per fact of the node it reads rather than one for the node, so that the line at the first level of every recommended row is a reader's and never the recommending party's; against it, a reading asked for a line on every fact is a reading asked to argue where it may have nothing to say, and the cost is `review-cost`'s." Keep on this node only the row-facing delta if one is wanted, and enter that node in `depends` so the cardinality is ruled where it lives.
+- "What a ruling here would do to the parent's recommended text", 4.7 (validation 3, a claim about the implementation, unverified). It reads "In `packages/disposition/alignment-template.html` two pill classes go and one is renamed." That file carries five at lines 201-205: `.pill.alt-ruled`, `.pill.alt-src`, `.pill.alt-stands`, `.pill.alt-passed`, `.pill.alt-adopted`. Under this answer `alt-adopted` stays, `alt-stands` and `alt-ruled` become the one confirmed mark, and `alt-src` and `alt-passed` leave the row for the details in the author's own words, "not in a chip" -- so three classes go and one is renamed, unless the details are meant to keep them as pills, which those words forbid. Suggested edit: name the classes rather than counting them, or say three.
+
+On the facts and what they recommend: Two facts, which is right: nothing proposes a prune and nothing changes the node's shape, and the authority fact the encoding requires of a staged node carrying facts is present. The answer fact recommends `three-marks-and-the-case-against` at moderate boldness and names it as `stands`, so there is correctly no `## Recommendation` fence, and moderate is defensible now that the reader's line rather than the AI's carries the contested clause; but the fact's `against` is the superseded window argument and is not the case the session means to present (first finding), and the `review` block still pins 9d5ee0ea, the answer this one replaces. The authority fact recommends `ratified` at low boldness with the `### authority` reading `class-recommendation` requires, disclaiming the expensive and irreversible limbs by name and finding the capture-shaped limb, and the limb is correctly found: the answer sets the strength of the record's own check on the AI.
+
+On the viability of the options: Every option listed is viable on its facts, and the four passed over carry reasons that hold: `keep-the-four-pills` is the reading the parent withdrew, `confirmed-mark-struck` fails `dialogue`'s requirement that a projection say the confirmed choice keeps its authority, and the authority fact's three options are the reserved vocabulary and are complete. One viable option is missing, on the same clause the answer contradicts itself about: where no reader's line exists for a fact, the row says that the recommendation has not yet been read, instead of either falling back to the AI's line or claiming the recommendation goes unopposed. Its prose would be: "Everything the recommended option says, with the first level carrying, on a fact whose reading has not returned a counter-argument, neither the AI's own case against nor the sentence saying the recommendation goes unopposed, but the mark that the recommendation is unread; the AI's case against is in the drill-down with the rest of its reasoning wherever the author placed it, and the unopposed sentence is kept for the case `recording` wrote it for, a reading that returned and found nothing worth the author's time. It honours the author's placement on every fact and not on one row per node, and no row ever claims an unopposed recommendation the record holds an objection to; against it, a reader who meets an unread row learns that an objection may exist and not what it says, where the AI's line would have told them, and `recording` already forbids a ruling in that window so the mark is informational."
+
+Strongest counter-argument (moderate): The answer's central move is that the AI never writes the first-level line where a reader's line is available, and the record can supply a reader's line on exactly one row of one fact per node: `caseAgainst` at packages/disposition/project.mjs:1381-1388 substitutes `review.against` only where `fact.name === "answer"`, and the review returns one counter-argument for the node. So the author's placement, which the answer says is "honoured whole", is honoured on one row per node and on no other, and on this node's own authority row the AI's words stay at the first level under an answer written to remove them. On the one row where the substitution does bite, what is removed is the recommending party's own admission of the weakness of its recommendation -- the argument it had to beat -- and what replaces it is a reader's objection that may bear on a different aspect entirely; `chenery-reasoned-decision`, that a decision stands on the reason its decider gave and not another's, and `bentham-publicity`, that a recommender withholding its own reasoning defeats publicity at the source, both cut against moving it out of first view. `scholastic-articulus`, which the answer leans on, says the substitution "is weaker than the tradition's guarantee and the record should not pretend otherwise", which is a warning about the reader's line and not a licence to drop the AI's.
+
+The session's reply: Accepted. The first two findings are the session's errors and not the reading's overreach. The fallback rule added for the previous reading's substantive finding closes the window the fact's `against` describes, so the objection printed against the recommendation was one the answer itself had already refuted; the `against` is rewritten to the objection that actually survives. And the answer settled a contradiction that is not this node's: `dialogue`'s recommended text requires an `against` on every recommendation, so a recommendation is never unopposed in the record's own terms, while `alignment-page` and `recording` prescribe a sentence saying that it is. Calling that sentence false inside a child's answer is a child ruling on its parent's doctrine. The conflict is recorded as an option on `recording`, whose rule it is, and the child's answer now says only what the row carries and defers the unopposed sentence to that node. The measurement behind the premise was checked: 48 `against` fields against 237 recommendations today, which is back-fill debt against `dialogue`'s recommended text and not a counterexample to it. The missing option the reading names, an unread mark where a fact's reading has not returned, goes on the fact; `counter-argument-per-fact` moves to `clean-context-review`, whose shape it is, with a pointer left here; and §4.3, §4.6 and §4.7 are corrected to what the answer actually does.
+
+### The second kickback answered, 2026-09-06
+
+Six findings, all validated at their loci, all accepted. Two were the session's
+own errors and are worth the record.
+
+The first: the fallback rule written for the previous reading, that the AI's line
+stands where a reading has returned none, closed the window that the fact's
+`against` described, and the `against` was left describing it. So the objection
+printed at the first level against this recommendation was one the answer itself
+had already refuted, which is the exact failure the case against exists to
+prevent. The `against` is rewritten to the objection that survives: that under
+this answer the row is written by up to three parties depending on the state of a
+reading, and a reader cannot tell which without knowing the node's stage.
+
+The second: the answer settled a contradiction that is not this node's.
+`dialogue`'s recommended text requires an `against` on every recommendation, so a
+recommendation is never unopposed in the record's own terms, while
+`alignment-page` and `recording` prescribe a sentence saying that it is. The
+draft called that sentence false. A child's answer is not where a parent's
+doctrine is ruled on, and the conflict is recorded as an option on `recording`,
+whose rule it is. The measurement behind the reading's premise was checked and
+holds in the direction that matters: 48 `against` fields against 237 recorded
+recommendations today, which is back-fill debt against `dialogue`'s recommended
+text and not a counterexample to it. The answer now says only that whatever that
+sentence resolves to belongs at the first level, and settles for itself the one
+case that is its own, where no reading has run at all and the row carries an
+unread mark.
+
+The rest were corrections of what the draft claimed. §4.3 announced in its
+preamble that the details list gains the AI's case against and its After text did
+not carry it, so a ruling would have taken the line off the row and put it
+nowhere; the insertion is now written out. §4.6 claimed the confirmed mark
+discharges `dialogue`'s requirement that a projection say the confirmed choice
+keeps its authority, where a mark reading "confirmed, <response>, <date>" says no
+such thing; the mark's text is fixed here rather than left to the projector.
+§4.7 said two pill classes go where three do, at `alignment-template.html:201`
+to `205`. And `counter-argument-per-fact` is recorded on `clean-context-review`, whose
+shape it is, and replaced here by the two options the reading named: the unread mark,
+now folded into the answer and passed over as a restatement of it, and
+`ai-line-until-a-reading-returns`, which is the live rival and the arrangement the
+fact's `against` argues for.
