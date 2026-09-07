@@ -1,13 +1,13 @@
 ---
 question: How are references to tradition recorded?
-stage: review
+stage: ruling
 review:
-  verdict: kickback
-  strength: moderate
+  verdict: forward
+  strength: weak
   date: 2026-09-07
-  of: 428e3065b43a98650d040f670856e4de46f4f9e2
-  commit: d35b0014367874f0376fea8e271f1737b798857c
-  against: "The amendment does make real progress: it correctly moves `recommends` and the fence to the new option, adds a justifying paragraph, and fixes the false census in the one place templated output actually surfaces first (the frontmatter summary). The two defects that remain are narrow, mechanical, and already half-done rather than untouched — a case exists for treating them as small residue for the next pass on the same footing the previous reading extended to the explicitly-blocked findings F3 and F4, rather than as grounds for a further kickback, especially since `## Answer` itself is unchanged and correct."
+  of: 1558b74a9a1199765bdee07abf825ac9313bfde1
+  commit: d9c2e3be43a1b0ba82d6c26ad964a57afb1648f9
+  against: "The account entry \"Repaired after the re-reading, 2026-09-07\" (the first repair's own self-report) still states unqualified that the authority fact's case against \"no longer claims that every reading on the record recommends delegated for itself,\" and that exact sentence is left untouched by this diff -- it was not corrected, only overtaken. A reader who trusted that entry in isolation, without reading the second re-reading's findings that followed it, would still be misled about what the first repair actually fixed (the frontmatter copy only, not the body prose). The sentence reads as true of the node now only because this amendment's authority-prose fix makes it true two steps later, which is incidental to the self-report's own honesty at the time it was written and was never itself corrected or flagged as imprecise."
   survey:
     date: 2026-09-05
     of: 4d59b849501c0abb7bd5648ed67732e57bc94e0b
@@ -570,3 +570,18 @@ Strongest counter-argument (moderate): The amendment does make real progress: it
 ### Repaired after the second re-reading, 2026-09-07
 
 The two residues the second re-reading found, repaired on the main thread: the authority fact's reason no longer carries the census the frontmatter's case against had already dropped, and the answer fact's case against argues against the option recommended, the completeness of `bears`. Pin-neutral; the node returns to review for the re-reading the record's mechanics require of a kickback, which is the defect of the instrument the reconciliation list names.
+
+### Clean-context re-reading, 2026-09-07, of 1558b74a
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-relation-is-projected-onto-the-option-as-one-of-three`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff only touches prose: it replaces the answer fact's stale `against` (previously arguing against the superseded `relation-per-option`, quoted as "The per-option relation binds a tradition's verdict to option names...") with the recommended option's own completeness-of-`bears` argument folded with the residual option-name and file-multiplication points, so `against` now argues against `the-relation-is-projected-onto-the-option-as-one-of-three`, the option `recommends` actually names; and it applies the same authority-fact correction, "each reading node recommends its own class for itself", to the ##### authority body prose (and its copy inside the `## Recommendation` fence), which had previously been fixed only in the frontmatter summary line. `recommends`, `stands`, and boldness on both facts are unchanged, and the `## Recommendation` fence is still present and correct because `recommends` (the-relation-is-projected-onto-the-option-as-one-of-three) still differs from `stands` (relation-per-option).
+
+On the viability of the options: No option is added, removed, or newly contradicted; the two edits are corrections to prose fields (the answer fact's `against` and the authority fact's reason paragraph) that bring them into agreement with what each fact already recommended, and the new option's own AI-support/AI-divergence subsection is untouched and internally consistent.
+
+Strongest counter-argument (weak): The account entry "Repaired after the re-reading, 2026-09-07" (the first repair's own self-report) still states unqualified that the authority fact's case against "no longer claims that every reading on the record recommends delegated for itself," and that exact sentence is left untouched by this diff -- it was not corrected, only overtaken. A reader who trusted that entry in isolation, without reading the second re-reading's findings that followed it, would still be misled about what the first repair actually fixed (the frontmatter copy only, not the body prose). The sentence reads as true of the node now only because this amendment's authority-prose fix makes it true two steps later, which is incidental to the self-report's own honesty at the time it was written and was never itself corrected or flagged as imprecise.

@@ -30,6 +30,14 @@ bears:
     fact: answer
     option: prose-argues-structure-records
     relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: confirmed-is-a-derived-label-and-every-option-carries-its-content
+    relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: confirmed-is-a-derived-label
+    relation: adopted
 ---
 ## Answer
 

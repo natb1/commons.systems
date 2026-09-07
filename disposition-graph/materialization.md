@@ -1,6 +1,6 @@
 ---
 question: What is materialized implementation, and where does it live?
-stage: maieutic
+stage: review
 review:
   verdict: kickback
   strength: strong
@@ -42,9 +42,12 @@ facts:
       - name: the-ref-carries-the-ledger-beside-the-graphs
         source: commons.systems/disposition-graph/quotes
         ref: "2026-09-07"
+      - name: name-the-ledger-and-cite-quotes
+        source: review
+        ref: "2026-09-07"
     recommends: the-ref-carries-the-ledger-beside-the-graphs
     boldness: low
-    against: "Ratifying this text arms a deletion whose scope no one has ruled: the shim's liquidation prunes at the swap whatever no disposition supports, nothing derives unsupported implementation onto the frontier, the gate is the coverage node at the periagogic stage, and what survives on main is decided by a census the author has instructed sessions not to repeat. The reading of 2026-09-05 sharpened it: the rule is already contradicted where it is automated, `writeRules` in `packages/disposition/project.mjs` deleting a rule file with no proposal and no ruling, so a rule no instrument guards is being asked for at the record's highest class while its own projector prunes without one."
+    against: "Ratifying this text arms a deletion whose scope no one has ruled: the shim's liquidation prunes at the swap whatever no disposition supports, nothing derives unsupported implementation onto the frontier, the gate is the coverage node at the periagogic stage, and what survives on main is decided by a census the author has instructed sessions not to repeat. The reading of 2026-09-05 sharpened it: the rule is already contradicted where it is automated, `writeRules` in `packages/disposition/project.mjs` deleting a rule file with no proposal and no ruling, so a rule no instrument guards is being asked for at the record's highest class while its own projector prunes without one. And the amendment couples that rule, which every session writing the implementation ref loads, to an option on `quotes` that the reading of 2026-09-07 kicked back, so what the ref may hold now moves whenever that node moves, and the enumeration's third term names a file the ref does not carry."
     stands: standing
   - name: authority
     options:
@@ -89,7 +92,7 @@ The author's ruling of 2026-09-03, quoted above, that all materialized implement
 
 ### answer
 
-`the-ref-carries-the-ledger-beside-the-graphs` is recommended since 2026-09-07: the standing text with one sentence amended, that the ref stores the manifest, the node files and the ledger of the author's words, following `quotes`' recommendation of the ledger, which the author has put up for confirmation, so that it stands or falls with that ruling. Its own support and divergence are under its subsection, and what follows is the reason the text it amends was recommended on, which the amendment carries except where it says otherwise.
+`the-ref-carries-the-ledger-beside-the-graphs` is recommended since 2026-09-07: the standing text with one sentence amended, that the ref stores the manifest, the node files and the ledger of the author's words, following `quotes`' recommendation of the ledger. The author's words of 2026-09-07 put that choice to their confirmation; they did not make it, and nothing has been ruled. `quotes#words-in-a-ledger-on-the-ref` is the option that node recommends and no ruling reaches: `quotes` stands at the review stage, its last reading of 2026-09-07 a kickback whose repair its account records and which owes a further reading, so the option this node's `depends` names is unruled and under redraft on the node that owns it. What that leaves of the support is stated rather than assumed: the enumeration here follows a recommendation and not a ruling, its third term names a file the ref does not carry on 2026-09-07, and a ruling on this node before `quotes` is ruled would ratify at the record's highest class an enumeration whose last term the node that owns it may yet strike. The `depends` entry is what discloses the coupling, the answer says the ledger is not materialized, and the case against on the fact says what the coupling costs. Its own support and divergence are under its subsection, and what follows is the reason the text it amends was recommended on, which the amendment carries except where it says otherwise.
 
 The standing text, at low boldness: the answer is the author's words of 2026-09-03 restated, and what is the AI's is the monorepo convention and the `packages/` layout, which the `npm-committed-lockfile` reading bears on. This text is projected as a rule and every session on the implementation ref runs under it today; confirming it changes nothing that runs, and ruling for another option changes what every session loads. The shim's liquidation rests on the coverage node, at the periagogic stage with three probes open, where the author rules on what survives the swap; a ruling here does not wait on it, only bootstrap exit does, so no `depends` entry is written. Nothing checks this rule today, as a cost and not a reason: no instrument walks the implementation ref for unsupported artifacts, so what is unsupported is found by a session and not by the frontier, and the instruments node decides what would guard it. One class is already pruned mechanically and never proposed: `project.mjs --rules` deletes a generated rule file that no global-tier node projects. That is a projection rewriting its own output inside a directory this record reserves for it, and not the liquidation this rule governs; the boundary is that the projector deletes only what it wrote, only where it writes, and only what carries its own generated notice. The case against is on the fact. `traditions-to-readings` stays viable as a consequence of the stub-traditions node's ruling; `facts-carry-each-shim-liquidation` and `disclose-that-sessions-run-under-this-rule` are passed over with their reasons, the second because the sentence it asked for is written here, and whether the record should show that as an adoption rather than a pass is `viable-options`' `adopted-is-a-status` to settle and not this node's. `layout-as-its-own-question` and `cite-persistence-for-the-disposition-ref` are the two limbs the reading of 2026-09-05 found missing, both live: the first would rule the author's words alone here and move the layout to a node of its own, the second would drop the sentence on what the disposition ref stores and cite `persistence` for it. Neither is taken, because a rule a session loads is easier to obey whole than assembled from citations, and that is the author's judgment to make, not the review's.
 
@@ -123,12 +126,18 @@ to another node for it is a rule half loaded.
 
 The answer drops the sentence on what the disposition ref stores and cites
 `persistence`, which owns where the record lives, so the fact is written once
-and cannot drift. The sentence is near-verbatim in both today, and the
-restatement runs both ways, `persistence` also saying where materialized
-implementation lives; `codd-update-anomaly` and `dry-single-source-of-truth`
-are the readings that bear on it. It is not taken here because the review
-proposes and never merges, and which of the two nodes keeps the sentence is a
-question for whichever is ruled second.
+and cannot drift. The sentence was near-verbatim in both until 2026-09-07; since
+the ledger was recorded as an option here and not there, the two texts disagree,
+this node's enumeration admitting the ledger and `persistence` answering that
+"The ref's tree holds the graphs and only the graphs: the manifest and the node
+files", so what this option would cure is no longer a restatement but a
+divergence, and it runs both ways, `persistence` also saying where materialized
+implementation lives. The same divergence is recorded on that node as the option
+`the-tree-holds-the-ledger-beside-the-graphs`, sourced here, so the author may
+rule the sentence into one place from either side; `codd-update-anomaly` and
+`dry-single-source-of-truth` are the readings that bear on it. It is not taken
+here because the review proposes and never merges, and which of the two nodes
+keeps the sentence is a question for whichever is ruled second.
 
 #### unsupported-where-authority-is-missing
 
@@ -153,6 +162,27 @@ The disposition ref stores the manifest, the node files of the graphs, and the l
 **AI support.** The words are the record's ground, every ruling's validity rests on them, and a reference into version control is not a reference the projections can resolve; so if the words are stored once, as `quotes` now recommends, the one place is on the ref. The rule is not loosened: what may be on the ref is still enumerated, and the enumeration grows by one named kind.
 
 **AI divergence.** The sentence this amends was the ref's whole discipline, and every kind of file it admits is a kind a reader must know how to read; a second kind is a second parser and a second thing a validator must check, and the option stands or falls with `quotes#words-in-a-ledger-on-the-ref`, on which it depends.
+
+#### name-the-ledger-and-cite-quotes
+
+The disposition ref stores the manifest, the node files of the graphs, and the
+ledger the `quotes` node keeps, and nothing else. Why the author's words are kept
+there, what shape the ledger has, and whether it exists at all are that node's
+question, and nothing of them is restated here.
+
+**AI support.** It buys the enumeration the recommended option buys and leaves
+the justification and the file's shape where they are owned, so this rule, which
+every session writing the implementation ref loads, does not move whenever
+`quotes` moves. It is not dominated by the recommendation, which buys the same
+enumeration at the price of two clauses of another node's argument standing in a
+global rule.
+
+**AI divergence.** The coupling it avoids is not the whole coupling: the
+enumeration still names a kind of file that exists only if `quotes` is ruled for
+the ledger, so this rule is still wrong on the day that node rules otherwise, and
+what the citation saves is the argument and not the dependency. A reader of the
+rule alone learns the ref carries a ledger and not what one is, which is the cost
+`layout-as-its-own-question` is refused for elsewhere on this fact.
 
 ### authority
 
@@ -181,11 +211,12 @@ shims:
 ---
 ## Answer
 
-Everything a repository holds other than the graph itself: code, skills, rules, pages, and the graph's own tooling. The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author's words the quotes node keeps, and nothing else. The ledger is not a graph and holds no node; it is the record's third kind of file, and it is on the ref because the words are the record's ground and a reference into version control is not a reference the projections can resolve. All materialized implementation is a projection of the graph, the browser and the graph's own tooling included: each artifact is the instrument or the projection of the node whose answer it checks or renders, and anything no disposition justifies is unsupported implementation, on the frontier and liquidated through reconciliation, where pruning is proposed and the author rules on it. Materialized implementation is organized by the JavaScript monorepo convention: one repository, a root manifest declaring workspaces, and one directory per package under `packages/`.
+Everything a repository holds other than the graph itself: code, skills, rules, pages, and the graph's own tooling. The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author's words the quotes node keeps, and nothing else. The ledger is not a graph and holds no node; it is the record's third kind of file, and why the author's words are kept on this ref rather than anywhere else is the quotes node's question and is not answered again here. The ledger is written by the migration under the author's grant of 2026-09-07, and no shim covers it: before that migration lands, a session reading this rule finds the enumeration's third term unmaterialized and the author's words where the nodes hold them, which is not a defect of the ref to repair. All materialized implementation is a projection of the graph, the browser and the graph's own tooling included: each artifact is the instrument or the projection of the node whose answer it checks or renders, and anything no disposition justifies is unsupported implementation, on the frontier and liquidated through reconciliation, where pruning is proposed and the author rules on it. Materialized implementation is organized by the JavaScript monorepo convention: one repository, a root manifest declaring workspaces, and one directory per package under `packages/`.
 
 ## Rationale
 
-The author's ruling of 2026-09-03, quoted above, that all materialized implementation, the browser included, is a projection of the graph and that anything the graph does not justify is liquidated through reconciliation. Keeping the disposition ref to the graph alone keeps its writes small, its history legible, and its readers simple; tooling changes never land as graph changes. The monorepo convention is a tradition the reading `npm-committed-lockfile`, under this node, bears on for the npm strand; readings on Lerna, Yarn workspaces, and the single-repository practice Potvin and Levenberg describe are owed. The incumbent repository already uses `packages/`, which is evidence, not authority. The third ref has one consequence to keep in view: whatever on `main` is to survive the swap must be reconciled into `greenfield` under a supporting disposition before exit, or it is pruned by the swap. The term "implementation unit" is struck for the reason the author gave in the words quoted above: what is materialized here is standing, and what passes takes one of the shapes `transience` names, so the record calls it materialized implementation and nothing that sounds like a unit of work. This node binds every session that writes to the implementation ref, subagents included, so it is projected as a rule.
+The author's ruling of 2026-09-03, quoted above, that all materialized implementation, the browser included, is a projection of the graph and that anything the graph does not justify is liquidated through reconciliation. Keeping the disposition ref to the record's own files, the manifest, the node files and the ledger, and to nothing else, keeps its writes small, its history legible, and its readers simple; tooling changes never land as graph changes. The ledger is admitted into that enumeration because the author's words are the record's ground, every ruling's validity rests on them, and a reference into version control is not a reference the projections can resolve, so where the words are stored once the one place is the ref the rulings are on; the discipline is not thereby loosened, what the ref may hold being still a closed list, which grows by one named kind and not by a class of file. Why the words are kept that way at all is the quotes node's question, and this node enumerates what the ref holds rather than arguing it. The monorepo convention is a tradition the reading `npm-committed-lockfile`, under this node, bears on for the npm strand; readings on Lerna, Yarn workspaces, and the single-repository practice Potvin and Levenberg describe are owed. The incumbent repository already uses `packages/`, which is evidence, not authority. The third ref has one consequence to keep in view: whatever on `main` is to survive the swap must be reconciled into `greenfield` under a supporting disposition before exit, or it is pruned by the swap. The term "implementation unit" is struck for the reason the author gave in the words quoted above: what is materialized here is standing, and what passes takes one of the shapes `transience` names, so the record calls it materialized implementation and nothing that sounds like a unit of work. This node binds every session that writes to the implementation ref, subagents included, so it is projected as a rule.
+
 ```
 
 ## Account
@@ -443,3 +474,8 @@ On the viability of the options: Every option listed is viable on its facts and 
 Strongest counter-argument (strong): The amendment makes the record's most widely loaded rule depend on an unruled design decision taken elsewhere. `materialization` is `tier: global` and projects into `.claude/rules/materialization.md`, which every session writing the implementation ref loads; after this amendment what that rule says the disposition ref may hold is settled by `quotes`, a node at the maieutic stage whose reading of 2026-09-07 kicked its ledger option back and argued that the rival needs "no amendment to `materialization`". The coupling buys nothing a citation would not: the enumeration could name the ledger and send the reader to the node that owns it, which is what the missing option above does. Behind that stands the older case, recorded on the fact and unanswered: ratifying this node at all arms the swap's deletion of whatever no disposition supports, under a rule no instrument checks and which its own projector already breaks, `writeRules` in `packages/disposition/project.mjs` deleting a rule file with no proposal and no ruling. The reply the record can make is that `depends` discloses the coupling and the alignment page will not put this question before the one it rests on — but disclosure in dialogue state that the recording removes is not disclosure in the rule, and the rule is what the sessions read.
 
 The session's reply: The coupling the counter-argument names is now disclosed in the rule and not only in the dialogue state: the amended answer says the ledger is written by the migration under the author's grant of 2026-09-07 and cites the quotes node for why the words are kept there, so a session reading the rule meets the dependence in the text it loads. The option the reading found missing, name-the-ledger-and-cite-quotes, is recorded on the fact beside the recommendation, so the author may rule the enumeration with or without the argument. And the older case, that writeRules deletes a rule file with no ruling, stands as the fact's own case against, verified and unanswered, for the author to weigh where they rule.
+
+
+### Repaired after the reading of d35b0014, 2026-09-07
+
+The clean-context reading of 2026-09-07 kicked the node back with seven findings and a strong counter-argument, that the amendment makes the record's most widely loaded rule depend on an unruled decision taken on `quotes`. Repaired here: the fence's `## Rationale` is rewritten to the enumeration the answer makes and carries the reason the ledger is admitted, which had stood only in the option's own support; the `### answer` reason says that the author's words of 2026-09-07 put the ledger choice to their confirmation and made nothing, and what that leaves of the support; the answer says the ledger is written by the migration under the author's grant of that day and that a session reading the rule before it lands finds the third term unmaterialized, in words that stay true after it lands; the clause arguing `quotes`' question inside this answer is cut and that node cited; the case against argues the option now recommended; `#### cite-persistence-for-the-disposition-ref` records that the restatement has become a divergence, and the option `the-tree-holds-the-ledger-beside-the-graphs` is recorded on `persistence` with this node as its source; `term: ledger` is defined on `quotes`, which owns it; and the option the reading found missing, `name-the-ledger-and-cite-quotes`, is recorded and not adopted. The counter-argument's reply is on the account entry above. The recommendation is not moved back: the reading offered that or full disclosure, and disclosure is taken. The node returns to the review stage with a re-reading owed on the amendment, and the rule projection under `.claude/rules/` is regenerated on the implementation ref with it.

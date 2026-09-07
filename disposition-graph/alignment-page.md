@@ -1,6 +1,6 @@
 ---
 question: What does the author read to rule?
-stage: review
+stage: maieutic
 probes:
   - id: unit-of-a-ruling
     asks: >-
@@ -189,12 +189,12 @@ facts:
     boldness: low
     against: "The shim describes a read-back mechanism the ruling-transport node owns, and could leave that clause to that node's shim."
 review:
-  verdict: forward
-  strength: weak
+  verdict: kickback
+  strength: moderate
   date: 2026-09-07
-  of: 39f5c588d154ed762d724dc071ccc15686cd1256
-  commit: 72e1715faca6cfa2f0704c4da7baffad760bcdf6
-  against: "The amendment corrects both false claims the survey found, but it does so by again restating, in this parent's own prose, a snapshot of what a child node currently recommends and at what stage — the very method that produced the staleness within a single day, as the option `clauses-cited-not-restated` already argues on this same fact. Nothing stops the same class of drift from recurring the next time `where-the-unconfirmed-indication-goes` moves. That risk is already named and recorded as an open, undecided option rather than hidden, and this reading finds no fresh instance of it in the diff, so the counter-argument bears on the durability of the fix rather than on whether it answers what was raised."
+  of: 57589470c9e634aa20420adc80b317c74079cc23
+  commit: d35b0014367874f0376fea8e271f1737b798857c
+  against: "The diff fully carries out the context-pane refinement the author dictated and does not touch or contradict anything the previous reading or the survey's three findings addressed, so as against those two questions it stands. The strongest case against forwarding as-is is that the amendment itself introduces a fresh, small instance of the exact class of drift the last reading's own counter-argument warned would recur: `every-fact-every-option`'s closing sentence now falsely claims to be the option \"set out in the fence\" once `recommends` moves off it, and the new option's `source` is recorded as a node id (`dialogue`) though its own account grounds it entirely in a quoted author refinement, which the record's vocabulary would call `source: author`. Both are narrow, mechanical corrections rather than substantive disagreements with the amendment's design, but the record's own rule against self-contradiction and against structural fields recording something other than the true source counts them as defects to redraw before this recommendation goes to the author."
   survey:
     date: 2026-09-07
     of: 94465d401a161fed15196ead1c0e71bd5950de58
@@ -2879,3 +2879,20 @@ Strongest counter-argument (weak): The amendment corrects both false claims the 
 ### Option adopted, 2026-09-07
 
 One option recorded on the author's refinement of 2026-09-07 quoted under `## Disposition`, the context pane previewing the node under the selected option. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `every-fact-every-option`; The text `every-fact-every-option` recommended stands whole in this node's fence at graph commit `c55c9ebb`, and the migration under the author's grant of 2026-09-07 recovers it there as that option's content. The stage returns to review and the amendment owes a reading.
+
+### Clean-context re-reading, 2026-09-07, of 57589470
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `the-context-pane-previews-the-selected-option`.
+
+Findings:
+
+- Section: Facts > answer > option `every-fact-every-option`. Verbatim locus: "Adopted by the recommendation, and set out in the fence." This sentence is now false: the diff moves `recommends` from `every-fact-every-option` to the newly added option `the-context-pane-previews-the-selected-option`, and the `## Recommendation` fence is amended in this same diff to carry that option's extended sentence, not `every-fact-every-option`'s unextended text. The very defect this node's own reading of 2026-09-07 already warned about recurring ("Nothing stops the same class of drift from recurring the next time ... moves") has recurred within this node's own facts, one diff later, not on a sibling/child this time but on the node's own option prose. Suggested edit: replace the closing sentence with something that states the option's history accurately, e.g. "Recommended from 2026-09-04 to 2026-09-07, when `the-context-pane-previews-the-selected-option` superseded it while keeping its text as the fence's base, extended by one sentence."
+- Section: Facts > answer > option `the-context-pane-previews-the-selected-option` (new in this diff). Verbatim locus: "`the-context-pane-previews-the-selected-option` — source commons.systems/disposition-graph/dialogue, ref 2026-09-07 — recommended, boldness moderate". The option's own account gives no ground in the `dialogue` node: its "AI support" is "The author's refinement of 2026-09-07: 'when the author selects an option via the alignment artifact the context pane is dynamically updated to preview the node that is being confirmed.'" -- a direct quote of the author, which is exactly what `source: author` denotes under `viable-options`' vocabulary ("author (the author's own stated answer)"), not the id of a node that raised the option. `dialogue` is not cited anywhere in this option's own prose as what raised it. Suggested edit: record `source: author, ref: 2026-09-07` unless the session can show the option was in fact raised by an application of `dialogue`'s own rule rather than transcribing the author's words.
+
+On the facts and what they recommend: The diff moves the `answer` fact's `recommends` from `every-fact-every-option` to a newly added option, `the-context-pane-previews-the-selected-option` (boldness unchanged at moderate, the fact's `against` clause unchanged), which the node's own prose describes as `every-fact-every-option` with the right-hand column's sentence extended per the author's 2026-09-07 refinement quoted under `## Disposition`; the same sentence is added to the `## Recommendation` fence's middle-column paragraph, and three new author quotes (the accumulation-strategy refinement, its grant, and the author's three answered calls) are appended under `## Disposition`. The `authority` and `persistence` facts, and their options, are untouched by this diff; the `review` block's `of`/`commit`/`against` values changed only because they record the prior reading's own apply step (per the brief's note), not this amendment.
+
+On the viability of the options: No option's status is added, removed, or re-marked by this diff beyond the one new option, which is recorded viable and recommended rather than displacing any existing option's record, so nothing on the answer fact becomes non-viable. But the diff leaves the now-superseded option `every-fact-every-option`'s own closing sentence -- which asserted it was "set out in the fence" -- uncorrected against the very `recommends` change this diff makes, so one option's account is internally stale as of this amendment.
+
+Strongest counter-argument (moderate): The diff fully carries out the context-pane refinement the author dictated and does not touch or contradict anything the previous reading or the survey's three findings addressed, so as against those two questions it stands. The strongest case against forwarding as-is is that the amendment itself introduces a fresh, small instance of the exact class of drift the last reading's own counter-argument warned would recur: `every-fact-every-option`'s closing sentence now falsely claims to be the option "set out in the fence" once `recommends` moves off it, and the new option's `source` is recorded as a node id (`dialogue`) though its own account grounds it entirely in a quoted author refinement, which the record's vocabulary would call `source: author`. Both are narrow, mechanical corrections rather than substantive disagreements with the amendment's design, but the record's own rule against self-contradiction and against structural fields recording something other than the true source counts them as defects to redraw before this recommendation goes to the author.

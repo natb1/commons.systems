@@ -1,13 +1,13 @@
 ---
 question: Who may change an answer?
-stage: review
+stage: ruling
 review:
-  verdict: kickback
-  strength: strong
+  verdict: forward
+  strength: weak
   date: 2026-09-07
-  of: 8d217d7dbce578b77dbc0aa47c343e73117edcc2
-  commit: d35b0014367874f0376fea8e271f1737b798857c
-  against: "The diff does close the previous reading's first finding cleanly and gestures at the second by prefacing the stale paragraph with a corrective sentence, so a generous reading could call the second finding substantially addressed since a reader who takes both paragraphs together is told the true state. But the third finding is not gestured at all: the diff never touches the `#### authority-derived` subsection the survey and the previous reading both named by node and by option, and the second finding's own suggested edit asked explicitly to drop or correct the false clause, which the retained sentence still carries verbatim and in the present tense. Two of the previous reading's three findings are not fully closed by this round's diff."
+  of: 2cf0cdde322069682f6928e0f8c5b80bd56b61ea
+  commit: 9b5993f5ce75ed55abdda1964cc3b7c7f1e53cf1
+  against: "The last reading's two findings are both fully closed: the false 'three options / the rest are passed over' sentence is now non-exhaustive and drops the closing clause exactly as the suggested edit asked, and the `authority-derived` subsection body is deleted outright, resolving the duplication with `## Answer` the survey and the previous reading both named. One could argue the subsection deletion is a stronger remedy than the previous reading's alternative of 'add a sentence explicitly deferring the fix to `dialogue`'s pending ruling', foreclosing that option rather than choosing between the two it offered; but the record's own encoding rule quoted in this brief is unconditional ('The option named by `stands` omits its subsection'), so outright deletion is the correct fix and not merely one of two equally valid choices. No new false claim, contradiction, or stale pin is introduced by this diff."
   survey:
     date: 2026-09-05
     of: 7db4b3832bbfd7604fa87bb408fb0b266bc45d03
@@ -836,3 +836,18 @@ On the viability of the options: The diff itself changes no option's status, and
 Strongest counter-argument (strong): The diff does close the previous reading's first finding cleanly and gestures at the second by prefacing the stale paragraph with a corrective sentence, so a generous reading could call the second finding substantially addressed since a reader who takes both paragraphs together is told the true state. But the third finding is not gestured at all: the diff never touches the `#### authority-derived` subsection the survey and the previous reading both named by node and by option, and the second finding's own suggested edit asked explicitly to drop or correct the false clause, which the retained sentence still carries verbatim and in the present tense. Two of the previous reading's three findings are not fully closed by this round's diff.
 
 The session's reply: Validated on the main thread: both residues are repaired in the commit that follows this reading, the clause counting the viable options struck and the subsection for the option that stands removed as the encoding of the day requires, which discharges the survey's contradiction finding on this node. The finding that the amendment addressed only the reason paragraph is right about what the two hunks reached; the reply of the previous reading promised the reason and not the subsection, and the subsection's removal is this repair's.
+
+### Clean-context re-reading, 2026-09-07, of 2cf0cdde
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-ruling-is-quoted-in-the-record-and-referenced-by-the-option`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff changes no fact's `recommends`, `boldness`, or `stands`: the answer fact still recommends `the-ruling-is-quoted-in-the-record-and-referenced-by-the-option` at moderate boldness with `stands: authority-derived`, the authority fact is untouched, and the `## Recommendation` fence's content is unchanged. The diff only edits the `authority-derived` option's own prose within the answer fact: it drops the false 'Three options stay viable beside it ... The rest are passed over with their reasons on their rows' claim (rewritten as the non-exhaustive 'Among the options viable beside it are ...', with the closing clause removed), and it deletes the `#### authority-derived` subsection's body entirely, since that option is the one named by `stands`.
+
+On the viability of the options: The diff itself flips no option's status: no option is newly passed over or newly unpassed. It corrects the answer fact's reason paragraph so it no longer misstates the count of viable options or falsely claims the rest are passed over (the four post-2026-09-05 options were already, and remain, correctly unflagged as viable), and it removes the `authority-derived` subsection's duplicate prose, which is not a viability change but a compliance fix with the node-encoding rule that the stands option's subsection is empty. Every option's viability, before and after this diff, is represented consistently.
+
+Strongest counter-argument (weak): The last reading's two findings are both fully closed: the false 'three options / the rest are passed over' sentence is now non-exhaustive and drops the closing clause exactly as the suggested edit asked, and the `authority-derived` subsection body is deleted outright, resolving the duplication with `## Answer` the survey and the previous reading both named. One could argue the subsection deletion is a stronger remedy than the previous reading's alternative of 'add a sentence explicitly deferring the fix to `dialogue`'s pending ruling', foreclosing that option rather than choosing between the two it offered; but the record's own encoding rule quoted in this brief is unconditional ('The option named by `stands` omits its subsection'), so outright deletion is the correct fix and not merely one of two equally valid choices. No new false claim, contradiction, or stale pin is introduced by this diff.

@@ -22,6 +22,9 @@ facts:
       - name: deferred-recommendation
         source: review
         ref: "2026-09-03"
+      - name: the-tree-holds-the-ledger-beside-the-graphs
+        source: commons.systems/disposition-graph/materialization
+        ref: "2026-09-07"
     recommends: standing
     boldness: moderate
     stands: standing
@@ -58,6 +61,39 @@ The reviews' strongest counter-argument, recorded twice as moderate, is that spl
 #### deferred-recommendation
 
 The placement finding names this node among twenty-two carrying no Disposition section and no quoted ruling while recommending ratified, its rationale's account of the author's rejection of pull-request landing being paraphrase. It proposes that each such node either gain a Disposition section carrying the ruling it rests on with its date, or that its recommendation change from ratified to deferred, since a ratified stamp the record cannot support is worse than an honest deferral. Nothing has been added to this node, so the deferral is the live alternative to the standing recommendation.
+
+#### the-tree-holds-the-ledger-beside-the-graphs
+
+The ref's tree holds the manifest, the node files of the graphs, and the ledger
+of the author's words the quotes node keeps, and nothing else; the ledger holds
+no node and is the record's third kind of file.
+
+**AI support.** `materialization` recorded this sentence as an option on
+2026-09-07, following `quotes`' recommendation that the author's words be stored
+once on the disposition ref, and the two nodes have said the same thing about
+what that ref holds since both were written. Recorded here, the author can rule
+the enumeration in one place from either side, and whichever node is ruled
+second is ruled against a text that does not contradict it; left unrecorded, a
+ruling on `materialization` alone would leave this node saying the tree holds
+the graphs and only the graphs while the rule every implementation session loads
+says otherwise, which is the update anomaly `codd-update-anomaly` names and the
+divergence `cite-persistence-for-the-disposition-ref` exists to close.
+
+**AI divergence.** It carries into this node a term this node does not define
+and a design it does not own: what a ledger is and why the words are kept there
+are `quotes`' question, and this option stands or falls with
+`quotes#words-in-a-ledger-on-the-ref`, which no ruling reaches and which that
+node's reading of 2026-09-07 kicked back. It also widens what the ref carries
+before any instrument reads a second kind of file there, so a validator that
+parses the tree would meet a file it has no parser for, and the discipline the
+present sentence states in six words takes three clauses to state under it.
+
+The amendment its text would take, one sentence of `## Answer`: "The ref's tree
+holds the graphs and only the graphs: the manifest and the node files." becomes
+"The ref's tree holds the manifest, the node files of the graphs, and the ledger
+of the author's words the quotes node keeps, and nothing else; the ledger holds
+no node and is the record's third kind of file." Nothing else in the answer
+moves.
 
 ## Account
 
@@ -171,3 +207,7 @@ One question — whether a node whose ruling was never quoted may be classed rat
 Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/review, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/recording.
 
 Proposed: Settle the question once on `commons.systems/disposition-graph/quotes`, which owns how the author's words are retained, and strike the six local options in favour of a citation to that ruling. In the same movement, remove both measurements from `quotes`' option prose: a count of the record inside the record is what `authority`'s `no-census-in-a-standing-answer` option is about, and both of these counts have already gone false. The set of unquoted-ratified nodes is derivable — nodes with no `## Disposition` whose authority fact recommends `ratified` — so the frontier or the alignment page should compute it and the node should name the rule. `evaluation`'s option is amended to drop the clause about carrying no Disposition section, which is no longer true of it.
+
+### Option recorded from materialization, 2026-09-07
+
+The clean-context reading of `materialization` on 2026-09-07 found that node's amended enumeration of what the disposition ref holds diverging from this node's sentence that the tree holds the graphs and only the graphs, and that the divergence was proposed nowhere here. The option `the-tree-holds-the-ledger-beside-the-graphs` records it on this node's answer fact with `materialization` as its source, not adopted, so the author may rule the sentence into one place from either side; the recommendation stays on the standing text.

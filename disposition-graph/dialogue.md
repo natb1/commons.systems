@@ -1,6 +1,6 @@
 ---
 question: What does an unanswered node carry?
-stage: maieutic
+stage: review
 probes:
   - id: option-text-per-node-or-per-option
     asks: >-
@@ -26,6 +26,22 @@ probes:
       `every-part-in-the-record`, whose fence states the one-text rule in terms.
     source: ai
     raised: 2026-09-04
+    status: discharged
+    reason: >-
+      the author answered it on 2026-09-07, in the words recorded under this
+      node's `## Disposition`: "each option for each fact is recorded with its
+      actual fact content so that when the author selects an option via the
+      alignment artifact the context pane is dynamically updated to preview the
+      node that is being confirmed." One text per option, and the reason is the
+      context pane, which cannot preview a node under an option whose text the
+      record does not hold. The probe's own `discharges` named the fence and the
+      recommendation `every-part-in-the-record`; the answer dissolves both, since
+      an option's content lives in its `####` subsection and there is no fence,
+      so what it settles is what the reader, the validator and both projections
+      must accept, which is the two content forms and the strict resolution
+      between them. Discharged by the author's answer under
+      `author-questions`' first discharge reason, and not by a session's reading
+      of it.
   - id: proposal-at-two-loci
     asks: >-
       Does the record anywhere say the dialogue's own section is a proposal in
@@ -233,9 +249,14 @@ facts:
       - name: the-survey-block-carries-what-the-next-survey-selects-on
         source: commons.systems/disposition-graph/survey-selection
         ref: "2026-09-07"
+      - name: generated-answer-and-disposition-sections
+        source: review
+        ref: "2026-09-07"
+        status: passed
+        reason: a generated section stored in the file is a copy the validator must check against its derivation, and the projections render the same derivation without storing it
     recommends: the-survey-block-carries-what-the-next-survey-selects-on
     boldness: moderate
-    against: "It puts six decisions in one row, the standing encoding and the five clauses adopted into it, so a confirmation confers together what the author examined and what they did not, which is the bundling this node's own rule that a text answering two questions is two nodes exists to prevent."
+    against: "It takes every surface on which the author checks the AI and makes it something the AI derives — the answer resolved through hunks against another option, the author's own words reached by `supports` and `diverges` references the AI files, the confirmed label computed — and it composes the encoding in force, five clauses folded into it earlier, the per-option content, the ledger, the removal of four sections and a six-key survey block into one row whose bundling the AI chose, so a confirmation confers together what the author examined and what they did not."
     stands: facts-carry-options
   - name: authority
     options:
@@ -244,7 +265,7 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: low
-    against: "Every node in the record is already written to this encoding under a bootstrap grant, so a ratification here ratifies a migration the AI performed rather than a design the author chose against a standing rival; deferred would let the recommendation act, keep the node in front of the author, and cost nothing."
+    against: "The migration this ruling would order is already under way under the author's grant of 2026-09-07, so by the time the author rules the record will be written this way and the ratification will bless what was done rather than choose between live rivals; deferred would let the same recommendation act, keep the node in front of the author, and cost nothing that the grant is not already spending."
 depends:
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
   - commons.systems/disposition-graph/quotes#words-in-a-ledger-on-the-ref
@@ -264,12 +285,18 @@ defines:
   - account
   - fact
   - ruling
+  - term: answer
+    gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
   - term: existence
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
     gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
   - term: prune
     gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+  - term: persistence
+    gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
+  - term: confirmed
+    gloss: "Confirmed is the label on the option of a fact that the author last ruled with the response confirm; it is derived from the rulings as the class is and stored nowhere, and it is the one name the record keeps for what the author's words of 2026-09-07 call standing."
 ---
 ## Disposition
 
@@ -443,143 +470,177 @@ The author, 2026-09-04, on the alignment page, transferred here on 2026-09-06 fr
 
 ### answer
 
-`every-part-in-the-record` is recommended: the standing encoding with the five
-clauses raised since its review folded into it, each of them an instance of one
-rule, that every part a ruling or a projection needs is in the record, in one
-place. That is what makes them one answer and not five. The survey's pin had no
-field and lived in a sidecar; the author's reason for a ruling had no field and
-was written to the page's database, which `transience` and `ruling-transport`
-both hold is a buffer and never the record; an option's sentence had no home on
-the two facts whose options are vocabulary, so the projector carried a sentence
-table of its own, which is implementation no disposition justifies; the
-authority fact was absent on eighteen nodes when the clause was raised, so the
-only class a confirmation could produce there was ratified; and the ground a
-diff was taken against was left to be inferred, which is what the author read
-off `purpose` on 2026-09-03. Five holes of one shape. Boldness moderate: the
-encoding is the author's model in their own words of 2026-09-04 on
-`viable-options`, and three of the five clauses rest on their words of the same
-day on `alignment-page`; what rests on the AI is the composition itself, the
-survey's field, which the author took as part of a recommendation rather than
-specified, the three departures below, and the reading of the author's words
-that `edit-led-against-a-named-ground` takes, which the review that raised it
-called unsettled. Boldness runs in the direction the author gave it on
-2026-09-03, "I want to know how much rests on the AI's own knowledge against
-the record", so high boldness is low confidence; `growth` defines the term and
-its own definition sentence runs the other way, which its option
-`boldness-reversed` repairs, and since that repair brings that node to this
+`the-survey-block-carries-what-the-next-survey-selects-on` is recommended. It is
+`an-option-carries-its-content-its-words-and-its-case`, the author's refinement of
+2026-09-07 written into the encoding, with the survey's block on a node carrying
+four keys beside its `date` and its `of`, so that the next survey's selection is
+local to the node it judges. What the composed option takes in, in the order the
+record took it: the encoding in force, `facts-carry-options`; the five clauses
+raised against it since its review and folded into `every-part-in-the-record`, each
+an instance of one rule, that every part a ruling or a projection needs is in the
+record, in one place; the author's refinement of 2026-09-07, which is the content
+on every option in one of two forms, the derived confirmed label, the three
+accumulations, and the recording and retention rules; the ledger the author asked
+after in the same sitting, which is where the words go and which the quotes node
+owns; the removal of `## Answer`, `## Recommendation`, `## Rationale` and
+`## Disposition`, which is what is left of a node file once those are in it; and
+the survey's six keys. The weighing is the same in every part. Each is a place the
+record held part of a thing and let something else hold the rest — the projector's
+sentence table, the page's database, the sidecar pin, the inferred ground, the
+rival option whose text lived in prose about it, the `stands` key that names the
+option whose section holds a text and not the option the author last confirmed, the
+quotation copied by hand onto eight nodes, the survey's own state in a commit
+message — and in each the part outside the record was the part that could lie. That
+is what makes them one answer and not eleven, and it is also, exactly, what the
+case against says the AI chose for the author.
+
+Boldness moderate. Most of what this option decides is the author's, in their own
+words of one day: the per-option content and the context pane it exists for, the
+confirmed label and the striking of standing, the three accumulations each headed
+support or divergence, the recording rule for options, the retention rule for
+quotations, the ledger, and the condition the named-change form must meet, "as long
+as the exact node preview can be mechanically derived (eg. via patch syntax)". What
+rests on the AI is the composition itself, which the author's delegation of
+2026-09-03 covers in terms — "Encoding details are delegated" — but which no ruling
+has yet touched; the reading that the four sections go, which is an inference from
+"Anything else that doesn't support the alignment dialogue/artifact disposition is
+subject to accumulation/removal" and not a sentence the author wrote; the survey
+block's four added keys, which come from the `survey-selection` node and not from
+the author; the widening of the pin to the option list; and the reading of the
+author's words that `edit-led-against-a-named-ground` takes, which the review that
+raised it called unsettled. Boldness runs in the direction the author gave it on
+2026-09-03, "stick with boldness then, I want to know how much rests on the AI's
+own knowledge against the record", so high boldness is low confidence; `growth`
+defines the term and its own definition sentence runs the other way, which its
+option `boldness-reversed` repairs, and since that repair brings that node to this
 usage and to the author's words, this ruling does not wait on it.
 
-**Three of the five are departed from, and the fence says so.**
-`authority-fact-on-every-node` as recorded says every node carrying a stage
-carries an answer fact and an authority fact; the fence says every node
-carrying facts does. Measured at graph commit 9144c708: ninety-seven nodes all
-carry a stage, ninety-four carry both facts, and three carry none at all,
-`assumption-form`, `frontier-metrics` and `lockfile`, every one at the
-periagogic stage, where no candidate answer
-has been drafted and there is no decision to record. A fact-less node there is
-not the gap the clause was raised about; requiring an authority fact on it
-would ask the author to confer a class on an answer that does not exist. From
-the review stage on a node carries facts, because a review reads a
-recommendation, so the requirement bites exactly where it matters.
-`survey-pin-in-review` as recorded also says when the pin is written, "at apply
-only where the recommendation still matches what was read"; that is the
+**Three of the five earlier clauses are departed from, and the fence says so.**
+`authority-fact-on-every-node` as recorded says every node carrying a stage carries
+an answer fact and an authority fact; the fence says every node carrying facts
+does. Measured at graph commit `93644144`: a hundred and fifty nodes all carry a
+stage and a hundred and forty-six carry facts, and the four that carry none stand
+at the periagogic stage, where no candidate answer has been drafted and there is no
+decision to record. A fact-less node there is not the gap the clause was raised
+about; requiring an authority fact on it would ask the author to confer a class on
+an answer that does not exist. From the review stage on a node carries facts,
+because a review reads a recommendation, so the requirement bites exactly where it
+matters. `survey-pin-in-review` as recorded also says when the pin is written, "at
+apply only where the recommendation still matches what was read"; that is the
 review's own step and the `clean-context-review` node's, so the fence keeps the
-field's shape and the readiness rule and cites that node for the rest, on the
-same rule by which this answer stops restating what other nodes own. And
-`every-option-carries-its-sentence` opens by saying the two exemptions go and
-closes by striking one and keeping the other; the fence states what it
-concluded and not what it opened with, since what the option that stands has is
-not an exemption but a different home, its own answer.
+field's shape and the readiness rule and cites that node for the rest. And
+`every-option-carries-its-sentence` opens by saying the two exemptions go and closes
+by striking one and keeping the other; the fence states what it concluded and not
+what it opened with, and under the author's refinement the exemption it kept is
+struck too, since an option's content is an option's content whether or not the
+author last confirmed it and no section stands outside the facts to hold one.
 
-**Two changes the fence makes beyond the five, each because leaving them would
-land a contradiction.** The standing answer says an option the AI no longer
-holds viable leaves the list; the reader now carries `status: passed` with a
-required reason, and `viable-options` carries `passed-over-options-stay`,
-deciding the membership of an option list, which is that node's question and
-not this one's, as the clean-context review of `prose-and-structure` found on
-2026-09-04. The fence names the fields an option carries and cites
-`viable-options` for what viability is and whether a candidate ever leaves, so
-this node states the membership rule nowhere and is right under either ruling.
-And the fence says what an option on the answer fact may be. The record already
-holds two sets of options that are not whole answers, the five here and the
-eight on `alignment-page`, while the encoding said an option is a candidate
-answer and only the recommended one carries text; the fence closes that gap. An
-option may be a whole answer or a named change to another, and where it is a
-change its prose says which option it changes and what it changes, so a ruling
-for it is a ruling for that text with that change. `viable-options`' sentence
-that an option carries "in full the text where it would stand as the answer and
-differs from what stands" is read here as the fence, one text per node and the
-recommended option's; if the author reads it as a text per option, that is a
-change to this encoding and nothing in the record carries it today.
+**Three options are absorbed whole, and one is adopted rather than left standing
+beside its own key.** `standing-option-carries-a-subsection` is what the sentence
+that every option has a subsection now says; `an-unconfirmed-nodes-draft-shape`
+asked which of two shapes a draft takes and is dissolved rather than answered,
+since this option abolishes both; `survey-pin-carries-its-commit` is the first of
+the four keys the survey's block gains. `commit-in-the-review-block` is adopted
+too, and for a reason the review found: the reader has carried the draft reading's
+`commit` since 2026-09-05, `review-cost`'s delta re-reading needs it, and an answer
+that enumerated four draft keys and closed against a fifth would make a shipped key
+unsupported implementation on the day it was ruled. So the draft block carries six
+keys with four required, and the survey block six of its own, and the two readings'
+commits are carried by one rule.
 
 **`existence` and `persistence` stay conditional, and the asymmetry with
 `authority` is a decision and not an oversight.** Every ruling decides a class,
-since a confirmation on the answer fact confers ratified and delegated and
-deferred are conferred only by a ruling on the authority fact, so the class must
-be askable wherever a ruling can be given, which is why its absence closed the
-author's third exit. A prune and a change of shape are decided only where one is
-proposed. A keep-or-prune row on a node nobody has proposed pruning is a
-candidate no one considered, which the options rule does not admit, and it would
-put a row on every screen in the record to ask a question none of them raises.
-Measured at the same commit: six nodes carry an existence fact and four a
-persistence fact, and on the rest both are derived from the node's shape and ask
-nothing.
+since a confirmation on the answer fact confers ratified and delegated and deferred
+are conferred only by a ruling on the authority fact, so the class must be askable
+wherever a ruling can be given, which is why its absence closed the author's third
+exit. A prune and a change of shape are decided only where one is proposed. A
+keep-or-prune row on a node nobody has proposed pruning is a candidate no one
+considered, which the options rule does not admit, and it would put a row on every
+screen in the record to ask a question none of them raises.
 
 **A gloss is the sentence a `defines` entry carries beside its term**, written
 `{term, gloss}`, saying what the term means and so what confirming that choice
 would mean where the term is an option's name. It lives on the node that defines
-the term and nowhere else: `ratified`, `delegated` and `deferred` on
-`authority`, `keep` and `prune` here. That is the home the two vocabulary facts'
-options were missing, and it is why those options carry no `#### <option>`
-subsection: `ratified` means the same on every node, so a subsection per node
-would be one sentence written ninety-four times and would drift. The consequence
-the record should not discover later is that a gloss is part of what stands on
-the defining node, so writing one moves that node's own pins and no other's.
+the term and nowhere else: `ratified`, `delegated` and `deferred` on `authority`,
+`keep` and `prune` here. That is the home the two vocabulary facts' options were
+missing, and it is why those options carry no `#### <option>` subsection:
+`ratified` means the same on every node, so a subsection per node would be one
+sentence written a hundred and forty-six times and would drift. This draft writes
+two more, for `answer` and for `persistence`, which are the two of the four
+reserved fact names the record glosses nowhere and which
+`how-a-fact-is-headed`'s recommended option needs so that no fact heading on the
+alignment page falls back to an unlinked word or links to a node asking another
+question; the option `dialogue-glosses-the-four-fact-names` drafted them and this
+answer adopts them, since the sentences are this node's to write. The consequence
+the record should not discover later is that a gloss is part of what stands on the
+defining node, so writing one moves that node's own pins and no other's.
 
-**The two `against` fields are outside every pin, and that is the load-bearing
-part of them.** A fact's `against` is the strongest case against the option it
-recommends, in one line and in the AI's own words, written when the
-recommendation is recorded, which is the adversarial reading of one's own output
-the `evaluation` node requires; the review's `against` is the counter-argument
-the reader returned, which the projections show in its place on the recommended
-option's row. Neither is pinned. The fact's is the argument the recommendation
-had to beat and not part of what is recommended, so sharpening it should not
-send a reviewed node back; the review's is written by the apply step of the very
-review whose pin sits beside it, so a pin that covered it would stale itself the
-moment it was recorded. Measured: all fifty-four reviews now carry the
-counter-argument they returned, backfilled from their accounts on 2026-09-04,
-and five facts on two nodes carry the AI's own case against, the two nodes
-drafted since the field landed; the case against is owed on every other fact
-that recommends.
+**The two `against` fields are outside every pin, and that is the load-bearing part
+of them.** A fact's `against` is the strongest case against the option it
+recommends, in one line and in the AI's own words, written when the recommendation
+is recorded, which is the adversarial reading of one's own output the `evaluation`
+node requires; the review's `against` is the counter-argument the reader returned,
+which the projections show in its place on the recommended option's row. Neither is
+pinned. The fact's is the argument the recommendation had to beat and not part of
+what is recommended, so sharpening it should not send a reviewed node back; the
+review's is written by the apply step of the very review whose pin sits beside it,
+so a pin that covered it would stale itself the moment it was recorded. Measured at
+the same commit: two hundred and four facts that recommend carry no case against,
+sixty-eight of them at the review or the ruling stage, so the field is owed on most
+of the record and is not a defect of the nodes that lack it.
 
-**What the reader must change, named exactly.** Three checks in
-`packages/disposition/read.mjs`, in the coherence block that already raises "a
-staged node's facts must include authority" and in the
-`stage === 'review' || stage === 'ruling'` block below it. First, the answer
-fact from the review stage on, beside the authority fact already required:
-nothing today refuses a node that reaches review with an authority fact and no
-candidate answer to confer a class on. Second, the reason: from the review stage
-on, a fact that recommends carries its `### <fact>` subsection saying why, which
-the answer has required since 2026-09-03 and nothing holds. Measured, a hundred
-and five facts recommend with no reason recorded, seventy-six of them at the
-review or ruling stage, fifty-two on answer facts and fifty-three on authority
-facts, this node's own answer fact among them until this draft. Third, a cycle
-in `depends`, in `readGraph`'s depends block, as `deriveRank` already throws on
-a cycle in `under`: two are live, `dialogue` with `viable-options` and
-`alignment-page` with `unanswered`, and each puts two questions behind each
-other so the ruling order can place neither.
+**What the pin gains, and what it gives up.** Two changes, each stated because
+neither is visible from the option's sentence. The option list moves inside the
+pin — each option's name, source, ref, status with its reason, and its `supports`
+and `diverges` — because under the refinement an option is a claim about the
+author's own words and not only a name on a list, and a claim about the author,
+filed by the AI, on the surface where the author rules, is the last thing that
+should reach a ruling unread. The cost is real and is paid: adding an option to a
+reviewed node now returns it to be read. And because an option's content resolves
+through a base, an edit to a base option moves the pin of every fact whose
+recommendation resolves through it, so the ladder this node's own recommendation
+sits on is a ladder of pins.
 
-**`depends`.** `viable-options` is dropped and
-`clean-context-review#per-draft-and-survey` added. The drop, because this ruling
-no longer waits on that one: the fence cites `authority` for the class read off
-the rulings and `viable-options` for what an option is, and reads correctly
-under either ruling there, while as recorded the entry closed the loop above
-with that node's own `depends` on `dialogue#aspects-are-nodes`, which is an
-option this answer carries whole and a ruling here settles. The addition,
-because `review.survey` exists only if the review divides into two readings; if
-the author rules for the standing single batch there is no second pin to carry.
-The five nodes naming `dialogue#aspects-are-nodes` are unaffected, since every
-option stays on the fact.
+**What the reader must change, named exactly, at implementation commit
+`feaaac1b`.** Two units are already built and wired to nothing:
+`packages/disposition/patch.mjs`, which parses, applies strictly and produces
+hunks, and `packages/disposition/words.mjs`, which parses the ledger, resolves a
+reference and reports unreferenced entries. Eight things are owed in
+`packages/disposition/read.mjs`: the option keys `content`, `supports` and
+`diverges`, where `OPTION_KEYS` today is `name`, `source`, `ref`, `status`,
+`reason`, `ruling`; the survey block's `commit`, `text`, `findings` and `pairs`,
+where `REVIEW_SURVEY_KEYS` today is `date` and `of`; the resolution of an option's
+content with its cycle check, where the reader refuses a cycle for `under` alone; a
+`depends` cycle, refused nowhere, of which two are live today, this node with
+`viable-options` and `alignment-page` with `unanswered`; `stands` struck from
+`FACT_KEYS` with the confirmed label derived in its place; the four section names
+struck from `SECTION_ORDER`; the answer fact and the fact's own reason required
+from the review stage on, beside the authority fact already required; and the
+`####` requirement inverted, since the reader exempts the option `stands` names.
+The record's own debt at graph commit `93644144`: a hundred and five answer options
+carry no subsection and every one is the option `stands` names; eighty-six facts
+recommend with no reason, fifty-two at the review or ruling stage; a hundred and
+thirty-four files carry `## Answer` and `## Rationale`, seventy-four
+`## Disposition`, forty-four a fence; and no node carries a ruling, so nothing in
+the record is confirmed and `stands` is nowhere the confirmed label.
+
+**`depends`.** Three entries: `clean-context-review#per-draft-and-survey`,
+`quotes#words-in-a-ledger-on-the-ref`, and
+`unconfirmed-accumulation#the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed`.
+`viable-options` is dropped, because this ruling no longer waits on that one: the
+fence cites `authority` for the class read off the rulings and `viable-options` for
+what viability is and whether a candidate leaves the list, and reads correctly under
+either ruling there, while as recorded the entry closed a loop with that node's own
+`depends` on `dialogue#aspects-are-nodes`, which is an option this answer carries
+whole and a ruling here settles. A loop is a finding under this node's own answer
+and one side of it is dropped; this is that side. The three kept are the questions a
+ruling here would otherwise get wrong: `review.survey` exists only if the review
+divides into two readings, the ledger the options reference is the quotes node's to
+confer, and what a node keeps before a confirmation is the accumulation node's.
+`survey-selection` is not entered, though this option came from it, because that
+node's `depends` already names this option and the pair would close the loop the
+paragraph above just opened one side of; the fence cites it for what the survey's
+keys carry and reads correctly under any ruling there.
 
 #### alternatives-beside-facts
 
@@ -922,6 +983,8 @@ The account also carries the conclusion of every unit the sitting delegated with
 
 The option named by `stands` carries a `####` subsection of its own, a stored sentence, in place of the answer's first sentences read from `## Answer`; against it, the answer's first sentences said twice drift. Recorded on 2026-09-04 with the alignment-page node as its source, where it had stood as `standing-sentence-stored` until that node's reading found it to be a candidate answer to this question, the clause `every-option-carries-its-sentence` deciding it the other way.
 
+Absorbed into `the-survey-block-carries-what-the-next-survey-selects-on`, whose sentence that every option has a subsection, the one the author last confirmed included, is what this option asked for with the exemption removed rather than kept: an option's content is an option's content whether or not the author last confirmed it, and no section stands outside the facts to hold one. A ruling for this option alone gives the option `stands` names a subsection and leaves `## Answer` where it is.
+
 #### instrumentation-is-a-fact
 
 Everything the recommendation says, with a fifth reserved name beside the four: `instrumentation`, the decision of how a node's answer is checked, the instrument the instruments node describes, carried as a fact with options and a recommendation so that the author rules on it where they rule on the class. Raised by the author's words of 2026-09-04, quoted above, "I expect instrumentation (eg.) would be a fact"; against it, the instruments node holds the instrument as a field of the node and not a decision the author rules on separately, and this node's rule is that a decision not among the reserved names is a question under the node.
@@ -929,6 +992,8 @@ Everything the recommendation says, with a fifth reserved name beside the four: 
 #### commit-in-the-review-block
 
 The review block carries a fifth draft key beside `verdict`, `strength`, `date` and `of`: `commit`, the graph commit the reviewed text was read at, written when the applying step finds a clean tree and absent when it does not. Recorded from the sitting on `review-cost`, whose answer gives an amended draft a re-reading whose object is the difference between the node as it stands and the text the last reading pinned. The pin identifies that text but does not locate it, so the difference is computable only from a commit, and without one the re-reading falls back to a full reading of the amended node. This node's recommended text enumerates the draft keys as four written together or not at all, which a fifth optional key contradicts, so it is recorded here as an option and acts on nothing; what a ruling would have to settle is whether `commit` joins the four in that rule or stands beside them as `against` does, optional and written only when the tree is clean. It bears on this node's answer fact and the recommendation is unmoved.
+
+Adopted into `the-survey-block-carries-what-the-next-survey-selects-on`, which settles what this option left open the way the reader already holds it: `commit` joins the draft block as a sixth key beside `against`, optional and written only where the tree is clean, since the reader has carried it since 2026-09-05, `review-cost`'s delta re-reading needs it, and an answer that enumerated four keys and closed against a fifth would make a shipped key unsupported implementation on the day it was ruled. A ruling for this option alone adds the key to the standing enumeration and none of the rest.
 
 #### source-names-who-raised-it
 
@@ -1019,6 +1084,8 @@ one movement presented to the author in two forms. What the option would decide 
 which shape a node with no ruling takes; it decides nothing about a node that has
 one, where the fence is what carries a proposed change to a text that stands.
 
+Absorbed into `the-survey-block-carries-what-the-next-survey-selects-on`, which dissolves the question rather than answering it: neither shape survives, since a draft is the recommended option's content in its own subsection and there is no `## Answer` and no fence, so a node with no ruling has one shape because every node does. A ruling for this option alone picks one of the two shapes for the standing encoding and keeps both sections.
+
 #### survey-pin-carries-its-commit
 
 The survey's state on a node, `survey` with its `date` and its `of`, carries a
@@ -1038,6 +1105,8 @@ nothing until ruled, and what a ruling would settle is the question
 `commit-in-the-review-block` leaves open, whether a commit key joins the keys
 written together or stands beside them.
 
+Absorbed into `the-survey-block-carries-what-the-next-survey-selects-on`, as the first of the four keys the survey's block gains beside its `date` and its `of`, and the question it left open, whether a commit key joins the keys written together or stands beside them, is settled the way `commit-in-the-review-block` is adopted: the key stands beside the pair, optional and written at apply where the tree is clean. A ruling for this option alone adds `commit` to the survey block of the standing encoding and nothing else.
+
 #### an-option-carries-its-content-its-words-and-its-case
 
 Every option of the answer fact carries its content, whole or as a named change to another option's applied strictly, so that a projection renders the node under any option; `## Answer`, `## Recommendation`, `## Rationale` and `## Disposition` leave the file, a node being its frontmatter, its `## Facts` and its `## Account`; confirmed is a label derived from the rulings and the word standing is not used of an option; every option carries the AI's accumulated support and divergence and references into the ledger to the author's words that support it and that it diverges from; and the author's recording and retention rules decide which options and which words a node carries.
@@ -1048,32 +1117,67 @@ Every option of the answer fact carries its content, whole or as a named change 
 
 #### the-survey-block-carries-what-the-next-survey-selects-on
 
-Everything `an-option-carries-its-content-its-words-and-its-case` says, with the survey's block on a node carrying, beside its `date` and its `of`, the `commit` it read at, the `text` hashes of the five sections its validations read, the `findings` register it left open on the node, and the `keys` the pairs touching the node were drawn on, so that the next survey's selection is local to the node.
+Everything `an-option-carries-its-content-its-words-and-its-case` says, with the survey's block on a node carrying, beside its `date` and its `of`, the `commit` it read at, the `text` hashes of the five sections its validations read, the `findings` register it left open on the node, and the `pairs` it read that touch the node, each with the key it was drawn on, so that the next survey's selection is local to the node.
 
 **AI support.** The `survey-selection` node's delta compares hashes and not commits, and needs the trace on the node it verifies, as the reading `verifying-traces-and-early-cutoff` has it; a comparison that needed a history walk would need a commit the record does not carry, which is the defect `frontier-consistency`'s recommended text records today. The register is what lets a finding be carried forward as standing rather than re-derived, and the keys are what make a key's yield measurable.
 
 **AI divergence.** The block grows from two keys to six and carries a register the fold may not touch, on every node a survey judges; and the hashes pin the five sections at the survey's own reading of them, so a change to what the validations read of a node, which is the `survey-selection` node's to decide, invalidates every hash on every node at once, which is why that node schedules a whole survey after any such change.
 
+#### generated-answer-and-disposition-sections
+
+The node file keeps `## Answer` and `## Disposition` as generated sections, rendered from the confirmed or the recommended option's resolved content and from the ledger entries its options reference, the validator regenerating both and refusing a file whose generated sections differ from what it derives.
+
+**AI support.** A node file stays readable on its own: a reader who opens it meets the answer and the words without resolving a hunk or a ledger reference, which is the legibility trade the recommended option pays. Raised by the clean-context reading of 2026-09-07 as a candidate the record did not carry.
+
+**AI divergence.** It stores a derived text in the record and checks it against its derivation, which is a copy that can drift between the write and the check, and the rule the recommended option rests on is that a copy is what drifts; what a reader gains the projections already give, since the browser and the page render the same derivation without storing it. Passed over for that reason.
+
 ### authority
 
 Ratified. This node fixes what every node in the record carries and what every
-projection may show of it, so a wrong answer here is written into every node
-file and into both pages at once, and the two failures the record has already
-suffered are of exactly the kind a ratification guards: a projector that
-supplied a sentence the record did not hold, and a caption that told the author
-a draft was the node as it stands. Each told the author their ruling meant
-something other than it did, which is capture-shaped whatever else is true, and
-neither was catchable from inside the projection that made it. Delegated would
-hand the AI the shape of the author's own ruling surface, which is a delegation
-of the terms on which a delegation is confirmed. Deferred is the honest second
-choice and is why it is on the fact: the record is already written to this
-encoding, so a deferral would change nothing today and would keep the node in
-front of the author while they work the frontier; the reason to escalate past it
-is that this answer is what every other ruling is recorded in, so an error here
-is not corrected by the rulings that follow but carried by them. Boldness low:
-the rule that escalates toward ratified where being wrong is expensive,
-irreversible, or capture-shaped is the record's own, and both instances are the
-record's.
+projection may show of it, so a wrong answer here is written into every node file
+and into both pages at once, and the two failures the record has already suffered
+are of exactly the kind a ratification guards: a projector that supplied a sentence
+the record did not hold, and a caption that told the author a draft was the node as
+it stands. Each told the author their ruling meant something other than it did,
+which is capture-shaped whatever else is true, and neither was catchable from
+inside the projection that made it. The recommended option adds a third surface of
+the same kind and is the reason the class is not merely re-affirmed but argued
+again: under it the author's own words reach the ruling surface through `supports`
+and `diverges` references the AI files, so a reference on the wrong side is the AI
+telling the author what the author said, at the moment they rule on it.
+
+What a ruling here sets in motion is a migration and not a blessing. No node in the
+record carries an option's content, a ledger reference, a derived confirmed label
+or a six-key survey block today, and at graph commit `93644144` a hundred and
+thirty-four node files still carry the `## Answer` and `## Rationale` this answer
+removes, seventy-four the `## Disposition`, and forty-four the `## Recommendation`
+fence; a hundred and five options owe the subsection they were exempt from, and
+every quotation in the record moves to a ledger that holds none of them yet. The
+author granted that reconciliation in their own words on 2026-09-07 —
+"reconciliation of that disposition in included in the bootstrap reconciliation
+authority for this sitting" — so the record will be written this way before the
+author rules, under a grant and not under a class. That cuts toward ratified on the
+record's own test rather than away from it: the cost of a wrong answer is paid in a
+hundred and fifty rewritten files and in every reference into a ledger, which is
+`class-recommendation`'s expensive limb, and it is paid in work no later ruling
+takes back, which is its irreversible one. What the author would be ratifying is
+the encoding they refined in their own words that day, and the AI's composition of
+it, and not the AI's execution of the migration, which is the grant's and answers
+to the grant.
+
+Delegated would hand the AI the shape of the author's own ruling surface, which is
+a delegation of the terms on which a delegation is confirmed, and it is the one
+class this fact should not carry. Deferred is the honest second choice and is why
+it is on the fact: the recommendation would act, the migration would proceed under
+the grant exactly as it will anyway, and the node would stay on the alignment
+frontier in front of the author while they work it. Its real content is that the
+author need never come back to it. The reason to escalate past it is that this
+answer is what every other ruling is recorded in, so an error here is not corrected
+by the rulings that follow but carried by them, and the surface the author checks
+the AI on is the last surface to leave the author's hands. Boldness low: the rule
+that escalates toward ratified where being wrong is expensive, irreversible, or
+capture-shaped is the record's own, all three limbs are met on the record's own
+measurements, and both instances cited are the record's.
 
 ## Recommendation
 
@@ -1093,16 +1197,22 @@ defines:
   - fact
   - ruling
   - gloss
+  - term: answer
+    gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
   - term: existence
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
     gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
   - term: prune
     gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+  - term: confirmed
+    gloss: "Confirmed is the label on the option of a fact that the author last ruled with the response confirm; it is derived from the rulings as the class is and stored nowhere, and it is the one name the record keeps for what the author's words of 2026-09-07 call standing."
+  - term: persistence
+    gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
 ---
 ## Answer
 
-Its question, its fields, its facts with their options, and its answer as it stands; and, while a dialogue is active on it, the dialogue state. A dialogue is active on every node of the alignment frontier: every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The class is derived from the rulings on the facts, as the authority node says, and a confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. At the recording the dialogue folds: the stage, the review, the dependencies and the account go, the author's words stay as the quotes node decides, and the facts stay with their options, their recommendation, their readings and the rulings the author gave, so that a later session meets what was considered and why before proposing it again. Three requirements fix what the state must be: it must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the frontier, and, reading a node that already has an answer, whether options are pending on it and where each came from. A fourth follows from those three and governs every part below: what a ruling or a projection needs is in the record, in one place, and none of it is supplied by a projection's own text, held in a buffer, or left to be inferred from the absence of a field. It has these parts, each holding only what cannot be re-derived.
+Its question, its fields, its facts with their options and the content each option carries, and its answer, which is the resolved content of the option labelled confirmed; and, while a dialogue is active on it, the dialogue state. A dialogue is active on every node of the alignment frontier: every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The class is derived from the rulings on the facts, as the authority node says, and a confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. At the recording the dialogue folds: the stage, the review, the dependencies and the account go, and the facts stay with their options, their contents, their recommendation, their readings, the references to the author's words their options carry, and the rulings the author gave, so that a later session meets what was considered and why before proposing it again. Three requirements fix what the state must be: it must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the frontier, and, reading a node that already has an answer, whether options are pending on it and where each came from. A fourth follows from those three and governs every part below: what a ruling or a projection needs is in the record, in one place, and none of it is supplied by a projection's own text, held in a buffer, or left to be inferred from the absence of a field. It has these parts, each holding only what cannot be re-derived.
 
 One rule governs where a decision lives, and it is the node node's and not a new one. A decision the author is to rule on separately is a question, and a question is a node: "If a text answers two questions, it is two nodes." So a text carrying several such decisions is decomposed into children, not into an inner structure that would repeat inside the node what the node already is. The record already provides for the children of an open question, since "a reading, a refinement, or any other node may sit under an open question, and does not have to wait for the question to be answered", and it already makes the result legible, since "a node's ceiling is its nearest ratified ancestor", so a ratified child under an unruled parent is exactly a decision the author has confirmed inside a question they have not. What remains on the node itself are the decisions that are not questions under it but facts about its answer, and those are the `facts` below.
 
@@ -1110,45 +1220,51 @@ One rule governs where a decision lives, and it is the node node's and not a new
 
 A node that carries facts at all carries the answer fact and the authority fact: the answer because the node's own question is what a dialogue on it is for, and the authority because a ruling on that fact is how delegated and deferred are conferred, so a node without it offers the author one exit where the record gives three. A node may carry no fact, and then it stands at the periagogic or the maieutic stage, where nothing has been proposed yet and a class would be conferred on nothing; from the review stage on there is a recommendation to read, so there are facts, and those two are among them. That `existence` and `persistence` are conditional where `authority` is not is a decision and not an accident of the encoding: every ruling decides a class, so the class is asked wherever a ruling can be given, while a prune and a change of shape are decided only where one is proposed, and a choice nobody has raised is not a candidate the record lists.
 
-An option carries its `name`; on the answer fact its `source`, the author's words in the disposition, the AI, the clean-context review, or the instrument or node that raised it outside alignment, and its `ref`, the date of the words or of the review, the graph commit, or the instrument or node; a `status`, which is `passed` and nothing else, with the `reason` it was passed over, wherever the AI holds it dominated on the record's criteria; and its `ruling` once the author has given one. and `supports` and `diverges`, the entries of the author's words that bear each way on it, as references into the ledger the quotes node keeps, an entry being referenced by any number of options on any number of nodes. An option must be recorded when the author's words support it or diverge from it, when a tradition supports it or diverges from it, or when the AI weighed it for any reason, its own assessment of viability included; and an entry of the author's words is retained on a node only where an option of that node supports it or diverges from it, an entry no option carries staying in the ledger unreferenced and on no node. What viability is, and whether a candidate ever leaves the list, is the viable-options node's question, whose terms this answer uses and does not restate. An option on the answer fact is a candidate answer to this node's question: it may be a whole answer, or a named change to another option, a clause taken alone or taken differently, and where it is a change its prose says which option it changes and what it changes, so that a ruling for it is a ruling for that text with that change. Every option of the answer fact carries its content, so that a projection can render the node as it would stand under any option the author selects, which is what the alignment page's context pane does. It carries it in one of two forms and no third: whole, as a fenced `markdown` block holding the node as it would stand under it, its frontmatter without the dialogue's own keys and without the facts, and its `## Answer`; or as a named change to another option of the same fact, a line naming that option followed by a fenced `diff` block of unified-diff hunks against that option's resolved content. A hunk carries an `@@ -l,s +l,s @@` header, context lines prefixed by one space, removals by `-` and additions by `+`, with three lines of context each side where the text allows; it is applied strictly, at the line its header names, every context and removal line matching byte for byte, with no fuzz and no offset search, so a hunk that does not apply exactly is an error of the record and is never re-anchored. The resolution is acyclic and a cycle is a finding, as it is in `depends`. Hunks are produced by diffing the two resolved texts and never written by hand. Every text is stored once: a ladder of options that each add a clause to the one above stores one text and the clauses, and the difference the prose used to assert is data the projections apply and the validator resolves.
+An option carries its `name`; on the answer fact its `source`, the author's words, the AI, the clean-context review, or the instrument or node that raised it outside alignment, and its `ref`, the date of the words or of the review, the graph commit, or the instrument or node; a `status`, which is `passed` and nothing else, with the `reason` it was passed over, wherever the AI holds it dominated on the record's criteria; its `supports` and its `diverges`, the entries of the author's words that bear each way on it, written as references into the ledger the quotes node keeps, an entry being referenced by any number of options on any number of nodes; and its `ruling` once the author has given one. An option must be recorded when the author's words support it or diverge from it, when a tradition supports it or diverges from it, or when the AI weighed it for any reason, its own assessment of viability included: the trigger is an act that leaves a trace, so an option the AI considered and rejected in its head is recordable by rule and not by conscience. Which entries of the author's words a node retains follows from those references and is the quotes node's rule, cited here and not restated, as what viability is and whether a candidate ever leaves the list are the viable-options node's, whose terms this answer uses.
 
-Every option of every fact has that sentence, and the record holds it in one place for each kind of option. An option of the answer or the persistence fact has a `#### <option>` subsection under its fact in `## Facts`, carrying in order: its sentence, in prose, what it would answer; the AI's accumulated support for it and its accumulated divergence from it, each headed and each kept whatever the fact recommends, so that the case for an option the AI declined is not written only by the act of declining it; and, on the answer fact, its content in one of the two forms above. Every option has a subsection, the one the author last confirmed included, since its content is an option's content like any other and no section stands outside the facts to hold it. What the traditions say of an option is not written there: it is the derived inverse of what the readings bear on, as the readings node has it, and the projections show it beside the other two accumulations, headed support or divergence like them. An option of the two facts whose options are the record's own vocabulary, `authority` and `existence`, has no subsection at all: its name is a term, and its sentence is the gloss on the node that defines the term. A gloss is the sentence a `defines` entry carries beside its term, written as the term and the gloss together, saying what the term means and so what confirming that choice would mean; it is written once, on the defining node, and read from there, ratified, delegated and deferred on the authority node and keep and prune here. No projection carries a sentence of its own for an option: a sentence that lives only in a projection is a rule no node projects, and the same sentence written again on every node that carries the fact would drift.
+An option on the answer fact is a candidate answer to this node's question, whole or a named change to another, so that a ruling for a change is a ruling for that text with that change. Every option of the answer fact carries its content, so that a projection can render the node as it would stand under any option the author selects, which is what the alignment page's context pane does. It carries it in one of two forms and no third: whole, as a fenced `markdown` block holding the node as it would stand under it, its frontmatter without the dialogue's own keys and without the facts, and its `## Answer`; or as a named change to another option of the same fact, a line naming that option followed by a fenced `diff` block of unified-diff hunks against that option's resolved content. A hunk carries an `@@ -l,s +l,s @@` header, context lines prefixed by one space, removals by `-` and additions by `+`, with three lines of context each side where the text allows; it is applied strictly, at the line its header names, every context and removal line matching byte for byte, with no fuzz and no offset search, so a hunk that does not apply exactly is an error of the record and is never re-anchored. The resolution is acyclic and a cycle is a finding, as it is in `depends`. Hunks are produced by diffing the two resolved texts and never written by hand. Every text is stored once: a ladder of options that each add a clause to the one above stores one text and the clauses, and the difference the prose used to assert is data the projections apply and the validator resolves.
+
+Every option of every fact has that sentence, and the record holds it in one place for each kind of option. An option of the answer or the persistence fact has a `#### <option>` subsection under its fact in `## Facts`, carrying in this order and no other: its sentence, in prose, what it would answer; a paragraph led `**AI support.**` and a paragraph led `**AI divergence.**`, the AI's accumulated support for the option and its accumulated divergence from it, each kept whatever the fact recommends, so that the case for an option the AI declined is not written only by the act of declining it; and, on the answer fact, its content in one of the two forms above. Every option has a subsection, the one the author last confirmed included, since its content is an option's content like any other and no section stands outside the facts to hold it. What the traditions say of an option is not written there: it is the derived inverse of what the readings bear on, as the readings node has it, and the projections show it beside the other two accumulations, headed support or divergence like them. So an option carries three accumulations and no more, and each is stored once in the place that owns it: the AI's on the option, the traditions' on the reading's `bears` entries and projected from them, and the author's own in the ledger and projected through the option's `supports` and `diverges`. An option of the two facts whose options are the record's own vocabulary, `authority` and `existence`, has no subsection at all: its name is a term, and its sentence is the gloss on the node that defines the term. A gloss is the sentence a `defines` entry carries beside its term, written as the term and the gloss together, saying what the term means and so what confirming that choice would mean; it is written once, on the defining node, and read from there, ratified, delegated and deferred on the authority node and keep and prune here. No projection carries a sentence of its own for an option: a sentence that lives only in a projection is a rule no node projects, and the same sentence written again on every node that carries the fact would drift.
 
 `## Facts` holds one `###` subsection per fact, in the facts' order, opening with the reason the fact recommends what it does and the boldness of that recommendation, and the `####` subsections of that fact's options beneath it, in the options' order. A recommendation may be recorded at any stage of the dialogue, as the author ruled on 2026-09-04, and is required from the review stage on, since a node cannot be reviewed without one; a recommendation withheld until a stage boundary is a recommendation held in a session, which the first requirement above forbids. The AI may add an option or move a recommendation in alignment, in reconciliation, and in the loop on itself, within the scope its class allows, as the authority, evaluation and work-loop nodes say.
 
-A `ruling` is the author's act on the option they chose, recorded on it: the `response`, confirm or edit, the `date`, `of`, the pin of the fact's recommendation it answered, and, where the author gave one, the `reason`, why they chose as they did, in their own words and optional. The reason sits on the option because that is where the choice is; the author's words that opened or moved the dialogue stay under `## Disposition`, dated, as the quotes node decides, and the two are different things, one being why this option was taken and the other what was said to the record. A denial is never a ruling: it is a kickback with the author's words. Only the author rules, on the alignment page or in prose, and the AI writes no ruling and no class for itself.
+A `ruling` is the author's act on the option they chose, recorded on it: the `response`, confirm or edit, the `date`, `of`, the pin of the fact's recommendation it answered, and, where the author gave one, the `reason`, why they chose as they did, in their own words and optional. Those words are the author's like any others, so they are an entry of the ledger and the option carries the reference and not a second copy of them, which is what the authority node means when it says a ruling whose words are not in the record, or whose option carries no reference to them, is invalid. The reason sits on the option because that is where the choice is, and the words that opened or moved the dialogue reach the same option, or another, by the same references; the two are different things, one being why this option was taken and the other what was said to the record. A denial is never a ruling: it is a kickback with the author's words. Only the author rules, on the alignment page or in prose, and the AI writes no ruling and no class for itself.
 
 `stage`, the next movement owed: periagogic, maieutic, review, or ruling. The movements come in that order, so the stage also says what is behind the node, and a kickback moves it back. A recommendation moved on a node with a class re-opens the dialogue at the movement the recording node's classification calls for, the review where only the recommendation moved, from wherever the move came.
 
 The author's words are not a section of the node. They are entries of the ledger, verbatim and dated, and they reach a node as the references its options carry, an entry appearing on every option that supports it or diverges from it and shown to the author as one quotation concatenated in date order.
 
-There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section. A node's answer is the resolved content of the option labelled confirmed; where none is, of the option the answer fact recommends; and where the node has neither, it has no answer, which is the state of every node no ruling reaches. The projections derive the edit between any two options' resolved contents, field by field and word by word, and store none of it. The argument for a recommendation is the recommended option's support, the rivals' divergence and the fact's own reason, none of which is a copy of the others. And the author's words are in the ledger the quotes node keeps, reaching the node as the references its options carry. A node file is its frontmatter, its `## Facts` and its `## Account`. Where the recommended option is the one that stands, on every node whose recommendation acts and on every node whose draft is its recommendation, there is no such section, and a confirmation rules for the answer as it stands. A diff is derived from the fence and the node and never stored. The draft, elsewhere in the record, is this text. It may be invalid under the doctrine of the day, as when it presumes a ruling not yet given; the validator parses it and checks only that it answers the same question and carries none of the node's own keys and no facts of its own.
+There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section. A node file is its frontmatter, its `## Facts` and its `## Account`. A node's answer is the resolved content of the option labelled confirmed; where none is, of the option the answer fact recommends; and where the node has neither, it has no answer, which is the state of every node no ruling reaches. The projections derive the edit between any two options' resolved contents, field by field and word by word, and store none of it. The argument for a recommendation is the recommended option's support, the rivals' divergence and the fact's own reason, none of which is a copy of the others. And the author's words are in the ledger the quotes node keeps, reaching the node as the references its options carry. An option's content is a draft and may be invalid under the doctrine of the day, as when it presumes a ruling not yet given: the validator resolves it and parses it, and checks only that it answers the same question and carries none of the node's own keys and no facts of its own, and it checks nothing else about what it says.
 
-A ruling that gives a node its first answer is not a ruling that amends one, and the projections say which by naming the ground rather than by withholding the edit. Wherever an answer stands they lead with the edit this ruling would make and name what that edit is against: the answer as ratified where the answer fact carries a ruling, and a draft no one has confirmed where it does not, whatever class a ruling on the authority fact confers, since that ruling is about who decides and not about this text. Where no answer stands there is nothing to diff and the recommended text is shown whole. A first answer is thereby named as one, by its ground: confirming a draft no one has confirmed ratifies the AI's draft, and a denial leaves the question open with nothing behind it that holds, since what an unanswered disposition lacks is authority and not standing, as the un-aligned-children node says.
+A ruling that gives a node its first answer is not a ruling that amends one, and the projections say which by naming the ground rather than by withholding the edit. Where an option is confirmed they lead with the edit this ruling would make and name the ground as the answer as confirmed. Where none is, nothing has been confirmed to take an edit against, so the recommended option's resolved content is shown whole and named as a draft no one has confirmed, whatever class a ruling on the authority fact confers, since that ruling is about who decides and not about this text. A first answer is thereby named as one, by its ground: confirming a draft no one has confirmed ratifies the AI's draft, and a denial leaves the question open with nothing behind it that holds, since what an unanswered disposition lacks is authority and not its place in the record, as the un-aligned-children node says.
 
-`review`, the state of the two readings the clean-context review divides into, as that node's answer describes them. Of this draft: `verdict`, forward or kickback; `strength`, of the counter-argument, strong, moderate, weak, or none; `date`; `of`, the pin of the recommendation the reviewer read; and `against`, the counter-argument it returned, which the projections show on the recommended option's row in place of the case the AI wrote there. The four are written together or not at all, and `against` is optional beside them. Of the frontier: `survey`, its `date`, its `of`, the same pin, its `commit`, its `text`, the hashes of the five sections the survey's validations read, its `findings`, the register of what the last survey left open on this node with the support each rests on and the condition on which each is discharged, and its `keys`, and no verdict, since a survey judges the frontier's consistency with itself and kicks back the nodes a finding names rather than forwarding one; it may stand alone on a node the survey judged before that node's draft review ran. When each pin is written is the review's own step and the clean-context-review node's. What a reader saw is the record at the date recorded and needs no field. A node reaches the ruling stage on a forward verdict; that both pins name the recommendation as it stands is the node's readiness, derived and shown by the projections, and no ruling is recorded while either reading is owed.
+`review`, the state of the two readings the clean-context review divides into, as that node's answer describes them. Of this draft: `verdict`, forward or kickback; `strength`, of the counter-argument, strong, moderate, weak, or none; `date`; `of`, the pin of the recommendation the reviewer read; `against`, the counter-argument it returned, which the projections show on the recommended option's row in place of the case the AI wrote there; and `commit`, the graph commit that reading read at, which names the tree the pin was taken from so that a re-reading can diff the text the last reading pinned against the node as it now stands. The first four are written together or not at all, and `against` and `commit` are optional beside them, a reading being complete without either and a reading taken before those fields existed carrying neither. Of the frontier: `survey`, its `date`; its `of`, the same pin; its `commit`, the graph commit the survey read at; its `text`, the hashes of the five sections the survey's validations read; its `findings`, the register of what the last survey left open on this node, each with the support it rests on and the condition on which it is discharged; and its `pairs`, the pairs that survey read which touch this node, each with the key it was drawn on; and no verdict, since a survey judges the frontier's consistency with itself and kicks back the nodes a finding names rather than forwarding one; it may stand alone on a node the survey judged before that node's draft review ran. Which five sections the hashes cover, what the register carries, and what a key is are the survey-selection node's, whose terms this answer uses and does not restate; what this answer fixes is that the block has somewhere to put them, since a survey that must walk history to find what it last read is a pin held outside the record. When each pin is written is the review's own step and the clean-context-review node's. A node reaches the ruling stage on a forward verdict; that both pins name the recommendation as it stands is the node's readiness, derived and shown by the projections, and no ruling is recorded while either reading is owed.
 
 `depends`, the open questions whose rulings this one waits on, as data: the ids of nodes still on the frontier whose rulings must come before this node's, or a node id and an option on its answer fact, written as the id and the option's name, so the page can order the author's queue, show what a ruling here would unblock, and refuse to put a question before the one it rests on. It is also what carries coherence between decisions, within a subtree as between subtrees, so no separate exclusion field is minted. A dependency runs one way: entries that close a loop put each question behind the other and no order can place either, so a loop is a finding and one side of it is dropped. The inverse, what this question feeds, is derived from it and never stored, as is the rest of the node's position in the frontier: rank, order, and the ancestry, which `under`, `after`, `order` and `cites` already carry as data for the answered graph. `depends` is dialogue state and not one of those, because it holds only while both questions are open and is removed with the rest of the dialogue at the recording.
 
 `## Account`, the AI's account in prose: the evidence, the findings, the reasoning behind the recommendation of each fact, the review's findings and its counter-argument with the session's reply, and what is open for the author. It is not a proposal and does not carry that name: a proposal is the state the authority node defines.
 
-The validator holds the parts together: a stage on every node no ruling grants, on every deferred node, and on every node whose recommendation has moved since its ruling, and every part of the dialogue, the review, the dependencies and the account, requiring one; from the review stage on, facts, with every fact recommending one of its own options and a boldness beside it; the authority fact wherever a staged node carries facts; on the answer fact from the review stage on, every option carrying its content in one of the two forms, each whole content parsing as a node, answering the same question, and carrying none of the node's own keys nor a `## Facts` section, each named change naming an option of the same fact, the resolution acyclic, every hunk applying exactly, and every `supports` and `diverges` reference resolving to an entry of the ledger that exists; the facts' names from the reserved four with the answer first, each option's name unique on its fact and a slug on the answer fact, an answer option carrying its source and its ref, the two vocabulary facts offering only their own vocabulary, a `status` that is `passed` with its `reason` and that is neither recommended nor standing nor ruled, at most one ruling per fact, and the ruled option the one that stands; the `## Facts` subsections matching the facts in name and order, with one `####` under a per-node fact for each option but the one that stands and none at all under a vocabulary fact; the review's four draft keys together or not at all, with the survey standing alone; a forward verdict at the ruling stage; every `depends` entry resolving to a node that still carries a stage, and to an option on its answer fact where one is named; and every reading's `bears` entry resolving to a fact and an option of the node it names. Three things this answer asks for the validator does not yet hold, named here so that they are reconciled and not discovered: the answer fact from the review stage on, beside the authority fact it already requires; the reason for a recommendation, which is the fact's own `###` subsection, from the same stage; and a `depends` entry that closes a loop, which the reader refuses for `under` and not here.
+The validator holds the parts together. A stage on every node no ruling grants, on every deferred node, and on every node whose recommendation has moved since its ruling, and every part of the dialogue, the review, the dependencies and the account, requiring one. From the review stage on, facts, with every fact recommending one of its own options, a boldness beside it, and the reason for that recommendation written in the fact's own `###` subsection; and the answer fact and the authority fact wherever a staged node carries facts. On the answer fact from the review stage on, every option carrying its content in one of the two forms, each whole content parsing as a node, answering the same question, and carrying none of the node's own keys nor a `## Facts` section, each named change naming an option of the same fact, the resolution acyclic and resolving through no name no option carries, every hunk applying exactly, and every `supports` and `diverges` reference resolving to an entry of the ledger that exists. The facts' names from the reserved four with the answer first, each option's name unique on its fact and a slug on the answer fact, an answer option carrying its source and its ref, the two vocabulary facts offering only their own vocabulary, a `status` that is `passed` with its `reason` on an option that is neither recommended nor ruled, at most one ruling per fact, and no key naming the confirmed option, that label being derived from the rulings and stored nowhere. The `## Facts` subsections matching the facts in name and order, with one `####` under a per-node fact for every option of that fact, the confirmed one included, and none at all under a vocabulary fact, each `####` carrying its sentence, then its `**AI support.**`, then its `**AI divergence.**`, then, on the answer fact, its content, in that order. The review's four required draft keys together or not at all, with `against` and `commit` optional beside them and the survey block standing alone. A forward verdict at the ruling stage. No `## Answer`, `## Recommendation`, `## Rationale` or `## Disposition` section on any node file. Every `depends` entry resolving to a node that still carries a stage, and to an option on its answer fact where one is named, with no entry that closes a loop. And every reading's `bears` entry resolving to a fact and an option of the node it names.
 
-Everything else is derived: the class and the status, the persistence where no fact carries it, the queue and its order, whether a recommendation has moved since its ruling and whether it has changed since either reading, the readings on each option, the sentence of every option, the edit the projections show, and the counts. A pin covers what was recommended and why and no more: a fact's pin is its name, the option it recommends, its boldness, the reason in `## Facts`, that option's own sentence, and, on the answer fact, the recommended text; the review's pin is every fact's. So adding an option, marking one passed, recording the author's reason for a ruling, or writing a subsection under an option nothing recommends moves no pin, and neither case against moves one, the fact's because it is the argument the recommendation had to beat and not part of what is recommended, the review's because it is written beside the very pin it would otherwise stale. What stands is the node without the dialogue and without the facts, so that recording a fact never moves the ground a recommendation was drafted against.
+What the instrument holds of that at implementation commit `feaaac1b`, and what it is owed, named here so that the debt is reconciled and not discovered. It holds the two hard pieces: `packages/disposition/patch.mjs`, which parses hunks, applies them strictly with no fuzz and no offset search, and produces them by diffing two resolved texts; and `packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry, and reports the entries no option references. Neither is wired into the reader, and eight things are owed there. The option keys `content`, `supports` and `diverges`, where `OPTION_KEYS` is `name`, `source`, `ref`, `status`, `reason` and `ruling`. The survey block's `commit`, `text`, `findings` and `pairs`, where the survey keys are `date` and `of`. The resolution of an option's content and the cycle check over it, the reader refusing a cycle for `under` alone today. A `depends` entry that closes a loop, refused for `under` and not there. `stands` struck from the fact keys and the confirmed label derived in its place. The four section names struck from the section order, which still lists Disposition, Answer, Rationale and Recommendation. The answer fact and the fact's own reason required from the review stage on, beside the authority fact the reader already requires. And the `####` requirement inverted, since the reader today exempts the option `stands` names from carrying one. What the record owes beside the instrument, measured at graph commit `93644144` over its hundred and fifty nodes: a hundred and five options on answer facts carry no subsection, and every one of them is the option `stands` names, so the exemption and the debt are the same hundred and five; eighty-six facts recommend with no reason recorded, fifty-two of them at the review or the ruling stage; two hundred and four recommend with no case against, sixty-eight of them at those stages; a hundred and thirty-four node files carry a `## Answer` and a `## Rationale`, seventy-four a `## Disposition`, and forty-four a `## Recommendation` fence; and not one node carries a single ruling, so nothing anywhere in this record is confirmed today and every projection that shows a text in the confirmed place is showing the AI's draft.
 
-The projections that show a node with a confirmed choice, the browser and the alignment page, show the choice first and beneath it the recommendation, the other options, and what each tradition says, and say that the choice keeps its authority until the author rules for another.
+Everything else is derived: the class and the status, the confirmed label, the persistence where no fact carries it, the queue and its order, whether a recommendation has moved since its ruling and whether it has changed since either reading, the readings on each option, the sentence of every option, the resolved content of every option, the edit the projections show, and the counts. A pin covers what was recommended and what the recommendation was chosen among, and no more: a fact's pin is its name, the option it recommends and the boldness of that recommendation; each of its options' `name`, `source`, `ref`, `status` with the `reason` it was passed over, and `supports` and `diverges`; and the recommended option's own sentence and its resolved content. The review's pin is every fact's. Because the pin covers a resolved content and not a stored one, an edit to an option that another option's content is a named change against moves the pin of every fact whose recommendation resolves through it, and a base option nothing recommends is therefore not outside the pin the way its own subsection is. What is outside every pin is what accumulates: the AI's support and divergence on any option, the fact's own reason, the author's reason recorded with a ruling, the accounts, and both cases against. The AI's accumulation and the fact's reason are outside it because they grow at every sitting and are exactly what the fold and the accumulation touch, so a pin over them would stale every reviewed node on every sitting and would say that a recommendation had moved when only its argument had thickened. Both cases against are outside it for the reason each has: the fact's is the argument the recommendation had to beat and not part of what is recommended, so sharpening it should not send a reviewed node back; the review's is written by the apply step of the very review whose pin sits beside it, so a pin that covered it would stale itself the moment it was recorded. The references are inside it because a `supports` or a `diverges` is a claim about what the author said, filed by the AI, on the surface where the author rules, and the one thing a pin exists to guarantee is that what the author confirms is what a reader read.
+
+The projections that show a node with a confirmed choice, the browser and the alignment page, show that choice first, marked confirmed, and beneath it the recommendation, the other options with their status, and, on every option, the three accumulations headed support or divergence; and they say that the confirmed choice keeps its authority until the author rules for another. Where no option carries a confirmed ruling nothing is confirmed, and a projection that puts an unconfirmed text in that place is showing the author the AI's draft where their own choice belongs.
 
 ## Rationale
 
-The author's question of 2026-09-03, quoted above, and their model of 2026-09-04 recorded on the viable-options node fix the shape: every decision on a node is a fact with a list of viable options, the recommendation is a mark on one of them with its boldness, and the author's ruling is recorded on the option they chose. What the dialogue must carry is fixed by what cannot be re-derived once the session that held it is gone: the author's words, the position reached, the options on the table and where each came from, the recommended text, the reasons the facts require, and what each reading found. What it must not carry is anything a session would decide the same way twice.
+The shape is the author's, given in three sittings. On 2026-09-03 they asked for the unanswered frontier to be encoded as a recommendation with dialogue state and a list of alternatives, and delegated the rest: "Encoding details are delegated." On 2026-09-04, on the viable-options node, they fixed the model: every decision on a node is a fact with a list of viable options, the recommendation is a mark on one of them with its boldness, and the author's ruling is recorded on the option they chose. On 2026-09-07 they refined it to the encoding this answer writes, and the refinement is the answer's spine: "each option for each fact is recorded with its actual fact content so that when the author selects an option via the alignment artifact the context pane is dynamically updated to preview the node that is being confirmed"; "\"standing\" is just a label that can be applied to an option (similar to an AI recommendation) to indicate that it was the last confirmed option for that fact on that node"; "the expanded details of an option (before and also after confirmation) shows a) the history of author quotes that both support and/or contradict the option (implies that one quote may be reference by multiple options) b) the accumulated/current AI support and/or rejection rationale for that option (independent of ultimate recommendation)"; and, of what a node keeps once those are in it, "Anything else that doesn't support the alignment dialogue/artifact disposition is subject to accumulation/removal." What the dialogue must carry is fixed by what cannot be re-derived once the session that held it is gone. What it must not carry is anything a session would decide the same way twice.
 
-One rule decides the rest, and it is what this answer adds to the model: every part a ruling or a projection needs is in the record, in one place. The record learned it five times in one direction. A survey with a pin and nowhere to put it. An author's reason for choosing written to a page's database, which transience and ruling-transport both hold is a buffer and never the record. An option's sentence supplied by a table inside the projector, which is implementation no disposition justifies. An authority fact missing where a ruling would have conferred a class, so that the only class a confirmation could produce was ratified. And a diff whose ground was left to be inferred, which is what the author read off the purpose node on 2026-09-03: "nodes (eg. commons.systems/disposition-graph/purpose) still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed." In each of the five the record held part of a thing and something else held the rest, and in each the part outside the record was the part that could lie. Writing the sentence on the node that defines the term rather than in the projector is the same move as reading the class off the rulings rather than storing a stamp: keep it once where it is decided, derive the rest, and no copy can drift because there is no copy.
+One rule decides the rest, and it is what this answer adds to the model: every part a ruling or a projection needs is in the record, in one place. The record learned it five times before this sitting. A survey with a pin and nowhere to put it. An author's reason for choosing written to a page's database, which transience and ruling-transport both hold is a buffer and never the record. An option's sentence supplied by a table inside the projector, which is implementation no disposition justifies. An authority fact missing where a ruling would have conferred a class, so that the only class a confirmation could produce was ratified. And a diff whose ground was left to be inferred, which is what the author read off the purpose node on 2026-09-03: "nodes (eg. commons.systems/disposition-graph/purpose) still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed." The refinement of 2026-09-07 is the same lesson four more times, in the four places the record still held part of a thing and let something else hold the rest. The text of a rival option was in the AI's prose about it rather than in the record, so the page could not preview the node the author was about to confirm, and only one option of a fact had a text at all. The label the projections showed as the node's answer was `stands`, which names the option whose section holds the text and not the option the author last confirmed, so a page reading it truthfully still showed the AI's draft where the author's choice belongs. The author's words were copied onto every node that needed them, thirty-seven thousand bytes of copy in a hundred and thirty-one thousand, every copy hand-made and none checked against another. And the survey's own state, what it read and what it left open, lived in the message of the commit that applied it. In each the part outside the record was the part that could lie. Writing an option's content on the option, deriving the confirmed label from the rulings, keeping the words once in the ledger and referencing them, and giving the survey a block on the node it judged are one move: keep it once where it is decided, derive the rest, and no copy can drift because there is no copy.
 
-The places this answer says what a pin does not cover follow from the same rule read the other way. A pin exists to tell the author that what they are about to confirm is what was read. A pin over everything on the node would say that of text nobody read differently, would send a reviewed node back because an option was added beside the recommendation, and would stale a review the moment its own counter-argument was written into the field beside its pin. So the pin covers the recommendation and its reason, and the statuses, the author's reasons, the options nothing recommends and both cases against sit outside it.
+The mechanical derivation is the author's condition and not a convenience: "named-change form legibility tradeoff is acceptable as long as the exact node preview can be mechanically derived (eg. via patch syntax)". So a named change is unified-diff hunks against a named base, applied at the line the header names with no fuzz and no offset search, and produced by diffing the two resolved texts rather than written by hand. There is no heuristic anywhere in the resolution, which is what makes the preview exact rather than probable, and the price of that is stated below rather than hidden: a hunk that does not apply is an error of the record. The three accumulations are the author's enumeration read literally — "All of AI and author rationale and references to tradition are recorded as support and/or divergence for each option. AI response is accumulated, reference to tradition is accumulated, author response is concatenated quotation" — and each is put once in the place that already owns it, the AI's on the option, the traditions' on the reading's `bears` entries where the readings node put them, and the author's in the ledger, so that the option carries three accumulations and stores one. The recording rule is theirs in the same turn: "If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded." It is sharper than the rule of thumb it replaces because it makes the trigger an act that leaves a trace. The retention rule that follows from it is the quotes node's and is cited here, not restated, on the same rule by which this answer stops restating what other nodes own, as it cites viable-options for viability and survey-selection for what a survey reads.
 
-The tradition closest to this encoding is read under this node as madr-decision-records, whose bears entries mark the form adopted and record two divergences: the class is derived here from the rulings on the facts where that tradition stores a status on the record, and a superseded answer is amended in place here where that tradition keeps the old record beside the new. Readings owed under this node, each surfaced by the second evaluation of 2026-09-04 with the resolution it informed: the special verdict form, for the rule that a decider is asked each question the judgment needs and the form supplies none by default; legislative amendment shown against the text it changes, for naming the ground of an edit; the single-subject rule, which diverges from this answer and is the case against composing five clauses into one option; and the three the sitting of 2026-09-03 named in prose here and left owed, the status field of the RFC and PEP processes, the review approval pinned to a revision, and the review of a change as a diff against what stands. Two readings the record already holds gain an entry rather than a node of their own, chenery-reasoned-decision for the reason recorded with the ruling and codd-update-anomaly for the sentence stored once.
+The places this answer says what a pin does not cover follow from the same rule read the other way. A pin exists to tell the author that what they are about to confirm is what was read. A pin over everything on the node would stale a review the moment its own counter-argument was written into the field beside its pin, and would send a reviewed node back because a paragraph of support was added under an option nobody recommends. So the pin covers the recommendation, the option list it was chosen from, and the references that say what the author's words do to each option, and leaves outside it the two cases against, the accumulating prose, the accounts and the fact's own reason. That the option list is inside the pin is a change from the encoding this answer replaces, and it is deliberate: under the refinement an option is no longer only a name on a list but a claim about the author's own words, and the surface where a wrong claim would be met is the surface where the author rules. The cost is that adding an option to a reviewed node now returns it to be read, where before it did not, and the record pays that rather than let a `supports` reference reach a ruling unread. The pin's other consequence is new with the named-change form and is stated so that nobody meets it as a surprise: because the pin covers a resolved content, editing an option that another option's content is a change against moves the pin of every fact whose recommendation resolves through it, so a ladder of options is a ladder of pins and an edit at its foot is felt at its top.
 
-What this costs, as a consequence of the design and never as a reason for it, measured at graph commit 9144c708: every fact that recommends owes the reason in its `## Facts` subsection, which a hundred and five do not carry and seventy-six of those stand at the review or ruling stage; every fact that recommends owes its case against, which five carry; the survey owes its pin on every node it has judged, of which none carries one, so no node is ready to rule until the survey has run; and the validator gains three checks. The answer as it stood is kept as the option `facts-carry-options`, and the answers before it as the options this fact carries.
+The traditions. The closest to this encoding is read under this node as madr-decision-records, whose `bears` entries mark the form adopted and record two divergences, the class derived here from the rulings on the facts where that tradition stores a status on the record, and a superseded answer amended in place here where that tradition keeps the old record beside the new. verifying-traces-and-early-cutoff is adopted on the option this fact recommends: a verifier that must re-derive what it already checked is a verifier that cannot cut off early, and the trace it needs belongs on the object it verified, which is why the survey's block carries what the next survey selects on rather than leaving it to a history walk. chenery-reasoned-decision is adopted for the reason recorded with the ruling, and codd-update-anomaly for the sentence stored once, which is now the argument for the ledger and for one text per option as well as for the gloss. legislative-amendment-in-context is adopted for naming the ground an edit is shown against, and special-verdict-form for the rule that a decider is asked each question the judgment needs; rfc-pep-status-field, review-approval-pinned-to-a-revision and change-reviewed-as-a-diff are adopted on the clauses this answer keeps unchanged, the ordered stage, the pin that a new revision stales, and the change read as a diff. One tradition diverges, and it is the case against this recommendation rather than a decoration on it: single-subject-rule holds that a measure carrying several subjects lets the party that drafted the bundle decide what travels with what, and the option this fact recommends composes the encoding in force, five clauses folded into it before this sitting, the per-option content, the ledger, the removal of four sections and a survey block of six keys. The record does not argue that away. It records the divergence, states in the fact's own `against` that the AI chose the bundling, and leaves every part separately on the fact so that the author may rule for a smaller one.
+
+What this costs, as a consequence of the design and never as a reason for it. Two legibility trades, each with a mechanical derivation behind it and the first of them accepted by the author on that condition: a node file no longer holds its answer in one place, and no longer holds the author's words at all. A `supports` or a `diverges` is a claim about the author's words that the AI writes, and one filed on the wrong side misrepresents the author to the author on the very surface where they rule; the record's answer is that the reference is inside the pin, so a wrong one is a thing a reader read and the author confirmed, and never a thing that changed underneath them. A hunk applied strictly is brittle by design: an edit to a base option that its dependants do not follow is a validator error rather than a silently re-anchored patch, which is the price of a derivation with no heuristic in it, and it is a price this record prefers to pay loudly. The migration is the rest of it, measured at graph commit `93644144`: a hundred and thirty-four node files lose their `## Answer` and their `## Rationale`, seventy-four their `## Disposition`, forty-four their `## Recommendation` fence; a hundred and five options gain the subsection they were exempt from; eighty-six facts owe the reason they recommend on and two hundred and four the case against; every quotation in the record moves to the ledger and comes back as a reference; and the reader gains eight things it does not hold. The answer as it stood is kept as the option `facts-carry-options`, the encoding of 2026-09-04 as `every-part-in-the-record`, and the answers before them as the options this fact carries.
 ```
 
 ## Account
@@ -2359,3 +2475,8 @@ On the viability of the options: Every option listed is viable on its facts and 
 Strongest counter-argument (strong): This answer takes every surface on which the author checks the AI and makes it something the AI derives. The node file stops holding the answer in prose, the author's own words leave the file for a ledger reached by `supports` and `diverges` references the AI writes, and a rival option's text becomes unified-diff hunks resolved against another option's text, so that reading what a node says at all requires an instrument that does not exist in `packages/disposition` today. The option's own recorded divergence concedes the sharp end of it -- "A `supports` or `diverges` reference is a claim about the author's words that the AI writes, and one filed on the wrong side misrepresents the author to the author on the surface where they rule" -- and the `single-subject-rule` reading under this node says the rest: the composition now puts the standing encoding, five clauses, the per-option content, the ledger, the section removal and a six-key survey block into one row, and the party that chose which decisions travel together is the party the ruling exists to check. That is capture-shaped in this record's own sense, which is the ground on which the authority fact escalates to ratified, and it is an argument for ruling the parts rather than the bundle. The reply the record can make is that each part is separately on the fact and that the author's words of 2026-09-07 name most of them; the reply it cannot make is that the whole is what the author examined, because the section removal and the survey block are the AI's and the fact's own `against` no longer even describes what it is against.
 
 The session's reply: Validated on the main thread: the amendment of b95923d7 applied eight quoted pairs to the recommended text and left every other sentence that presupposed the four sections, so the fence contradicted itself, the fact's reason named the option the recommendation had moved from, and the rationale argued it. Repaired in the commit that follows this reading: the fence's answer rewritten wherever it presupposed `## Answer`, `## Recommendation`, `## Rationale` or `## Disposition`, the fact's reason and the rationale written for the option recommended, the three false claims about what the reader holds corrected against `read.mjs` at the implementation commit named, the survey-pin count struck, and the `depends` prose brought to the entries. On the counter-argument: the surfaces move, and the record's answer is that every derivation is mechanical and checked, the resolution by a strict applier, the reference by a validator that resolves it, and the label by the rulings; what the author checks is unchanged, the words verbatim and the node under any option, and the case against on the fact now says exactly this.
+
+
+### Repaired after the reading of 93644144, 2026-09-07
+
+The clean-context reading of 2026-09-07 kicked the node back with fifteen findings and a strong counter-argument, that the recommended option bundles what the author examined with what they did not. Every finding is repaired here, and the counter-argument is now the answer fact's own case against. The fence is rewritten whole to the option the fact recommends: no sentence presupposes the four sections, the recording rule is stated here and retention cited to `quotes`, the `####` order is fixed and checkable, the draft block carries six keys with four required, the validator paragraph agrees with the subsection rule and names what the instrument holds and owes at implementation commit `feaaac1b`, the pin covers the option list and the recommended option's resolved content and leaves the accumulations, the reasons and both cases against outside, and every count is measured at graph commit `93644144`. The `### answer` reason is rewritten to open on the recommended option and re-derives its boldness; the `### authority` reason and both cases against are rewritten off the premise that the record is already written to this encoding, which it is not: a ruling here orders the migration the grant of 2026-09-07 will carry out. The three absorbed options and `commit-in-the-review-block`, which is adopted, carry the absorption paragraph the five earlier clauses carry. The probe `option-text-per-node-or-per-option` is discharged on the author's words of 2026-09-07. Two glosses `how-a-fact-is-headed` says this node writes, `answer` and `persistence`, are written into `defines`, in the fence and in the node's own frontmatter, since the projections read a gloss from the defining node as it stands; and a third, `confirmed`, is written with them by a decision the design unit flagged rather than made: the term is load-bearing in the answer, it is the author's own word for the label, and a term glossed nowhere is a finding the next reading returns. The recommended option's sentence names the sixth survey key `pairs`, each with the key it was drawn on, where it had said `keys`, so that the option and its content name one thing; `survey-selection`'s sentence that the block carries the keys the pairs were drawn on is satisfied by it. The reading's own viable option, generated `## Answer` and `## Disposition` sections checked against their derivation, is recorded as `generated-answer-and-disposition-sections` and passed over, under the recording rule the answer states. The option `a-node-file-is-facts-and-account` on `node` was recorded on 2026-09-07 at `d35b0014`; the option `every-weighed-candidate-must-be-recorded` on `viable-options` is recorded with that node's own repair. `depends` keeps its three entries, and `survey-selection` is not entered though the recommended option came from it, because that node's own `depends` names this option and the pair would close a loop; the dependence is recorded on that side alone. The node returns to the review stage, its reading owed on the amendment.

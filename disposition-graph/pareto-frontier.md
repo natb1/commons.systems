@@ -34,6 +34,10 @@ bears:
     fact: answer
     option: passed-over-options-stay
     relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: confirmed-is-a-derived-label-and-every-option-carries-its-content
+    relation: adopted
 ---
 ## Answer
 

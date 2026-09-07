@@ -1,13 +1,13 @@
 ---
 question: How are the author's words retained when a ruling is recorded?
-stage: review
+stage: maieutic
 review:
   verdict: kickback
   strength: moderate
   date: 2026-09-07
   of: 8895ea94ffb09a942f8f7a40c22fd2830dca9d74
-  commit: d9c2e3be43a1b0ba82d6c26ad964a57afb1648f9
-  against: "The repair's silence on the other two flagged options and on the proposed 'own ref' alternative may be a deliberate judgment rather than an oversight: the recommended option's own recorded divergence already argues the trade the alternative option would avoid, and `fence-carries-the-ruling` may have been left live because the round's shape (no `## Recommendation` fence on ratified nodes) is itself only a proposal, not yet a settled fact, so passing it over would be premature. But the amendment states neither reason, and the account describes only one of the three edits the last reading asked for, so the node as it stands cannot show the author which of these is true."
+  commit: 19221a31878688d880ddd56b273e56994c87335a
+  against: "The dropped `recording` claim is about another node's content, not this node's own answer, facts, or options, and the previous reading itself treated both cross-node claims as things it \"cannot verify... without those nodes\" and explicitly deferred them to \"the survey or the next full reading\" rather than demanding this amendment resolve them. Read that way, silence on `recording` is not a failure to answer the finding but a continuation of the same deferral the previous reading itself proposed, and the session may simply have judged the `dialogue` note worth adding (because it was actively rewriting that node in the same sitting) while `recording` needed no comment because nothing about it changed. But the account explicitly tallies \"four items\" it resolved from the re-reading without including this one, so the record does not show whether the omission is a judgment or an oversight, and an author or later reader cannot tell which from the node alone."
   survey:
     date: 2026-09-05
     of: 2bc62fd8426b1e3b5af8410c96d37bb154cc3eb1
@@ -65,6 +65,9 @@ facts:
     boldness: moderate
 under:
   - commons.systems/disposition-graph/authority
+defines:
+  - term: ledger
+    gloss: "The append-only file of the author's words on the disposition ref, `disposition/words/<date>.md`, each entry verbatim and dated, addressed `words/<date>/<n>` by its date and its ordinal within that date, and referenced by the options a ruling or a divergence rests on."
 ---
 ## Disposition
 
@@ -385,3 +388,26 @@ Strongest counter-argument (moderate): The repair's silence on the other two fla
 ### Repaired after the re-reading, 2026-09-07
 
 The re-reading's four items, validated on the main thread: `fence-carries-the-ruling` and `one-ruling-for-the-unquoted-stamp` are passed over with the clause saying why; the alternative the first reading named, `words-in-a-ledger-on-its-own-ref`, is recorded and not adopted, with its support and divergence; the `dialogue` fence's self-contradiction is being rewritten on that node, whose reading of 2026-09-07 found it, and this node's answer does not depend on which sentence of that fence survives; and the `commit` key in the review block is the reader's sixth draft key at implementation commit feaaac1b, missing from the brief template's own listing, which is a defect of the brief and is on the reconciliation list. Pin-neutral; the node returns to review for the re-reading a kickback owes.
+
+### The term defined, 2026-09-07
+
+The clean-context reading of `materialization` on 2026-09-07 found the term ledger defined nowhere. It is this node's term, so `defines` now carries it with its gloss: the append-only file of the author's words on the disposition ref, `disposition/words/<date>.md`, each entry verbatim and dated, addressed `words/<date>/<n>`, and referenced by the options a ruling or a divergence rests on. A gloss is part of what stands on the defining node, so this moves this node's own pin and no other's.
+
+### Clean-context re-reading, 2026-09-07, of 8895ea94 (ii)
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `words-in-a-ledger-on-the-ref`.
+
+Findings:
+
+- Finding 1 of the previous reading (viability, only partially answered on `fence-carries-the-ruling` and `one-ruling-for-the-unquoted-stamp`) is answered. The node as it now stands carries: "- `fence-carries-the-ruling` — source review, ref 2026-09-03 — passed over — a fence is one option's content and carries no ruling; the ruling is recorded on the option, as the viable-options node has it, and the words it rests on are referenced from there" and "- `one-ruling-for-the-unquoted-stamp` — source review, ref 2026-09-03 — passed over — there is no stamp to rule for: the class is read off the rulings, and a ruling whose words are not in the record is invalid, so an unquoted ruling is not a class of ruling the record has". Both now carry `status: passed` with a reason, closing the gap.
+- Finding 2 of the previous reading (the missing `words-in-a-ledger-on-its-own-ref` option) is answered. The option is now recorded on the answer fact's list (`...|the-quotation-is-copied-onto-every-option|words-in-a-ledger-on-its-own-ref`) with its own subsection: "The ledger lives on a ref of its own beside the disposition ref, and options reference it across refs," carrying both an AI support and an AI divergence paragraph, live but not recommended — matching the account's own description, "the alternative the first reading named, `words-in-a-ledger-on-its-own-ref`, is recorded and not adopted, with its support and divergence."
+- Finding 3 of the previous reading (the undocumented `commit` field in the `review:` block) is answered by an explanation rather than a fix, which is adequate to what the previous reading asked: it flagged the question "for the survey to check against the node that defines the `review` shape," and the account now states "the `commit` key in the review block is the reader's sixth draft key at implementation commit feaaac1b, missing from the brief template's own listing, which is a defect of the brief and is on the reconciliation list." This reading cannot verify the cited implementation commit independently (out of scope per this brief), so the claim is passed through to the survey rather than treated as a defect of this node.
+- Finding 4 of the previous reading is only half-answered. That finding bundled two unconfirmed cross-node claims under one bullet: whether the proposed option on `recording` ("the proposed option `the-words-are-in-the-ledger-and-referenced` was actually added to `recording`") was carried through, and the separate self-contradiction on `commons.systems/disposition-graph/dialogue`. The amendment's account, "### Repaired after the re-reading, 2026-09-07," addresses only the `dialogue` half — "the `dialogue` fence's self-contradiction is being rewritten on that node, whose reading of 2026-09-07 found it, and this node's answer does not depend on which sentence of that fence survives" — and says nothing at all about `recording`. The account's own tally, "The re-reading's four items, validated on the main thread," lists four repairs (the two passed-over options, the new option, the dialogue note, and the commit-key note) and none of them is the `recording` claim; it is neither confirmed, denied, nor re-flagged. Suggested edit: add one clause confirming (or disclaiming) whether `recording` in fact gained `the-words-are-in-the-ledger-and-referenced`, or explicitly re-flag it for the survey the way the `commit` key was, so the omission reads as a decision rather than a drop.
+
+On the facts and what they recommend: The diff marks `fence-carries-the-ruling` and `one-ruling-for-the-unquoted-stamp` `status: passed` with reasons, closing the key/reason gap the last reading found on the answer fact; it adds one new live (unrecommended) option, `words-in-a-ledger-on-its-own-ref`, with AI support and divergence prose; and it leaves `recommends: words-in-a-ledger-on-the-ref` (moderate), the `authority` fact, and the Recommendation fence's content unchanged (pin-neutral, per the account).
+
+On the viability of the options: Every option now on the answer fact's own list carries either a `status: passed` reason or stands live and named with support/divergence; nothing on this node's own facts is left unaccounted for by the diff. The one open item is not a viability gap on this node but an unconfirmed claim about a sibling node (`recording`) that this delta cannot check.
+
+Strongest counter-argument (moderate): The dropped `recording` claim is about another node's content, not this node's own answer, facts, or options, and the previous reading itself treated both cross-node claims as things it "cannot verify... without those nodes" and explicitly deferred them to "the survey or the next full reading" rather than demanding this amendment resolve them. Read that way, silence on `recording` is not a failure to answer the finding but a continuation of the same deferral the previous reading itself proposed, and the session may simply have judged the `dialogue` note worth adding (because it was actively rewriting that node in the same sitting) while `recording` needed no comment because nothing about it changed. But the account explicitly tallies "four items" it resolved from the re-reading without including this one, so the record does not show whether the omission is a judgment or an oversight, and an author or later reader cannot tell which from the node alone.

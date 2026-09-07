@@ -77,6 +77,10 @@ bears:
     fact: answer
     option: glosses-written-with-this-ruling
     relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: confirmed-is-a-derived-label-and-every-option-carries-its-content
+    relation: adopted
 depends:
   - commons.systems/disposition-graph/viable-options
 ---
