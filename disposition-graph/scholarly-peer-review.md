@@ -29,6 +29,9 @@ bears:
     fact: answer
     option: per-fact-after-two-readings
     relation: adopted
+  - fact: answer
+    option: the-smaller-model-on-a-re-reading
+    relation: diverged
 ---
 ## Answer
 
@@ -39,6 +42,8 @@ The record takes the uniform standard and the identity of the peer. The party wh
 The tradition reads the record's abandoned floor charitably and cuts against the tier above it. "Never smaller than the drafter's" is the peer floor stated as a floor, so the rule the record carried was not against this tradition in its first half; what the tradition refuses is the second half, a formula that gives a bold draft a stronger reader and a modest one a weaker reader, which is a two-tier venue inside one record. That relation is not written on `conditional-by-boldness` here because `review-model`'s account records the adoption alone; a `bears` entry there is owed if the author reads the tradition the way the survey did.
 
 Where the analogy is thin, the reading says so. A referee is a person with a career, a rival's paper in the same field, and reasons of their own to be careful, and blinding exists to neutralize a status that a model does not have. What survives the transposition is the standard of the reader and not the sociology that enforced it, so the tradition supplies a rule for how a reader is chosen and nothing that makes the choice stick.
+
+Diverged on `the-smaller-model-on-a-re-reading`. The clause grades the reader by the reading's object -- an answer judged whole against an amendment checked against a stated diff -- and a graded reader is a second standard inside one venue, which this tradition refuses. The divergence is narrower than the one this reading refuses in `conditional-by-boldness`, since the grading is not by anything the reviewed party writes, and it is a divergence all the same.
 
 ## Rationale
 

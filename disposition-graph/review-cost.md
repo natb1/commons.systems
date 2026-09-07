@@ -61,6 +61,12 @@ facts:
       - name: one-answer-a-node-and-one-read
         source: ai
         ref: "2026-09-07"
+      - name: a-waves-brief-is-one-brief
+        source: commons.systems/disposition-graph/clean-context-review
+        ref: "2026-09-07"
+      - name: the-surveys-unreached-node-is-one-line
+        source: commons.systems/disposition-graph/frontier-consistency
+        ref: "2026-09-07"
     recommends: one-answer-a-node-and-one-read
     boldness: moderate
     against: "Every clause of it narrows what the reviewer is shown, on measurements taken by the party the review exists to check. A reader that must search for what it is no longer given searches for what it thinks to look for, which is the drafter's own frame, and the failure the index guarded against, a contradiction with a node nobody thought to name, is the one failure a search cannot be aimed at. The answer's reply, that the survey holds the whole graph and is the reader of last resort, is good only while the survey runs before every ruling; this design moves that load onto it, and as of 2026-09-05 the survey has never run once, with forty-eight nodes standing at the review or the ruling stage at graph commit 1cde11f6 and no node in the record carrying a survey pin."
@@ -292,6 +298,26 @@ The read. A brief that fits is read in the fewest pieces the reader's tool allow
 The finding and the mechanical defect. A finding names the file and the heading and quotes its locus verbatim, so the main thread's validation is a search that returns the text or nothing; and a defect an instrument can name is the instrument's, the checks being owed to the validator and a reading that meets one still reporting it until they land. What it costs is the debt: until the validator holds the six checks, the class of defect they name is caught by nobody who is looking for it.
 
 Raised from the author's words of 2026-09-07 and from the measurement of that sitting's own seven briefs. Three of the four clauses -- the account, the verbatim locus, and the survey's carrying rule -- were already running in the working tree at 87e4b24e under the author's instruction to begin applying, which makes this recommendation the record catching up with its instrument, the same order the option `pointers-for-what-grows-with-the-record` had on the node above.
+
+#### a-waves-brief-is-one-brief
+
+Everything `one-answer-a-node-and-one-read` says, with the wave's brief among what this node bounds: where a sitting's drafts are read as one wave, the shared neighbourhood is carried once and each object once, and the wave is split whenever the resulting brief exceeds what one reader holds whole.
+
+Measured on 2026-09-07 on the four children of the alignment page, at graph commit `d0942d57` and implementation commit `87e4b24e`: `draft-authors-words-on-the-page.brief.md` 307,920 bytes, `draft-what-an-option-row-carries.brief.md` 389,802, `draft-where-a-change-request-goes.brief.md` 317,061 and `draft-where-the-unconfirmed-indication-goes.brief.md` 344,563, totalling 1,359,346, of which the parts common to all four run 249,607, 255,194, 256,936 and 256,305 bytes, differing between them only by which of the four each brief excludes from its round and its siblings. One brief carrying their union once and the four objects once is about 598,240 bytes, fifty-six percent less than the four. That figure is a projection: no generator writes a wave brief. The one wave the record has run, later the same day at graph commit `2abca334` and implementation commit `cb0e02c6`, was one reader over four separately generated briefs -- `draft-clean-context-review.brief.md` 323,650, `draft-review-model.brief.md` 280,360, `draft-frontier-consistency.brief.md` 319,159 and `draft-unit-skills.brief.md` 263,766, 1,186,935 bytes in all -- which realized none of the saving and incurred the whole of the loss. Both sets are in `tmp/review/`, which is gitignored, and are re-taken by re-running the generator at the commit named.
+
+Against it: this node's recommended text cures a brief the reader cannot hold by narrowing the object, and a wave widens it; the split is what reconciles the two, and no instrument runs the split.
+
+Raised on `commons.systems/disposition-graph/clean-context-review`, whose recommendation makes the wave, and recorded here because what a brief must fit and how many readings an answer gets are this node's. Whether the clause stands there or here is the author's to rule, and the two rows name each other.
+
+#### the-surveys-unreached-node-is-one-line
+
+Everything `one-answer-a-node-and-one-read` says, with the survey's own graph priced by the same rule: a node the judged set reaches is carried by what it answers, and a node no judged node reaches is the id, the question and the file on one line, on the ground that the validations which read text reach only what the judged set reaches.
+
+Measured on the survey brief of 2026-09-07: 1,202,450 bytes at implementation commit `87e4b24e`, before the cut, of which the eight judged nodes are 233,716 and the hundred and thirty-three context nodes 710,747; 994,467 bytes at implementation commit `cb0e02c6`, after it, which is the shape `packages/clean-context-review/brief.mjs` now writes.
+
+Against it: at a hundred and forty-three nodes neither shape is held whole by one reader, so what the cut buys is a smaller brief and not a brief that fits; and the one-line class rests on an earlier survey having read those nodes, and no survey has yet run.
+
+Raised on `commons.systems/disposition-graph/frontier-consistency`, whose validations state the inputs, and recorded here because what a reading is given is this node's. The author then rules the placement once rather than meeting the same rule on two nodes.
 
 ### authority
 

@@ -25,6 +25,9 @@ bears:
   - fact: answer
     option: fable-for-both-readings
     relation: diverged
+  - fact: answer
+    option: the-smaller-model-on-a-re-reading
+    relation: adopted
 ---
 ## Answer
 
@@ -33,6 +36,8 @@ Against the flat rule in part, and the part matters less here than it does in th
 Read straight across, the tradition prescribes the strongest reader on the draft and a lesser one on the check, and `fable-for-both-readings` does not do that. The divergence is recorded and it is partial, because the record is not the case the allocation was written for: here the most capable model makes the draft and checks it too, so the flat rule keeps the surgeon in the surgeon's seat and adds a second reading of the same rank in a context that carries nothing of the first. What the record would be doing if it inverted Brooks is the opposite arrangement, a lesser drafter checked by the strongest reader, and the answer does not propose that.
 
 The condition the allocation rests on is the one that has gone. Brooks is pricing hours of a person of whom there is one, and every hour spent checking is an hour not spent designing, so the excellence has to be placed. A reading here is bought again at the same rank for the price of tokens and takes nothing from the drafting, so the scarcity that made the allocation a choice is absent and the prescription loses its premise before it loses its argument. What survives is the warning the answer should keep: a second pass by the same mind over its own work is the weakest kind of check, which is why the reading's independence is bought by the clean context and not by the rank.
+
+Adopted in part on `the-smaller-model-on-a-re-reading`. The tradition prescribes the strongest reader on the draft and a lesser one on the check, and this clause makes the check a lesser reader for the first time, which narrows the divergence recorded on `fable-for-both-readings` without closing it: the first reading of an answer and the survey both stay at the top rank, so only the third of the three readings is arranged as the tradition would arrange it.
 
 ## Rationale
 

@@ -28,6 +28,9 @@ bears:
   - fact: answer
     option: fable-for-both-readings
     relation: diverged
+  - fact: answer
+    option: the-smaller-model-on-a-re-reading
+    relation: adopted
 ---
 ## Answer
 
@@ -38,6 +41,8 @@ Adopted on `chosen-for-difference`. A reviewer chosen for difference from the dr
 Diverged on `fable-for-both-readings`. Two readings on one model share a prior; the clean context removes the shared framing and not the shared blind spot, which is exactly the inference the experiment falsified. The answer's reply is that the four models the harness offers are one lineage, so what a choice among them buys is a difference of capability and not the independence the experiment demanded; that reply concedes the tradition's point rather than meeting it. The record does not have an independent second reader, and the divergence records that it does not.
 
 The tradition's own standard is failed on both sides, and the reading says so rather than resting on the concession. Knight and Leveson measured correlation and did not assume it; here nothing is measured, so the claim that four models of one lineage fail together is the AI's from its knowledge of how they are built, which is the kind of claim the experiment exists to distrust. What the record could do about it is bought in the brief and not in the reader, since the brief is where a reading's framing is set. Shelved once by a constraint that has gone: N-version programming died because paying several teams to build one artifact was uneconomic, and a second reader that is a different model costs a token bill, so the caution is actionable here in a way it was not where it was raised.
+
+Adopted in part on `the-smaller-model-on-a-re-reading`. Two readings on one model share a prior, and a re-reading one rank down is the first difference the record puts between two readers of one text. It is a difference of capability inside one lineage, which this reading has already said is not the independence the experiment demanded, so the support reaches the direction of the move and not its sufficiency.
 
 ## Rationale
 
