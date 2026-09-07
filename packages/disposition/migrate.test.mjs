@@ -309,6 +309,79 @@ describe('migrate over the legacy fixture', () => {
     assert.equal(reading.form, 'reading');
     assert.deepEqual(reading.bears.map((b) => b.option), ['the-root-answers-plainly']);
   });
+
+  // `root` carries a review, a survey, and a ruling that all pin the hash
+  // the legacy encoding actually recommends -- none of them stale before the
+  // migration -- so migration must re-pin all three to the new encoding's
+  // hash rather than leave them reading as stale for no reason but the
+  // encoding change. `ladder` carries the same three pins already stale
+  // (pinned to a hash nothing recommends), so migration must leave them
+  // exactly as they stood.
+  test("a review, a survey, and a ruling that were not stale are re-pinned to the migrated node's hash", async () => {
+    const now = await readGraph(graph);
+    const root = now.nodes.find((n) => n.slug === 'root');
+    assert.equal(root.reviewStale, false);
+    assert.equal(root.surveyStale, false);
+    assert.equal(root.review.of, root.recommendationHash);
+    assert.equal(root.review.survey.of, root.recommendationHash);
+    const authority = root.facts.find((f) => f.name === 'authority');
+    assert.equal(authority.moved, false);
+    const ruled = authority.options.find((o) => o.ruling);
+    assert.equal(ruled.ruling.of, authority.recommendationHash);
+    // The pins moved from the legacy hashes: re-pinning is not a no-op that
+    // happens to read the same by coincidence.
+    assert.notEqual(root.review.of, before_.nodes.find((n) => n.slug === 'root').review.of);
+  });
+
+  test('a review, a survey, and a ruling that were already stale are left exactly as they stood', async () => {
+    const now = await readGraph(graph);
+    const ladder = now.nodes.find((n) => n.slug === 'ladder');
+    const legacyLadder = before_.nodes.find((n) => n.slug === 'ladder');
+    assert.equal(ladder.reviewStale, true);
+    assert.equal(ladder.surveyStale, true);
+    assert.equal(ladder.review.of, legacyLadder.review.of);
+    assert.equal(ladder.review.survey.of, legacyLadder.review.survey.of);
+    const authority = ladder.facts.find((f) => f.name === 'authority');
+    assert.equal(authority.moved, true);
+    const ruled = authority.options.find((o) => o.ruling);
+    const legacyRuled = legacyLadder.facts.find((f) => f.name === 'authority').options.find((o) => o.ruling);
+    assert.equal(ruled.ruling.of, legacyRuled.ruling.of);
+  });
+
+  test('the account names the old and new hash of each pin it re-pins', async () => {
+    const text = await readFile(path.join(graph, 'main', 'root.md'), 'utf8');
+    const legacyRoot = before_.nodes.find((n) => n.slug === 'root');
+    const now = await readGraph(graph);
+    const root = now.nodes.find((n) => n.slug === 'root');
+    const authority = root.facts.find((f) => f.name === 'authority');
+    const legacyAuthority = legacyRoot.facts.find((f) => f.name === 'authority').options.find((o) => o.ruling);
+    assert.match(text, new RegExp(`draft review's pin \`${legacyRoot.review.of}\` is re-computed for the encoding as \`${root.review.of}\``));
+    assert.match(text, new RegExp(`survey's pin \`${legacyRoot.review.survey.of}\` is re-computed for the encoding as \`${root.review.survey.of}\``));
+    assert.match(
+      text,
+      new RegExp(`ruling on \`authority\`'s \`deferred\` option's pin \`${legacyAuthority.ruling.of}\` is re-computed for the encoding as \`${authority.recommendationHash}\``),
+    );
+  });
+
+  test('the account says a stale pin was already past the recommendation and is left as it stood', async () => {
+    const text = await readFile(path.join(graph, 'main', 'ladder.md'), 'utf8');
+    assert.match(text, /draft review's pin `deadbeefdeadbeefdeadbeefdeadbeefdeadbeef` was already past the recommendation and is left as it stood/);
+    assert.match(text, /survey's pin `deadbeefdeadbeefdeadbeefdeadbeefdeadbeef` was already past the recommendation and is left as it stood/);
+    assert.match(text, /ruling on `authority`'s `deferred` option's pin `deadbeefdeadbeefdeadbeefdeadbeefdeadbeef` was already past the recommendation and is left as it stood/);
+  });
+
+  test('the report counts what it re-pinned and what it left stale', () => {
+    assert.equal(result.stats.reviewRepinned, 1);
+    assert.equal(result.stats.surveyRepinned, 1);
+    assert.equal(result.stats.rulingsRepinned, 1);
+    assert.equal(result.stats.reviewLeftStale, 1);
+    assert.equal(result.stats.surveyLeftStale, 1);
+    assert.equal(result.stats.rulingsLeftStale, 1);
+    assert.match(
+      result.report,
+      /pins re-computed: review 1, survey 1, rulings 1; left stale: review 1, survey 1, rulings 1/,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

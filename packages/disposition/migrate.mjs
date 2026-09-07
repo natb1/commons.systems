@@ -288,6 +288,161 @@ export function editFrontmatter(fmText, supports) {
 }
 
 // ---------------------------------------------------------------------------
+// re-pinning the dialogue's hashes for the new encoding
+// ---------------------------------------------------------------------------
+
+function indentOf(line) {
+  return line.match(/^[ \t]*/)[0].length;
+}
+
+/** A hash literal, quoted where an all-digit string would otherwise parse as
+ * a YAML number rather than the string it is. */
+function yamlHashLiteral(hash) {
+  return /^[0-9]+$/.test(hash) ? `"${hash}"` : hash;
+}
+
+function replaceOfLine(line, newHash) {
+  const m = line.match(/^([ \t]*of:[ \t]*)(.*)$/);
+  const prefix = m ? m[1] : `${line.match(/^[ \t]*/)[0]}of: `;
+  return `${prefix}${yamlHashLiteral(newHash)}`;
+}
+
+/**
+ * Locate a node's top-level `review:` block in frontmatter text: the line
+ * carrying its own `of:` pin and, where a nested `survey:` block sits beside
+ * it, the line carrying the survey's own `of:` pin. Null where the
+ * frontmatter carries no `review:` key.
+ *
+ * @param {string} fmText
+ * @returns {{start: number, end: number, ofAt: number|null,
+ *   surveyOfAt: number|null}|null}
+ */
+export function locateReview(fmText) {
+  const lines = String(fmText).split('\n');
+  const at = lines.findIndex((l) => /^review:[ \t]*$/.test(l));
+  if (at === -1) return null;
+  let end = lines.length;
+  for (let i = at + 1; i < lines.length; i += 1) {
+    if (lines[i].trim() !== '' && /^\S/.test(lines[i])) { end = i; break; }
+  }
+  let childIndent = null;
+  for (let i = at + 1; i < end; i += 1) {
+    if (lines[i].trim() === '') continue;
+    const ind = indentOf(lines[i]);
+    if (childIndent === null || ind < childIndent) childIndent = ind;
+  }
+  let ofAt = null;
+  let surveyAt = -1;
+  if (childIndent !== null) {
+    for (let i = at + 1; i < end; i += 1) {
+      if (indentOf(lines[i]) !== childIndent) continue;
+      if (/^[ \t]*of:/.test(lines[i])) ofAt = i;
+      if (/^[ \t]*survey:[ \t]*$/.test(lines[i])) surveyAt = i;
+    }
+  }
+  let surveyOfAt = null;
+  if (surveyAt !== -1) {
+    let surveyEnd = end;
+    for (let i = surveyAt + 1; i < end; i += 1) {
+      if (lines[i].trim() !== '' && indentOf(lines[i]) <= childIndent) { surveyEnd = i; break; }
+    }
+    let surveyChildIndent = null;
+    for (let i = surveyAt + 1; i < surveyEnd; i += 1) {
+      if (lines[i].trim() === '') continue;
+      const ind = indentOf(lines[i]);
+      if (surveyChildIndent === null || ind < surveyChildIndent) surveyChildIndent = ind;
+    }
+    if (surveyChildIndent !== null) {
+      for (let i = surveyAt + 1; i < surveyEnd; i += 1) {
+        if (indentOf(lines[i]) === surveyChildIndent && /^[ \t]*of:/.test(lines[i])) surveyOfAt = i;
+      }
+    }
+  }
+  return { start: at, end, ofAt, surveyOfAt };
+}
+
+/**
+ * Rewrite the `of:` pins the migration re-computes for the content
+ * encoding -- the draft review's, the survey's, and any per-fact ruling's --
+ * each only where the caller asks for it (`repin.review`, `repin.survey`,
+ * each a new hash to write; `repin.rulings`, a `<fact>\n<option>` to new
+ * hash map). A line edit, like `editFrontmatter`: everything else in the
+ * frontmatter, including a pin the caller leaves out, survives untouched.
+ *
+ * @param {string} fmText
+ * @param {{review?: string|null, survey?: string|null,
+ *   rulings?: Map<string, string>}} [repin]
+ * @returns {{text: string, review: boolean, survey: boolean, rulings: number}}
+ */
+export function repinDialogue(fmText, repin = {}) {
+  const lines = String(fmText).split('\n');
+  let review = false;
+  let survey = false;
+  let rulings = 0;
+
+  if (repin.review || repin.survey) {
+    const located = locateReview(fmText);
+    if (located !== null) {
+      if (repin.review && located.ofAt !== null) {
+        lines[located.ofAt] = replaceOfLine(lines[located.ofAt], repin.review);
+        review = true;
+      }
+      if (repin.survey && located.surveyOfAt !== null) {
+        lines[located.surveyOfAt] = replaceOfLine(lines[located.surveyOfAt], repin.survey);
+        survey = true;
+      }
+    }
+  }
+
+  if (repin.rulings && repin.rulings.size > 0) {
+    const located = locateFacts(fmText);
+    if (located !== null) {
+      for (const fact of located.facts) {
+        for (const option of fact.options) {
+          const newHash = repin.rulings.get(`${fact.name}\n${option.name}`);
+          if (newHash === undefined) continue;
+          let rulingAt = -1;
+          for (let i = option.start; i < option.end; i += 1) {
+            if (new RegExp(`^[ \\t]{${option.keyIndent}}ruling:[ \\t]*$`).test(lines[i])) { rulingAt = i; break; }
+          }
+          if (rulingAt === -1) continue;
+          let rulingEnd = option.end;
+          for (let i = rulingAt + 1; i < option.end; i += 1) {
+            if (lines[i].trim() !== '' && indentOf(lines[i]) <= option.keyIndent) { rulingEnd = i; break; }
+          }
+          for (let i = rulingAt + 1; i < rulingEnd; i += 1) {
+            if (indentOf(lines[i]) === option.keyIndent + 2 && /^[ \t]*of:/.test(lines[i])) {
+              lines[i] = replaceOfLine(lines[i], newHash);
+              rulings += 1;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return { text: lines.join('\n'), review, survey, rulings };
+}
+
+/**
+ * One sentence naming a pin's fate: re-computed against the migrated text
+ * where it was not already stale, or left exactly as it stood where it was.
+ * Null where there was no such pin to say anything about.
+ *
+ * @param {string} label - e.g. "The draft reading's".
+ * @param {{status: 'repinned'|'stale', old: string, new?: string}|null} decision
+ * @returns {string|null}
+ */
+function pinSentence(label, decision) {
+  if (decision === null) return null;
+  if (decision.status === 'repinned') {
+    return `${label} pin \`${decision.old}\` is re-computed for the encoding as \`${decision.new}\`; nothing it read changed.`;
+  }
+  return `${label} pin \`${decision.old}\` was already past the recommendation and is left as it stood.`;
+}
+
+// ---------------------------------------------------------------------------
 // the ledger
 // ---------------------------------------------------------------------------
 
@@ -912,7 +1067,6 @@ export function migrateNode(node, ctx) {
 
   // The file: frontmatter, '## Facts', '## Account'.
   const fm = editFrontmatter(node.fmText, supports);
-  const out = [`---\n${fm.text}\n---`];
 
   const factsBody = [];
   for (const fact of node.facts ?? []) {
@@ -934,6 +1088,91 @@ export function migrateNode(node, ctx) {
       if (content !== undefined) factsBody.push(renderContent(content));
     }
   }
+
+  // The dialogue's own pins -- the draft review's, its survey's, and each
+  // ruled option's -- are computed against the migrated text itself, so a
+  // pin that was current before the migration reads current after it: only
+  // the encoding changed, and staleness the record already carried through
+  // the migration is left exactly as it stood, in one further reading and
+  // never a second reckoning of what "stale" means. `## Account` is never
+  // part of the hashed text (`hashParts` in `derive.mjs` does not include
+  // it), so the base manifest line can be written into the draft before this
+  // read without the read then invalidating itself.
+  const draftAccount = [];
+  if (node.account !== null && node.account !== undefined && node.account.trim() !== '') {
+    draftAccount.push(node.account.trim());
+  }
+  draftAccount.push(`### Migrated to the content encoding, ${ctx.date}`);
+  const baseNote = manifestLine(node, note, ctx, null);
+  draftAccount.push(baseNote);
+  const draftOut = [`---\n${fm.text}\n---`];
+  if (factsBody.length > 0) draftOut.push(['## Facts', ...factsBody].join('\n\n'));
+  draftOut.push(['## Account', ...draftAccount].join('\n\n'));
+  const draftText = `${draftOut.join('\n\n')}\n`;
+
+  let repin = null;
+  try {
+    const parsedNew = parseNode(draftText, {
+      id: node.id, graph: node.graph, slug: node.slug, path: node.path,
+    });
+    const newFactHash = new Map((parsedNew.facts ?? []).map((f) => [f.name, f.recommendationHash]));
+
+    const review = (node.reviewStale === false && node.review && node.review.of)
+      ? { old: node.review.of, new: parsedNew.recommendationHash }
+      : null;
+    const survey = (node.surveyStale === false && node.review && node.review.survey && node.review.survey.of)
+      ? { old: node.review.survey.of, new: parsedNew.recommendationHash }
+      : null;
+    const rulings = new Map();
+    const rulingSentences = [];
+    for (const fact of node.facts ?? []) {
+      for (const option of fact.options ?? []) {
+        if (!option.ruling || !option.ruling.of) continue;
+        const key = `${fact.name}\n${option.name}`;
+        const newHash = newFactHash.get(fact.name);
+        if (fact.moved === false && newHash) {
+          rulings.set(key, newHash);
+          rulingSentences.push({ status: 'repinned', old: option.ruling.of, new: newHash, fact: fact.name, option: option.name });
+        } else {
+          rulingSentences.push({ status: 'stale', old: option.ruling.of, fact: fact.name, option: option.name });
+        }
+      }
+    }
+
+    const applied = repinDialogue(fm.text, {
+      review: review === null ? null : review.new,
+      survey: survey === null ? null : survey.new,
+      rulings,
+    });
+    repin = {
+      fmText: applied.text,
+      review: review === null ? null : { status: 'repinned', old: review.old, new: review.new },
+      reviewLeftStale: review === null && node.review && node.review.of
+        ? { status: 'stale', old: node.review.of }
+        : null,
+      survey: survey === null ? null : { status: 'repinned', old: survey.old, new: survey.new },
+      surveyLeftStale: survey === null && node.review && node.review.survey && node.review.survey.of
+        ? { status: 'stale', old: node.review.survey.of }
+        : null,
+      rulingSentences,
+      counts: {
+        reviewRepinned: review === null ? 0 : 1,
+        reviewLeftStale: review === null && node.review && node.review.of ? 1 : 0,
+        surveyRepinned: survey === null ? 0 : 1,
+        surveyLeftStale: survey === null && node.review && node.review.survey && node.review.survey.of ? 1 : 0,
+        rulingsRepinned: rulingSentences.filter((s) => s.status === 'repinned').length,
+        rulingsLeftStale: rulingSentences.filter((s) => s.status === 'stale').length,
+      },
+    };
+  } catch {
+    // The draft does not parse (unexpected, since it is checked again below
+    // and the migration refuses it there); no pin is re-computed and none of
+    // the dialogue's `of:` values are touched.
+    repin = null;
+  }
+
+  const finalFmText = repin === null ? fm.text : repin.fmText;
+  const out = [`---\n${finalFmText}\n---`];
   if (factsBody.length > 0) out.push(['## Facts', ...factsBody].join('\n\n'));
 
   const account = [];
@@ -941,14 +1180,23 @@ export function migrateNode(node, ctx) {
     account.push(node.account.trim());
   }
   account.push(`### Migrated to the content encoding, ${ctx.date}`);
-  account.push(manifestLine(node, note, ctx));
+  account.push(manifestLine(node, note, ctx, repin));
   out.push(['## Account', ...account].join('\n\n'));
+
+  if (repin !== null) {
+    stats.reviewRepinned += repin.counts.reviewRepinned;
+    stats.reviewLeftStale += repin.counts.reviewLeftStale;
+    stats.surveyRepinned += repin.counts.surveyRepinned;
+    stats.surveyLeftStale += repin.counts.surveyLeftStale;
+    stats.rulingsRepinned += repin.counts.rulingsRepinned;
+    stats.rulingsLeftStale += repin.counts.rulingsLeftStale;
+  }
 
   return { text: `${out.join('\n\n')}\n`, note };
 }
 
 /** The manifest line: what was absorbed where, and where the legacy text stands. */
-function manifestLine(node, note, ctx) {
+function manifestLine(node, note, ctx, repin) {
   const said = [];
   said.push(
     `Written by \`packages/disposition/migrate.mjs\` on ${ctx.date}. The legacy text of `
@@ -1001,6 +1249,17 @@ function manifestLine(node, note, ctx) {
       `No content is recorded for ${note.contentNone.map((n) => `\`${n}\``).join(', ')}: `
       + 'the record never wrote one and the migration invents none.',
     );
+  }
+  if (repin !== null) {
+    const draftSentence = pinSentence('The draft review\'s', repin.review ?? repin.reviewLeftStale);
+    if (draftSentence !== null) said.push(draftSentence);
+    const surveySentence = pinSentence('The survey\'s', repin.survey ?? repin.surveyLeftStale);
+    if (surveySentence !== null) said.push(surveySentence);
+    for (const r of repin.rulingSentences) {
+      const label = `The author's ruling on \`${r.fact}\`'s \`${r.option}\` option's`;
+      const sentence = pinSentence(label, r);
+      if (sentence !== null) said.push(sentence);
+    }
   }
   return said.join(' ');
 }
@@ -1068,6 +1327,12 @@ export async function migrate(graphDir, options = {}) {
     unplaced: 0,
     ledgerEntries: ledger.entries.length,
     ledgerQuotations: 0,
+    reviewRepinned: 0,
+    reviewLeftStale: 0,
+    surveyRepinned: 0,
+    surveyLeftStale: 0,
+    rulingsRepinned: 0,
+    rulingsLeftStale: 0,
     refused: [],
   };
   for (const node of legacy) {
@@ -1158,6 +1423,11 @@ function renderReport(stats, ledger, notes, ctx) {
     + `${stats.unplaced} unplaced`,
   );
   lines.push(`fan-out of a quotation over nodes: ${Object.entries(fan).sort((a, b) => Number(a[0]) - Number(b[0])).map(([k, v]) => `${v} on ${k}`).join(', ')}`);
+  lines.push(
+    `pins re-computed: review ${stats.reviewRepinned}, survey ${stats.surveyRepinned}, `
+    + `rulings ${stats.rulingsRepinned}; left stale: review ${stats.reviewLeftStale}, `
+    + `survey ${stats.surveyLeftStale}, rulings ${stats.rulingsLeftStale}`,
+  );
   if (ledger.undated.length > 0) {
     lines.push(`undated quotations left in place: ${ledger.undated.length}`);
   }

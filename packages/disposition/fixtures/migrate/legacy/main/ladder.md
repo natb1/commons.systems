@@ -22,8 +22,21 @@ facts:
       - name: ratified
       - name: delegated
       - name: deferred
+        ruling:
+          response: confirm
+          date: "2026-09-06"
+          of: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
     recommends: deferred
     boldness: low
+review:
+  verdict: forward
+  strength: none
+  date: "2026-09-06"
+  of: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+  commit: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+  survey:
+    date: "2026-09-06"
+    of: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
 ---
 ## Answer
 

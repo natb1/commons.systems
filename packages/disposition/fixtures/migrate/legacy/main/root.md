@@ -25,8 +25,21 @@ facts:
       - name: ratified
       - name: delegated
       - name: deferred
+        ruling:
+          response: confirm
+          date: "2026-09-06"
+          of: 6059c539b5e739434084e3b3d69f7e13b3c1f651
     recommends: deferred
     boldness: low
+review:
+  verdict: forward
+  strength: none
+  date: "2026-09-06"
+  of: 205fbae33b06c9b8fac7e7fc863dd1fb3faa8ae5
+  commit: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+  survey:
+    date: "2026-09-06"
+    of: 205fbae33b06c9b8fac7e7fc863dd1fb3faa8ae5
 ---
 ## Disposition
 
