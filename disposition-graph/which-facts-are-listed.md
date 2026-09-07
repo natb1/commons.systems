@@ -37,6 +37,9 @@ facts:
       - name: existence-asked-persistence-derived
         source: review
         ref: "2026-09-07"
+      - name: existence-radio-waits-on-the-delegations-ruling
+        source: commons.systems/disposition-graph/graph-topology
+        ref: "2026-09-07"
     recommends: all-four-listed-two-derived
     boldness: moderate
     against: "On 123 of the 134 nodes that carry facts the author will read two decisions and two rows that say nothing is proposed, and a row that asks nothing is apparatus in the one column the parent reserves for what the ruling asks. The author's directive was to list all facts; what this answer lists on almost every node is two facts and two sentences reporting that the record has nothing to ask, which is the fold struck and its silence reinstated under a heading."
@@ -321,6 +324,20 @@ The same day's standing disposition gives the prune of an unratified node to the
 AI under the general delegation of graph topology, so on those nodes the radio
 would ask the author to confirm what they have said they do not want to be asked
 about.
+
+#### existence-radio-waits-on-the-delegations-ruling
+
+Everything the recommended option says, with one of its grounds dated: the page's
+reason for deriving the existence row rather than asking it holds only from the
+ruling of `delegated` on `commons.systems/disposition-graph/graph-topology`'s
+authority fact; until then the author has not been asked to delegate the prune,
+and the row is what asks it. Raised on `graph-topology`, whose recommended answer
+holds that the delegation acts from that ruling and not before, and which names
+this node's answer among the places that already read the delegation as
+conferred. Viable and not adopted: the author's rule of 2026-09-06 keeps a
+proposal nobody has made off the page whichever way `graph-topology` is ruled,
+and that ground does not wait on the ruling; what the ruling settles is whether
+the prune is the AI's, not whether the page asks it.
 
 ### authority
 
