@@ -42,7 +42,7 @@ facts:
         reason: "the variance the thirteen briefs of 2026-09-08 actually exhibit is omission and not diversity of frame: one in thirteen stated its error behaviour, three named no model, the write bound was written nine ways with three different enumerations of the forbidden git verbs, and the record's own file format was stated three mutually inconsistent ways of which the version three briefs carried was false; none of those is a variance anyone chose, and Anderson, Shah and Kreminski's homogenization finding defends variance that someone chose"
     recommends: a-thin-skill-and-a-tested-return
     boldness: moderate
-    against: "The author gave three reasons and this recommendation declines all three of them, on evidence the author has not seen and which the AI selected: the tradition survey that produced the counter-case was convened by the AI, briefed by the AI with a nine-family floor list, and returned nine families tracking the nine it was given, which is the fixation effect Jansson and Smith 1991 predicts, so the strongest counter-evidence in this node's account is itself an instance of the defect it reports and is not independent of the party reporting it. Four of the seven probes would move the recommendation, and it is made at the periagogic movement, where by `growth`'s conduct the ground is not yet established. The thin standard also has a failure mode the rich one does not: a standard that fixes only what a return must satisfy governs nothing about what an expert is told, so every defect the corpus measured in the tradition-facing half of a brief -- the pre-supplied finding, the floor list, the framing that names what the AI hopes will be found -- survives this answer untouched, and the record would have paid for an instrument that fixes the half that was already easy to fix. And the telemetry facet the author's third reason names is bought by any answer that makes a skill and lost by every answer that does not, so if that premise is verified the choice among the six narrows sharply and this node's reasoning has not yet been run against a verified version of it."
+    against: "The author gave three reasons and this recommendation declines all three of them, on evidence the author has not seen and which the AI selected: the tradition survey that produced the counter-case was convened by the AI, briefed by the AI with a nine-family floor list, and returned nine families tracking the nine it was given, which is the fixation effect Jansson and Smith 1991 predicts, so the strongest counter-evidence in this node's account is itself an instance of the defect it reports and is not independent of the party reporting it. Four of the seven probes would move the recommendation, and it is made at the periagogic movement, where by `growth`'s conduct the ground is not yet established. The thin standard also has a failure mode the rich one does not: a standard that fixes only what a return must satisfy governs nothing about what an expert is told, so every defect the corpus measured in the tradition-facing half of a brief -- the pre-supplied finding, the floor list, the framing that names what the AI hopes will be found -- survives this answer untouched, and the record would have paid for an instrument that fixes the half that was already easy to fix. And the telemetry facet the author's third reason names is bought by any answer that makes a skill and lost by every answer that does not; that premise was verified on 2026-09-08 and holds, which narrows the six to those that make a skill and leaves this recommendation among them, so the third of the author's three reasons is satisfied by this recommendation rather than declined by it, and the opening sentence of this case against overstates by one, which is left standing and named rather than quietly repaired."
   - name: authority
     options:
       - name: ratified
@@ -1218,3 +1218,53 @@ judgment in place of a unit's on a design question with no evidence the unit did
 not have, which `evaluation` names as the move to avoid. What is owed is the
 sequencing on `words/2026-09-08/30`, recorded here as owed rather than quietly
 performed in the same breath as the observation that it was skipped.
+
+### The telemetry premise is verified, 2026-09-08
+
+The case against this node's recommendation ended by naming a premise the reasoning
+had not been run against: that the telemetry facet the author's third reason names
+is bought by any answer that makes a skill and lost by every answer that does not,
+and that if it were verified the choice among the six would narrow sharply. It was
+verified in this sitting, by a lookup against the harness's own published telemetry
+documentation on 2026-09-08, and it holds. The facet is real: `skill.name` is a
+dimension on both spend metrics; its value for a user-defined skill is that skill's
+own name verbatim, rather than a category or a hash; and it composes with the
+attribution that already separates a subagent's spend from its launcher's, so a
+skill invoked inside a convened expert is attributed to the skill and to the expert
+at once. The author's third reason is a fact of the harness and not a hope about a
+future one.
+
+What the verification settles. The facet is bought by the artifact and not by the
+instructions: what earns the name in the metric is that a skill was invoked, and
+not what the skill says, so every answer here that produces a skill buys the facet
+whole and every answer that does not buys none of it. That separates the six
+cleanly, and the recommendation is among those that buy it. So the verification
+supports the recommendation without moving it, which is stated plainly here because
+a premise that turns out to favour the incumbent is the case where running the
+check is easiest to skip and the record would never afterwards know that it had
+been skipped.
+
+What it does not settle, and what it corrects. It is silent between the two answers
+that both buy the facet, the author's `a-standard-expert-skill` and the recommended
+`a-thin-skill-and-a-tested-return`: both produce one skill and one `skill.name`, so
+the author's third reason cannot be cited for either against the other. The
+correction is to this node's own case against, which opens by saying that the
+recommendation declines all three of the author's reasons. It declines two. The
+third it satisfies, and it always did; what the AI declined was not the reason but
+the inference from it, and the two are not the same act. The case against now says
+so at the point where the premise is named, and its opening sentence is left
+standing rather than rewritten, so that a reader sees the overstatement and its
+correction together.
+
+Boldness does not move with the verification. The recommendation stays at moderate:
+four of the seven probes on this node would still move it, it is made at the
+periagogic movement where by `growth`'s conduct the ground is not yet established,
+and the strongest item in the case against -- that the tradition survey producing
+the counter-evidence was convened and briefed by the party the evidence favours --
+is untouched by anything measured here.
+
+The locus is owed. The finding is stated at the width the sitting measured it, and
+its pinpoint citations are not in the record: the lookup reported its findings and
+not its pages. Under `readings` a reference carries its source and its locus, and
+this one carries a source and a date. It is a debt on this node, and it is not a
+reading until the pages are in it.
