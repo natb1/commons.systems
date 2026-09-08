@@ -74,7 +74,7 @@ review:
   survey:
     date: 2026-09-07
     of: 6c026933881c7d4137fb31e4a7fcfc6bfd030164
-    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "3dfcd8cceb86a0d69691e6cdb2331103bb5f09ae56e31ea301c3c579796bddf5"
       answer: "aa389e4c5d8a002cf11a70d1abad0ddedd54d6ffb0d89edc474b81147911d0c9"

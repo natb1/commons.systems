@@ -118,6 +118,15 @@ review:
   of: aceee98d9585171b14768daa8aa59ba6855fd550
   commit: 32a615df336afeec4917bc5d9f05a0ac73742582
   against: "The last reading's own weak counter-argument -- that this node's AI-reported measurements are unverifiable from a delta reading's scope, since it has no independent access to the term concordance, the validator's run, or the brief generator's output at the commits cited -- is not merely uncured here but is borne out: the amendment's own account now attributes the identical 1,348,406-byte figure to two different graph commits (31e257b9 in one place, f57877f9 in another), which is exactly the kind of undetectable misattribution that scope limit predicted. A reader confined to this node's file cannot tell which commit, if either, actually produced the number, which undercuts the account's own chain of measurements that the backfill-versus-recurring-whole redesign rests on."
+  survey:
+    date: 2026-09-07
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "a80b681c9f728354760581edb345003e848c871e96216a1c0d2d0d674853309f"
+      answer: "748cfe68d789be1e63b8b58d356c52b9a158fccc1fadbc8e408a9b03f93a4ae1"
+      options: "dc17e4b4a74002375bcde2c7746c0e3da60e9ebffc96d9f6730253103f4b4701"
+      rivals: "41e84aa57e9a9e4bb374dfd29fa851c61a6fb54bc5e379b168dc16797f96c5ed"
+      words: "d9b807036d4ba7b996e3eada905d853ad248b50e3a08b428787826b971f1141f"
 under:
   - commons.systems/disposition-graph/review-cost
 defines:
@@ -591,3 +600,29 @@ The session's reply: Accepted on both findings, with the first's direction rever
 ### Repaired on the re-reading, 2026-09-07, at 32a615df
 
 The re-reading of the amendment kicked back on two findings, both accepted and both repaired here, the first in the direction opposite to the reader's suggested edit: the 1,348,406-byte brief was generated at graph commit f57877f9, the graph the survey of 2026-09-07 read, and applied at 31e257b9, so the recommended option's support is corrected from 31e257b9 to f57877f9 and the account entry's body stands. The materialization sentence in the recommended content is rewritten to name the implementation commit and the command it was measured with, a8a69389 and `brief.mjs --survey disposition --force-tier --whole`, which adopts the review's option `the-materialization-sentence-is-dated-to-its-commit` and marks it passed with that reason. This is the second reading of this answer, so no third is run, as the review-cost node's rule holds; the recommendation moves past the survey's pin with the repair, and the backfill survey of this sitting, run at a8a69389 on the author's word (words/2026-09-07/23), judges the repaired node.
+
+### Frontier finding, 2026-09-07
+
+Kind: redundancy.
+
+The one-line carriage of an unreached or unchanged node is stated on four nodes. survey-selection: 'a node the judged set reaches but whose read text has not changed since a survey read it, judged or reached, is carried on one line rather than by what it answers'. frontier-consistency: 'a node whose text stands as an earlier survey read it is carried on one line, and a node minted or amended since is carried by what it answers until a survey has read it again', while its Facts 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'. clean-context-review's recommended answer: 'of a node no judged node reaches, what the frontier-consistency node\'s condition on its text gives, its question alone on one line'. review-cost: option `the-surveys-unreached-node-is-one-line`, of which frontier-consistency's account says 'a rule drafted twice in one day on two nodes is evidence that the seam is in the wrong place'.
+
+Also named: commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/review-cost.
+
+Proposed: survey-selection survives as the rule's home. frontier-consistency's paragraph goes with its recommended move; clean-context-review cites survey-selection instead of frontier-consistency, its option `the-unreached-line-is-conditioned-by-frontier-consistency` being passed over; review-cost's `the-surveys-unreached-node-is-one-line` is passed over with survey-selection as the reason.
+
+Recorded as an option on commons.systems/disposition-graph/clean-context-review's answer fact: `the-unreached-line-is-cited-from-survey-selection` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+clean-context-review's recommended answer: 'a whole reading, in which nothing is frozen, runs besides on the cadence the `survey-selection` node states and after any amendment to the validations'. survey-selection's recommended answer: 'The whole survey, in which nothing is frozen, is a backfill and never the norm: it runs on the author\'s word, and after any amendment to the validations, to what a reading is given, or to the tier' and 'it runs on no cadence and after no count of deltas.' survey-selection carries `size-the-cadence-and-the-sample-on-inclusiveness-and-precision` unrecommended, so the cadence clean-context-review cites is an option there, not the answer.
+
+Also named: commons.systems/disposition-graph/clean-context-review.
+
+Proposed: survey-selection survives, its question being when the whole reading runs; clean-context-review's sentence is amended to say the whole reading runs as survey-selection says, naming no cadence.
+
+### The backfill ran, 2026-09-07, on graph commit edc5af91
+
+The whole reading this node's recommendation calls a backfill ran once in this sitting, under the author's words of 2026-09-07 (words/2026-09-07/23: "If a one time backfill/migration must be done so that future processes are bounded then that must be done now as part of bootstrap reconciliation") and the grant they renew. Its brief was written by `packages/clean-context-review/brief.mjs --survey --force-tier --whole` at implementation commits a8a69389 and 28dec347, 680,585 bytes over the graph at edc5af91, every one of the 154 nodes carried by what it answers and eight judged whole. The first reader failed: an earlier form of the brief told it to read thirteen node files whole, 1.28 MB on top of the brief, and it overflowed before writing a finding; the list was the unbounded part, not the brief, and 28dec347 struck it from the template. The second reader, launched once more with the corrected brief as the survey skill's failure rule says, read the whole and returned its findings, each validated on the main thread against the standing text and the recommended content before anything was applied: one option and one subtree divergence were discarded there, and the rest stand, seven nodes leaving the ruling stage for the maieutic on them. Every node the reader read is pinned at edc5af91, so from here the survey judges the delta alone: the nodes whose recommendation moves past this pin, and the whole reading runs again only as this node's answer says.

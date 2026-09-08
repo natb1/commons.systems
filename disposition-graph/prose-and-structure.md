@@ -57,6 +57,15 @@ review:
   strength: strong
   date: 2026-09-04
   of: ee669918bcfe861c5b70d3497774f08f207554ea
+  survey:
+    date: 2026-09-07
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "8290edf90208faa6ad51f872fe97c951507b37ba2b2252e2f4f21cca3c9b3040"
+      answer: "d3c614f2eb3d80e462c5cc784262ec19900ff9a0a32340d1cfeafd378399b989"
+      options: "da60ccb29f0a4942fa0fcb47cdc832659a2c758784ab016321cf528c81b5b052"
+      rivals: "d7e5d167575ef83ebd47ee538b153a775102d0f86d7d3319d0322098cdedd333"
+      words: "0551d84f50abbe1490ffc09840e1fde5bf2c547a11a80ebfac1ced307683930d"
 form: rule
 under:
   - commons.systems/disposition-graph/node

@@ -7,6 +7,15 @@ review:
   date: 2026-09-03
   of: 50b9ea4f40a07e8facf86b081e6183c2381cce21
   against: "The four-form model rests on a merge whose carrier does not exist: no criterion in the graph says whether its answer is to be achieved or maintained, no field holds it, and instruments' draft sentence that would have introduced it is withdrawn. Instruments' current text uses the distinction operationally — 'A target's failing check is work. A rule's failing check is a variance that gates the work that broke it' — which is how the frontier decides what to do with a failure, and almost every node is unguarded, so under the merge an unguarded node's failure would have no class at all. Ratifying this draft bakes the merge into the schema definition after the record has already decided against it."
+  survey:
+    date: 2026-09-07
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "2ea5499ddd085088e665e15b342081b9e4148e9838b65c78d813322d98db202d"
+      answer: "6ce6fe02c674d2bf6ccab0b6d1175203120ddf86c99329da43d36af60f5cdb5d"
+      options: "27086639e5025de9b75b7b2c82e775dec15015ed073bfab48ea187d74a1d2c75"
+      rivals: "cb068173ccbe4d7df53355e2dfee6d48bfa4b4595aaa956a6f808de866e9b5ac"
+      words: "7aedaea0cb8f5b1fa93aeb4e24a7752903a6bce34d90ebe043da922b262f0e83"
 facts:
   - name: answer
     options:
@@ -57,6 +66,9 @@ facts:
         ref: "2026-09-07"
 
       - name: a-node-file-is-facts-and-account
+        source: review
+        ref: "2026-09-07"
+      - name: a-node-is-classed-by-the-rulings-on-its-facts
         source: review
         ref: "2026-09-07"
     recommends: four-form-draft
@@ -479,6 +491,10 @@ instrument:
 A node is one question and the options its facts carry, each answer option holding the node as it would stand under it; its file is frontmatter, `## Facts` and `## Account`, and the sentence that a rationale says why and which alternatives were rejected is answered by the options' support and divergence.
 ```
 
+#### a-node-is-classed-by-the-rulings-on-its-facts
+
+A node is a question, a form, and facts each carrying options; its class is read off the rulings recorded on those facts and nothing is written beside them; on the table because the standing answer says every node carries a stamp, which authority says is written nowhere.
+
 ## Account
 
 ### Manifest
@@ -585,3 +601,25 @@ Recorded as an option on commons.systems/disposition-graph/transience's answer f
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/node stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `four-form-draft`; 5 `## Disposition` entries became the ledger entries words/2026-09-02/15, words/2026-09-02/7, words/2026-09-02/16, words/2026-09-02/17, words/2026-09-02/18, referenced by 0 options the entry's own date names and by the recommended option for 5 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `five-forms-restored`, `un-aligned-disposition-not-open-question`, `absorb-form-vocabulary`, `rationale-argues-facts-list`, `node-as-a-topic`, `node-as-a-cluster-around-a-default-scope`, `history-kept-inside-the-node`, `proposal-as-a-state-of-a-ratified-node`, `answer-gloss-released-to-dialogue`, `a-node-file-is-facts-and-account`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `50b9ea4f40a07e8facf86b081e6183c2381cce21` was already past the recommendation and is left as it stood.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+authority's standing answer: 'no stamp is written beside them: a node\'s class is read off those rulings, and a node no ruling grants is unanswered'. Standing answers that still define the node by a stamp: node 'Every node carries a stamp, or it is an open question awaiting its answer'; growth 'a ratification is recorded as the stamp in the author\'s name with the ruling quoted'; projection 'an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected'; traditions-home 'A tradition root is a node like any other, a question, an answer, a form and a stamp'. quotes' option `stamp-vocabulary-struck-from-the-live-options` reaches only quotes' own options.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/quotes.
+
+Proposed: authority's vocabulary survives: class, ruling, fact, option. node, growth, projection and traditions-home are amended to define a node by the rulings on its facts, and the record's use of stamp is confined to authority's historical sentence about the stamps the bootstrap wrote.
+
+Recorded as an option on this node's answer fact: `a-node-is-classed-by-the-rulings-on-its-facts` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+The record's term is option, and growth carries '`rejected-alternative-is-an-option` — source commons.systems/disposition-graph/rejected, passed over' while the brief's vocabulary line still reads 'rejected — term: rejected alternative'. Standing texts using the struck term: frontier-consistency 'it is recorded as an alternative on the node it conflicts with, a proposal under the authority node when it arose outside alignment, and the review says which' and 'it adopts a listed alternative or the node as it stands'; node 'The rationale says why, and which alternatives were rejected and for what reason; the page projects those alternatives beside the stamp.'; transience 'the alternatives pending, each with its source'; projection 'the alternatives the rationale rejected'. node's 'The rationale says why' and prose-and-structure's 'A node\'s prose is its disposition, its answer, its rationale and its account' also name a `## Rationale` that dialogue strikes.
+
+Also named: commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/growth.
+
+Proposed: viable-options survives; the four nodes are amended to say option, and node and prose-and-structure to name the sections dialogue keeps (`## Facts`, `## Account`) rather than rationale and disposition.

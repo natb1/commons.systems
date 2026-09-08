@@ -44,8 +44,15 @@ review:
   of: fd543d8b56a6a8724a9eaf03ac0f6ba8d7b3391f
   against: "The node's whole content is a decision about another node's prose, and the record now has three nodes deciding one page: second-stop on whether model is rewritten, model on the rewrite itself, and rejected on what a rationale carries of its alternatives. Keeping the option as a node buys the author a separate ruling; it costs a screen, an ordering the page does not show, and a text that must be reopened if the two rulings disagree. The redundancy finding's own second branch — fold each option into its parent's alternatives, which the new encoding makes structural — is the cheaper answer and is pending as `fold-into-model`."
   survey:
-    date: 2026-09-05
+    date: 2026-09-07
     of: 0c5c0c4cc417ac0db7355195d22000bd76325e2c
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "12f2ea10e619192823d3e2ff6cb4e79ffeb23d7d0bfece82313f5397e5fca1d0"
+      answer: "63f56065b0cb55c1d186010ea4a7c040a79d8064e742a6ea09c45c4abcd2bf22"
+      options: "1ee159da1f6ed72c03712663a344576206cc4d18143f8f21bc001047e0e4ddb0"
+      rivals: "0ea230a76bd45e0fdcce04edbdbeea51ca3e06d5f3bcea2b00e53a725290cd07"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 facts:
   - name: answer
     options:

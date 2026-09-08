@@ -117,6 +117,15 @@ review:
   of: 9d6e470956601ff19c472045db38544dd2159098
   commit: c1128d49c3f3b295deef2f4d20e60aa4a8cd77f7
   against: "The amendment's own account asserts, without evidence this delta reading can check, that the two edits it credits to `node` and `viable-options` (options `a-node-file-is-facts-and-account` and `every-weighed-candidate-must-be-recorded`) actually landed at commit `d4ab0283`. If either did not land as claimed, the record would still be short the two merge-finding discharges validation 15 raised, and nothing in this node's own file would show it. This is a residual, non-blocking gap rather than a defect the amendment introduces or fails to answer on its own object: the last reading treated the identical item as unverifiable-but-not-kickback-worthy, and the repair changes nothing about that status."
+  survey:
+    date: 2026-09-07
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "8e4cfda6b2cc73dd81ec7cec283420d29d6fb608b865228de8e58a8cf232715d"
+      answer: "e73307626b1a80c4edbd9c4eec72a4d58796560f4fbc91a766e374b69e4a35e7"
+      options: "6d37e97997fa84a7bc1023d8f9ed8f575048c013e61fb92f4d750cd190b0ea38"
+      rivals: "9daae666187b35a9788618a64198844f0809992bcd17ffca547d815500bbd058"
+      words: "e74de05bfa0fc4b3fdf9414b2b01ee71db7fcfd42df934432bb674054d642a08"
 facts:
   - name: answer
     options:
@@ -3133,3 +3142,13 @@ Five judged nodes stand at the ruling stage on ground still at the maieutic stag
 Also named: commons.systems/disposition-graph/tolerated-inconsistency, commons.systems/disposition-graph/verifying-traces-and-early-cutoff, commons.systems/disposition-graph/madr-decision-records, commons.systems/disposition-graph/event-sourcing-with-snapshots, commons.systems/disposition-graph/unconfirmed-accumulation, commons.systems/disposition-graph/viable-options.
 
 Proposed: No merge and no survivor: the placement is corrected by the record saying so. Either `dialogue` is advanced to the ruling stage before the five are put to the author, or each of the five states in its answer that it rests on a `dialogue` option still at the maieutic stage and what it would lose if that option moves. The ruling order is derived from the placement, as `alignment-order` requires, and is not recommended here in prose.
+
+### Frontier finding, 2026-09-07
+
+Kind: supersession.
+
+dialogue's standing answer: 'The author\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\'s on it move to the parent\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\'s `## Disposition`, where their words already are.'; transience 'the author\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\'s third term unmaterialized' are dated past.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/transience.
+
+Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.

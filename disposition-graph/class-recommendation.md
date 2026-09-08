@@ -37,8 +37,15 @@ review:
   commit: a85f29250ccfcc8a10192dc507a0f1a17de6c2c3
   against: "Three of the previous reading's five findings were findings about `.claude/rules/class-recommendation.md`, the text every session loads, and the amendment answers all three in the node while leaving the projection exactly as that reading found it: the file still says \"escalates toward ratified\", still carries the citation loop, and still states as the ground of a sentence in doctrine the general census rule that `authority` deliberately holds unruled as `no-census-in-a-standing-answer`. So on the day the author is asked to rule, the defect the amendment's own account calls \"the one that changes what a session does\" is still in front of every session, and the amendment's claim that those clauses now sit outside \"a text projected verbatim into `.claude/rules/`\" is true of the node and false of the file. Against that: the fix is a regeneration and not a redrawing. The answer as amended is the right text on all five findings, the two things the amendment adds of its own -- the rationale paragraph and the fifth option -- check out against the record, and what is owed is publication, which is why this is a finding and not a kickback."
   survey:
-    date: 2026-09-05
+    date: 2026-09-07
     of: ef23296a96bb799b9cdd1d500652d172746aea3d
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "e36cfa0d84631a191ee50cf0c06cd6a5111dea516d3a97508d8108201faa6bd8"
+      answer: "8ee015e5c4a42af1e80dd7d68249295042e4a597f50ec1922372a0dd2360172b"
+      options: "2dfe63c9f5793bec86dcc479a14c14cc9be00b96d0ac69b092f95152a353ebbe"
+      rivals: "8b4f0f46cdf26d32fac778fdf8398d01e7d3cfad3cf71a8ad9f8d938a70b8ddb"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 form: rule
 tier: global
 under:

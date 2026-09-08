@@ -7,6 +7,15 @@ review:
   date: 2026-09-03
   of: b5717e656b723368acf1ad6f3609c7ab85c6a1a3
   against: "Reclassifying every deferred answer as unanswered loses nothing formally and changes what the record is while the record is in use: sixty-eight nodes now sit in one queue with no distinction between an answer written that morning from the author's quoted words and one written two days earlier from the AI's own knowledge, and the author must rule on all of them through a dialogue whose own rules are in the queue. The session's reply — that the stage says what each is owed where the deferred stamp did not — is a real gain and is now visible in the frontier and the page. What is unanswered is the volume: forty-three nodes stand at review or ruling in one sitting, and the record offers a ruling order only as a review's recommendation that nothing consumes."
+  survey:
+    date: 2026-09-07
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "09cba62ef34db9cf68e59d3ef4c190943c328168a291998879f34d2b20ec9539"
+      answer: "09a972922fa40a2da4f32486321197559dd974cd2ee2c492f9c688d02ce5ace1"
+      options: "dadb414546ad7f6352e98b5122f4bbb957ecb03c8885a80d317a7086723ee52d"
+      rivals: "de45963f873a391ceab9d85d32258d9d9f4c2a78fad5533af666516482b6e639"
+      words: "c8ec8788a610f28277df55afbfe88e12c771c0abf85d47cbcda224e5a76981df"
 facts:
   - name: answer
     options:

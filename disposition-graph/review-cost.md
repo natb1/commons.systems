@@ -67,6 +67,8 @@ facts:
       - name: the-surveys-unreached-node-is-one-line
         source: commons.systems/disposition-graph/frontier-consistency
         ref: "2026-09-07"
+        status: passed
+        reason: "the survey's selection and reach are survey-selection's question (F5 of the survey of 2026-09-07); what this node prices is the bound alone"
       - name: the-surveys-selection-moves-to-its-own-node
         source: commons.systems/disposition-graph/survey-selection
         ref: "2026-09-07"
@@ -94,6 +96,9 @@ facts:
         supports:
           - words/2026-09-07/22
           - words/2026-09-07/23
+      - name: reader-is-the-parser-and-reviewer-is-the-reading
+        source: review
+        ref: "2026-09-07"
     recommends: no-brief-grows-with-the-record
     boldness: moderate
     against: "Every clause of it narrows what the reviewer is shown, on measurements taken by the party the review exists to check. A reader that must search for what it is no longer given searches for what it thinks to look for, which is the drafter's own frame, and the failure the index guarded against, a contradiction with a node nobody thought to name, is the one failure a search cannot be aimed at. The answer's reply, that the survey holds the whole graph and is the reader of last resort, is good only while the survey runs before every ruling; this design moves that load onto it: at graph commit 1cde11f6 on 2026-09-05, before the first survey ran, forty-eight nodes stood at the review or the ruling stage and none carried a survey pin, and what the survey costs once the load is on it is the question the author raised on 2026-09-07 and `survey-selection` answers beneath this node."
@@ -114,35 +119,55 @@ review:
   against: "The previous reading forwarded the node while flagging, at weak strength, that it could not itself verify `survey-selection` existed and was deferring that check to the survey; this re-reading closed that gap by checking the disk directly rather than relying further on the record's own narration. The residual concern is procedural rather than substantive: a second unratified recommendation move has now landed on top of the first before the author has ruled on either, and one of the three live options still carries only a sentence rather than full content, which is exactly why the node cannot yet reach the review stage. The record discloses this itself in the same account section rather than presenting the node as more finished than it is, which is the reason this is a residual doubt and not a defect."
   survey:
     date: 2026-09-07
-    of: 388a136d38ca73f6e73c1f4030df0be4de25665a
-    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    of: bb2eb39aac16fa96e1453bd6d22298c26e0a3a20
+    commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "5a276f1bf8183de6f01b2848f4b759efc17925da9b1ea889ceb9a2b2c522bf8d"
-      answer: "f7fb36612c411d8e4ce04000e23aeac609a3747d9e7b159f0f5d13e141e22985"
-      options: "3da3e5ba79aedab04596754cd4affd56ea27b6518a75c692cdc8ad1ecee8d20c"
-      rivals: "8d798b6642af09af7cf832c7d432e75dacfa74614ba5692ac5a6972f688d7bbc"
-      words: "998fe03ca947a5ce316bc6d59435a462eb28a6590ac29e9d3ed6af58218d21c0"
-    findings: []
+      answer: "322b4c79c4923a837fa8ab0a7a8c236515e54deb363df0907ce25e9e4d7c9e94"
+      options: "ab246cdd3791bca1ea903f22eb32eaba621298e705ec3210a2e9309ab25e2753"
+      rivals: "4e0bf6dce0a2d2fd753cb1ff5b142279672940238af1e72502b53d8df2d37ebd"
+      words: "9bc306ab74cf5e5b0f099e672dc98fe1bd9ab7fb79ff99d6a69d4d5dbe69f2a9"
+    findings:
+      - finding: "The one-line carriage of an unreached or unchanged node is stated on four nodes. survey-selection: 'a node the judged set reaches but whose read text has not changed since a survey read it, judged or reached, is carried on one line rather than by what it answers'. frontier-consistency: 'a node whose text stands as an earlier survey read it is carried on one line, and a node minted or amended since is carried by what it answers until a survey has read it again', while its Facts 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'. clean-context-review's recommended answer: 'of a node no judged node reaches, what the frontier-consistency node\\'s condition on its text gives, its question alone on one line'. review-cost: option `the-surveys-unreached-node-is-one-line`, of which frontier-consistency's account says 'a rule drafted twice in one day on two nodes is evidence that the seam is in the wrong place'."
+        kind: "redundancy"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/survey-selection"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/clean-context-review"
+      - finding: "author-questions' answer: 'The two senses of reader collide here and the record carries both, the parser of the graph and the clean-context reading\\'s subagent, which is a vocabulary finding this answer records rather than settles and leaves to the survey; where this node says reader without qualification it means the parser.' The parser sense: viable-options 'the reader parses an option\\'s `#### ` subsection and no content within it'; what-an-option-row-carries 'which the reader of the graph enforces'. The agent sense: review-cost 'A reading is the only reader in this record that can judge whether an answer is right, and it is the most expensive reader the record has'; what-an-option-row-carries 'Where no reader\\'s line bears on a fact the row carries, in the line\\'s place, one'. recording already has the third term: 'The reviewer recommends and never writes'."
+        kind: "vocabulary"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/what-an-option-row-carries"
+          - "commons.systems/disposition-graph/clean-context-review"
     pairs:
-      - with: "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
-        keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
       - with: "commons.systems/disposition-graph/alignment-page"
         keys:
           - "words:words/2026-09-07/2"
           - "words:words/2026-09-07/3"
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/appellate-review-en-banc"
-        keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
-      - with: "commons.systems/disposition-graph/author-questions"
-        keys:
-          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
-      - with: "commons.systems/disposition-graph/authority"
-        keys:
-          - "term:authority (defines: commons.systems/disposition-graph/authority)"
-          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
-          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
       - with: "commons.systems/disposition-graph/authors-words-on-the-page"
         keys:
           - "words:words/2026-09-07/2"
@@ -151,15 +176,8 @@ review:
       - with: "commons.systems/disposition-graph/change-reviewed-as-a-diff"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/class-recommendation"
-        keys:
-          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
       - with: "commons.systems/disposition-graph/clean-context-review"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "words:words/2026-09-07/5"
           - "words:words/2026-09-07/6"
           - "words:words/2026-09-07/7"
@@ -169,30 +187,13 @@ review:
           - "depends"
       - with: "commons.systems/disposition-graph/decomposition"
         keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "words:words/2026-09-07/5"
           - "words:words/2026-09-07/6"
           - "words:words/2026-09-07/7"
           - "words:words/2026-09-07/8"
           - "cites"
-      - with: "commons.systems/disposition-graph/delegation"
-        keys:
-          - "term:main thread (defines: commons.systems/disposition-graph/delegation)"
-          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
-          - "term:unit (defines: commons.systems/disposition-graph/delegation)"
       - with: "commons.systems/disposition-graph/dialogue"
         keys:
-          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:standing answer (defines: commons.systems/disposition-graph/dialogue)"
           - "words:words/2026-09-07/2"
           - "words:words/2026-09-07/3"
           - "words:words/2026-09-07/4"
@@ -204,12 +205,9 @@ review:
           - "depends"
       - with: "commons.systems/disposition-graph/fagan-inspection-roles"
         keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "cites"
       - with: "commons.systems/disposition-graph/frontier-consistency"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "words:words/2026-09-07/5"
           - "words:words/2026-09-07/6"
           - "words:words/2026-09-07/7"
@@ -221,77 +219,38 @@ review:
           - "cites"
       - with: "commons.systems/disposition-graph/growth"
         keys:
-          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
-          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
           - "term:propose (defines: commons.systems/disposition-graph/growth)"
-      - with: "commons.systems/disposition-graph/information-hiding"
-        keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
-      - with: "commons.systems/disposition-graph/instruments"
-        keys:
-          - "term:check (defines: commons.systems/disposition-graph/instruments)"
-          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
-          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
       - with: "commons.systems/disposition-graph/madr-decision-records"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/materialization"
         keys:
           - "term:package (defines: commons.systems/disposition-graph/materialization)"
-      - with: "commons.systems/disposition-graph/model"
-        keys:
-          - "term:disposition (defines: commons.systems/disposition-graph/model)"
-          - "term:node (defines: commons.systems/disposition-graph/model)"
-      - with: "commons.systems/disposition-graph/namespaces"
-        keys:
-          - "term:id (defines: commons.systems/disposition-graph/namespaces)"
-      - with: "commons.systems/disposition-graph/node"
-        keys:
-          - "term:answer (defines: commons.systems/disposition-graph/node)"
-          - "term:form (defines: commons.systems/disposition-graph/node)"
-          - "term:question (defines: commons.systems/disposition-graph/node)"
-          - "term:rationale (defines: commons.systems/disposition-graph/node)"
-      - with: "commons.systems/disposition-graph/operation-naming-in-telemetry"
-        keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
       - with: "commons.systems/disposition-graph/persistence"
         keys:
           - "term:land (defines: commons.systems/disposition-graph/persistence)"
       - with: "commons.systems/disposition-graph/progressive-disclosure"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/projection"
-        keys:
-          - "term:projection (defines: commons.systems/disposition-graph/projection)"
       - with: "commons.systems/disposition-graph/quotes"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "words:words/2026-09-07/4"
           - "words:words/2026-09-07/15"
       - with: "commons.systems/disposition-graph/readings"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "words:words/2026-09-07/4"
       - with: "commons.systems/disposition-graph/recording"
         keys:
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "cites"
       - with: "commons.systems/disposition-graph/rejected"
         keys:
           - "term:rejected alternative (defines: commons.systems/disposition-graph/rejected)"
           - "cites"
-      - with: "commons.systems/disposition-graph/review"
-        keys:
-          - "term:review (defines: commons.systems/disposition-graph/review)"
       - with: "commons.systems/disposition-graph/review-approval-pinned-to-a-revision"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/review-model"
         keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "words:words/2026-09-07/5"
           - "words:words/2026-09-07/6"
           - "words:words/2026-09-07/7"
@@ -300,34 +259,23 @@ review:
           - "cites"
       - with: "commons.systems/disposition-graph/review-skills"
         keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "parent:commons.systems/disposition-graph/clean-context-review"
           - "cites"
-      - with: "commons.systems/disposition-graph/scope"
-        keys:
-          - "term:order (defines: commons.systems/disposition-graph/scope)"
-          - "term:section (defines: commons.systems/disposition-graph/scope)"
       - with: "commons.systems/disposition-graph/self-contained-specification"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/session-context"
-        keys:
-          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
       - with: "commons.systems/disposition-graph/survey-selection"
         keys:
+          - "term:candidate pair (defines: commons.systems/disposition-graph/survey-selection)"
           - "words:words/2026-09-07/9"
           - "words:words/2026-09-07/11"
           - "words:words/2026-09-07/12"
           - "words:words/2026-09-07/13"
           - "words:words/2026-09-07/16"
+          - "words:words/2026-09-07/22"
+          - "words:words/2026-09-07/23"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/transience"
-        keys:
-          - "term:standing (defines: commons.systems/disposition-graph/transience)"
-      - with: "commons.systems/disposition-graph/unanswered"
-        keys:
-          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
       - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
         keys:
           - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
@@ -340,33 +288,18 @@ review:
           - "words:words/2026-09-07/15"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/under"
-        keys:
-          - "term:context (defines: commons.systems/disposition-graph/under)"
-          - "term:under (defines: commons.systems/disposition-graph/under)"
-      - with: "commons.systems/disposition-graph/unit-skills"
-        keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
       - with: "commons.systems/disposition-graph/viable-options"
         keys:
-          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
           - "words:words/2026-09-07/2"
           - "words:words/2026-09-07/3"
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
-        keys:
-          - "term:bootstrap (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
       - with: "commons.systems/disposition-graph/what-an-option-row-carries"
         keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "words:words/2026-09-07/2"
           - "words:words/2026-09-07/3"
           - "words:words/2026-09-07/4"
       - with: "commons.systems/disposition-graph/work-loop"
         keys:
-          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
           - "cites"
 form: rule
 under:
@@ -1122,6 +1055,10 @@ From: the-surveys-selection-moves-to-its-own-node
  
 ```
 
+#### reader-is-the-parser-and-reviewer-is-the-reading
+
+Reader names the graph's parser and nothing else; the clean-context agent is the reviewer, its act the reading; on the table because author-questions records the collision and leaves it to the survey, and this node uses reader in the second sense throughout.
+
 ### authority
 
 Ratified. What this decides is how much of the record the adversarial reader is shown, and the party it is shown against is the party that would otherwise set it: a rule that lets the drafter narrow the review's object is capture-shaped in the way the `class-recommendation` node's escalation test names, and being wrong here is not visible in the record, since a review that reads too little returns fewer findings and looks cheaper and no worse. Moderate boldness: the escalation is the test the `class-recommendation` node states, and what rests on the AI is the judgment that the author's delegation of right-sizing does not reach the reviewer's object, which the case against disputes.
@@ -1231,3 +1168,41 @@ On the viability of the options: Every option present at the last reading's pin 
 Strongest counter-argument (weak): The previous reading forwarded the node while flagging, at weak strength, that it could not itself verify `survey-selection` existed and was deferring that check to the survey; this re-reading closed that gap by checking the disk directly rather than relying further on the record's own narration. The residual concern is procedural rather than substantive: a second unratified recommendation move has now landed on top of the first before the author has ruled on either, and one of the three live options still carries only a sentence rather than full content, which is exactly why the node cannot yet reach the review stage. The record discloses this itself in the same account section rather than presenting the node as more finished than it is, which is the reason this is a residual doubt and not a defect.
 
 The session's reply: Accepted. The reading forwards with no finding; the residual doubt it records, that the review's option `the-brief-is-bounded-by-what-one-call-holds` carries its sentence only, is the reason the stage stays maieutic, as the account says, and that option is on the table for the author and not adopted by this amendment. The node's ruling waits on the survey the fact's movement owes, which the backfill survey of this sitting is.
+
+### Frontier survey, 2026-09-07, of bb2eb39a
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Answer, 'What attention is': 'A reading is the only reader in this record that can judge whether an answer is right, and it is the most expensive reader the record has' uses reader for the clean-context subagent, while author-questions says 'where this node says reader without qualification it means the parser' and viable-options has 'the reader parses an option\'s `#### ` subsection and no content within it'; the two senses collide on the judged node, which author-questions 'leaves to the survey' (frontier: vocabulary).
+- Answer, 'What a brief must fit': 'And no brief grows with the record.' does not say which brief. The survey brief this reading was given carries 86 nodes, 62 by what they answer, and 2909 candidate pairs, and survey-selection says of the whole reading 'it runs on the author\'s word'; a whole reading grows with the record by construction, so the sentence holds of the draft brief and of the selected survey only, and should name them.
+- Options: `the-surveys-unreached-node-is-one-line` restates a rule frontier-consistency's account already calls misplaced: '`review-cost` carries the same rule as the option `the-surveys-unreached-node-is-one-line`, sourced to this node so that the author rules the placement once, and a rule drafted twice in one day on two nodes is evidence that the seam is in the wrong place'; survey-selection now states the rule ('a node the judged set reaches but whose read text has not changed since a survey read it, judged or reached, is carried on one line rather than by what it answers'), so the option here is a third statement (frontier: redundancy).
+
+Strongest counter-argument (moderate): The answer bounds what a reading is given by its object and its neighbourhood, but the reading that catches what nobody thought to name is the one that holds the whole graph, and the answer concedes it ('the survey holds the whole graph and is the reader of last resort'). Bounding every brief by construction then makes the survey the only unbounded reading, and survey-selection has since made the whole survey a backfill that runs on the author's word alone. Between them, no reading that holds the whole record runs on any schedule, so the failure the against names, a defect the drafter's frame never puts in front of a reader, is caught only when the author asks for it; the answer should say that this is the price it accepts rather than leave it to survey-selection to state.
+
+The session's reply: Validated on the main thread at graph edc5af91: every quoted locus found verbatim in the node or in the brief's own rendering; each offending sentence checked against the node's recommended content resolved from its option ladder, not only its standing text. f0 (reader in two senses) stands: the recommended content says 'most expensive reader' of the clean-context agent while author-questions reserves reader for the parser; the option reader-is-the-parser-and-reviewer-is-the-reading is recorded. f1 rejected: the sentence it quotes is followed in the same paragraph by 'a brief that is the record's size is a backfill, run once on the author's word', which names the one brief the bound excepts. f2 stands: the-surveys-unreached-node-is-one-line is a third statement of survey-selection's rule; it is passed over by the session with survey-selection as the reason (frontier finding 5). The counter-argument is recorded: the answer accepts that no whole reading runs on a schedule, and the session holds that the price is the author's to confirm on survey-selection, where the-whole-reading-is-a-backfill-and-the-delta-is-the-norm states it.
+
+### Frontier finding, 2026-09-07
+
+Kind: redundancy.
+
+The one-line carriage of an unreached or unchanged node is stated on four nodes. survey-selection: 'a node the judged set reaches but whose read text has not changed since a survey read it, judged or reached, is carried on one line rather than by what it answers'. frontier-consistency: 'a node whose text stands as an earlier survey read it is carried on one line, and a node minted or amended since is carried by what it answers until a survey has read it again', while its Facts 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'. clean-context-review's recommended answer: 'of a node no judged node reaches, what the frontier-consistency node\'s condition on its text gives, its question alone on one line'. review-cost: option `the-surveys-unreached-node-is-one-line`, of which frontier-consistency's account says 'a rule drafted twice in one day on two nodes is evidence that the seam is in the wrong place'.
+
+Also named: commons.systems/disposition-graph/survey-selection, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/clean-context-review.
+
+Proposed: survey-selection survives as the rule's home. frontier-consistency's paragraph goes with its recommended move; clean-context-review cites survey-selection instead of frontier-consistency, its option `the-unreached-line-is-conditioned-by-frontier-consistency` being passed over; review-cost's `the-surveys-unreached-node-is-one-line` is passed over with survey-selection as the reason.
+
+Recorded as an option on commons.systems/disposition-graph/clean-context-review's answer fact: `the-unreached-line-is-cited-from-survey-selection` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+author-questions' answer: 'The two senses of reader collide here and the record carries both, the parser of the graph and the clean-context reading\'s subagent, which is a vocabulary finding this answer records rather than settles and leaves to the survey; where this node says reader without qualification it means the parser.' The parser sense: viable-options 'the reader parses an option\'s `#### ` subsection and no content within it'; what-an-option-row-carries 'which the reader of the graph enforces'. The agent sense: review-cost 'A reading is the only reader in this record that can judge whether an answer is right, and it is the most expensive reader the record has'; what-an-option-row-carries 'Where no reader\'s line bears on a fact the row carries, in the line\'s place, one'. recording already has the third term: 'The reviewer recommends and never writes'.
+
+Also named: commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/what-an-option-row-carries, commons.systems/disposition-graph/clean-context-review.
+
+Proposed: recording's term survives for the agent: reviewer, or the reading where the act is meant; reader is kept for the parser, which is what read.mjs is. review-cost, what-an-option-row-carries and clean-context-review substitute; author-questions strikes the sentence that leaves the finding to the survey.
+
+Recorded as an option on this node's answer fact: `reader-is-the-parser-and-reviewer-is-the-reading` (source review, 2026-09-07).

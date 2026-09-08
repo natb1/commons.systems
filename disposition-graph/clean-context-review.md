@@ -1,6 +1,6 @@
 ---
 question: How is the clean-context review run?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: none
@@ -10,7 +10,7 @@ review:
   survey:
     date: 2026-09-07
     of: e2a45f86e02e587699b715e7bd116ab1f0280c83
-    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "391cfe8148687d475a1c1636f26c08285ce0c341246dcdebc81f794833ce1f29"
       answer: "6ff60bcf5373592940c0edbe304da9c00da35fe53b654f75ceb17917a60fa550"
@@ -540,6 +540,9 @@ facts:
           - words/2026-09-07/7
           - words/2026-09-07/8
           - words/2026-09-07/9
+      - name: the-unreached-line-is-cited-from-survey-selection
+        source: review
+        ref: "2026-09-07"
     recommends: a-surveys-selection-and-its-state-are-the-selection-nodes
     boldness: high
     against: "The wave buys bytes and spends attention, and attention is the quantity this subtree has already said is the scarce one. `review-cost` now recommends that \"Token efficiency and context management are bounds on what a reading is given; attention is what the reading does with it, and it is not the same quantity\", and a wave halves the bytes while quartering what any one object gets of the reader: the brief is fifty-six percent smaller, but each of the four drafts is now judged by a reader holding three other drafts, three other neighbourhoods of options, and three other verdicts it must also write. Deriving the wave's membership and bounding its brief settle who is in it and how large it may be, and neither touches that: on the record's own accounting a wave is a rise in cost per unit of attention and not a fall, and it is invisible to the measurement the case is built on, which counts only bytes. The deeper objection is that the saving and the loss fall on different parties: the bytes are the record's, the independence is the author's, and the author is the one the review exists to protect. And the loss is hedged only by the survey, which this node's own rationale still records as one \"no sitting has yet generated\" and which runs for the first time in the sitting that recommends the wave."
@@ -1225,6 +1228,10 @@ The survey. Its object is the frontier's consistency with itself, and it keeps t
 The session that invoked the skill validates every finding against the record before any is applied, on its own thread and never delegated, as the author ruled on 2026-09-03, and applies what it validated by script. What the two readings gate, and when a node is ready for the author's ruling, is the recording node's confirmation; the frontier and the alignment page show which of the two is owed. Invoked directly, either skill validates, lands the nodes it changed, and republishes the alignment page; invoked by a sitting, the sitting lands with its own round.
 ```
 
+#### the-unreached-line-is-cited-from-survey-selection
+
+The survey carries a node the judged set does not reach, or whose read text an earlier survey read, on one line as the survey-selection node states, and this node cites that node and restates nothing; on the table because the recommended answer cites frontier-consistency for a condition frontier-consistency's own recommendation moves to survey-selection.
+
 ### authority
 
 Ratified, at low boldness. The author's words set this node's shape twice on 2026-09-03 and once more on 2026-09-04 through the decomposition node, and being wrong here is capture-shaped: the review is the guard against the blind spots of the session that drafts, and a delegation would let the reviewed party set the terms of its own review. The parent and the decomposition node recommend the same class at the same boldness.
@@ -1361,3 +1368,47 @@ The finding is recorded so that the sitting that takes this node up finds it.
 The `contradiction` finding on the brief's size against `review-cost`'s bound, as the survey wrote it: The bound `review-cost` states on a brief is contradicted by the brief the same family of nodes produced. Its answer holds that "A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim" and that a brief that fits "is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it". The survey brief of 2026-09-07 is 9,277 lines and 1,111,970 bytes, roughly ten times a single call's cap, so the fewest pieces its reader's tool allows is nineteen, and the brief itself reports the selection that produced it as unnarrowed: "This survey is whole.", "4677 candidate pair(s), all live, 0 frozen". Either the bound is not a bound, or the object was not narrowed and the defect is the brief's.
 
 Its proposal: The survivor is the bound, made operative rather than aspirational: `review-cost` states the brief's size in what the reader's tool holds, and the generator refuses or splits a brief that exceeds it rather than emitting it, so that the clause about the fewest pieces describes an artifact that can satisfy it. `survey-selection` is where the narrowing happens and takes the number; `clean-context-review` and `review-skills` are named because the two readings and their generator are what the bound binds.
+
+### Frontier finding, 2026-09-07
+
+Kind: redundancy.
+
+The one-line carriage of an unreached or unchanged node is stated on four nodes. survey-selection: 'a node the judged set reaches but whose read text has not changed since a survey read it, judged or reached, is carried on one line rather than by what it answers'. frontier-consistency: 'a node whose text stands as an earlier survey read it is carried on one line, and a node minted or amended since is carried by what it answers until a survey has read it again', while its Facts 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'. clean-context-review's recommended answer: 'of a node no judged node reaches, what the frontier-consistency node\'s condition on its text gives, its question alone on one line'. review-cost: option `the-surveys-unreached-node-is-one-line`, of which frontier-consistency's account says 'a rule drafted twice in one day on two nodes is evidence that the seam is in the wrong place'.
+
+Also named: commons.systems/disposition-graph/survey-selection, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/review-cost.
+
+Proposed: survey-selection survives as the rule's home. frontier-consistency's paragraph goes with its recommended move; clean-context-review cites survey-selection instead of frontier-consistency, its option `the-unreached-line-is-conditioned-by-frontier-consistency` being passed over; review-cost's `the-surveys-unreached-node-is-one-line` is passed over with survey-selection as the reason.
+
+Recorded as an option on this node's answer fact: `the-unreached-line-is-cited-from-survey-selection` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+clean-context-review's recommended answer: 'a whole reading, in which nothing is frozen, runs besides on the cadence the `survey-selection` node states and after any amendment to the validations'. survey-selection's recommended answer: 'The whole survey, in which nothing is frozen, is a backfill and never the norm: it runs on the author\'s word, and after any amendment to the validations, to what a reading is given, or to the tier' and 'it runs on no cadence and after no count of deltas.' survey-selection carries `size-the-cadence-and-the-sample-on-inclusiveness-and-precision` unrecommended, so the cadence clean-context-review cites is an option there, not the answer.
+
+Also named: commons.systems/disposition-graph/survey-selection.
+
+Proposed: survey-selection survives, its question being when the whole reading runs; clean-context-review's sentence is amended to say the whole reading runs as survey-selection says, naming no cadence.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+information-hiding's answer: 'They change for different reasons: the first six validations and the fifteenth against the seventh to the fifteenth, one node\'s verdict against a graph commit and a set of recommendation hashes.' frontier-consistency numbers sixteen validations, and the sibling reading fagan-inspection-roles has 'the first six validations and the fifteenth over one draft\'s neighbourhood, the seventh to the sixteenth over the whole graph', as clean-context-review has 'on validations seven to sixteen of the frontier-consistency node'.
+
+Also named: commons.systems/disposition-graph/information-hiding, commons.systems/disposition-graph/fagan-inspection-roles, commons.systems/disposition-graph/frontier-consistency.
+
+Proposed: fagan-inspection-roles and clean-context-review survive; information-hiding's 'seventh to the fifteenth' becomes 'seventh to the sixteenth'.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+author-questions' answer: 'The two senses of reader collide here and the record carries both, the parser of the graph and the clean-context reading\'s subagent, which is a vocabulary finding this answer records rather than settles and leaves to the survey; where this node says reader without qualification it means the parser.' The parser sense: viable-options 'the reader parses an option\'s `#### ` subsection and no content within it'; what-an-option-row-carries 'which the reader of the graph enforces'. The agent sense: review-cost 'A reading is the only reader in this record that can judge whether an answer is right, and it is the most expensive reader the record has'; what-an-option-row-carries 'Where no reader\'s line bears on a fact the row carries, in the line\'s place, one'. recording already has the third term: 'The reviewer recommends and never writes'.
+
+Also named: commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/what-an-option-row-carries.
+
+Proposed: recording's term survives for the agent: reviewer, or the reading where the act is meant; reader is kept for the parser, which is what read.mjs is. review-cost, what-an-option-row-carries and clean-context-review substitute; author-questions strikes the sentence that leaves the finding to the survey.
+
+Recorded as an option on commons.systems/disposition-graph/review-cost's answer fact: `reader-is-the-parser-and-reviewer-is-the-reading` (source review, 2026-09-07).

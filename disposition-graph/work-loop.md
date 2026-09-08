@@ -8,8 +8,15 @@ review:
   of: 495e788047084ff6922db65745e215bb6c11f508
   against: "The amendment gives the loop a licence to write into the very record it reconciles to, and the controls the author conditioned that licence on do not exist in checkable form. 'Within the node's scope' is defined by no node; the review and the frontier read no reconciliation graph write; and on a delegated node the move acts and the author never sees it, so the only thing between a licensed option and a rewritten desired state is the judgment of the session making the move. The record's own two readings say as much and are the strongest witnesses against the draft: `level-triggered-reconciliation` concedes that 'the tradition's clean line is not kept', and `ocap-attenuation` says that here 'the attenuation is a written disposition that a session follows ... the same rule with a weaker guarantee', with 'the harness's permissions ... the only part of it that is actually a mechanism' — neither of which this node's answer records. Joined to an eleven-clause shim no projection reads and a second direction nothing derives, ratifying this ratifies the loop's self-licence together with the absence of its guard, on the one node whose failure mode is the record ceasing to be the author's. What answers it, and what the author should weigh against it, is that the licence is narrow by its terms (never a ruling, never a ruling's edit, never the author's words), that every move is visible in the graph's history the moment it lands, and that the author's own words of 2026-09-04 grant exactly this."
   survey:
-    date: 2026-09-05
+    date: 2026-09-07
     of: 36e0bcccf9760e47ac0e7c54c7edae85c64854c6
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "0d94cad7d0a3935e7ad4b9abb9e931bf392390e5b5d87078b43fb8f469ca4a25"
+      answer: "1f04e640af1f547fa0d8589c48ba193601e64b0371a6be8f6f4beeab371442f8"
+      options: "b1a4bb8f8accbb76d7287d4d12cbb28ae346137e4cc9234cf4992619bb1b5c18"
+      rivals: "32cac3b317b30c7c3850d4412ab5f4a134643746d263e670716f7c079cb99515"
+      words: "e739754cfab65d68771b9e2abadd6e4ca4f5a9eb4c1ae0f853469b0a8319e060"
 facts:
   - name: answer
     options:

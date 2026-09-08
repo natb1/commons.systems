@@ -9,8 +9,15 @@ review:
   commit: dfded1295e4312c3cdfb1ee03b07e1aad87311eb
   against: "The draft asks the author to ratify a global-tier rule two of whose operative sentences are not in the record. The model a reconciliation session's main thread runs on is delegated to a shim skill's text, and that skill grounds its own choice by citing this node, so ratification would pin a pointer whose target is scheduled for liquidation by a clause that itself reads 'every rule this project runs under is a node or a declared shim'. Beside that, the one ruling on the authority fact covers both the capture-shaped bounds, where ratified is plainly right, and the sizing of units, models and effort, which the author's own quoted words hand to the AI twice ('\"appropriate\" is open question'; right-sized models and effort 'when it would result in token efficiency'), so the author cannot delegate the sizing without denying the bounds. And the oldest objection still stands unmet: the contract, the report and the main thread's read of the conclusion are a fixed cost per unit, the lookup exemption is the only floor, and 'anything larger is a unit' still catches every three-line investigation. What answers all of this is that each defect is an amendment away — state the model here, split the class question into a node beneath, and the rule is the one the author's words already describe."
   survey:
-    date: 2026-09-05
+    date: 2026-09-07
     of: 9ede4272e4d4442995d1f49ce024850cbef674ca
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "3cdeb14abd20825fe37ef02e186f1e5a06e9adf2dce980a065fb393517ce60a5"
+      answer: "fd62075c11ffccc55d8957cb0bcb1e1832db8a504d8e5112634c3dfaba249cb7"
+      options: "1e2ebcc061832e46583a404e807eb00775610bfe5cdc4cb3a87d84f24343824a"
+      rivals: "57170a995dea300d41cb4aa74fb69fb1951d658f7261fa1e3d0cd0ba973cc57e"
+      words: "a0001a7a1407cbfee0ad84cfb65d43a26ccbdcda88e34e033bfb55897d258d80"
 facts:
   - name: answer
     options:

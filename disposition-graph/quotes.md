@@ -10,16 +10,16 @@ review:
   against: "The disclaim answering Finding 4 is itself a new, unverified assertion about `recording`'s current answer fact and its recommended option's fence content, made in a delta-scoped reading that has no access to `recording`'s file to confirm it. If `recording` in fact carries some form of the promised option under a different name, or its cited fence does not do what this account claims, the repair would be inaccurate rather than merely silent — a stronger defect than the silence it replaces. But this is the same category of cross-node uncertainty the previous reading itself accepted as deferrable to the survey (its Finding 3 on the `commit` field), so treating this disclaim the same way is consistent rather than a double standard."
   survey:
     date: 2026-09-07
-    of: dfe115405719ce311fa7facaa997f9326b6aef32
-    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    of: a300a951d709452b616a8a7d1f9e65f3c266ce95
+    commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "8c47ddf791b1a5708972c2a0f138fef97e2dbf8fb45e8670f89720b485ac28d5"
       answer: "afa36a77715f4695cbab52e603b76d9b1f63b7d92f98c60301d5321cf8882ff3"
-      options: "93bee065b4fc74fe2937f055af41e7b09437a31e5757cef784ee15737902e49e"
-      rivals: "42d8364dfe1b82695e1f7686271afd3c075237ac62effb8a51d59813f9d034dc"
+      options: "47e4a9512268649499d6a630d83d5de10ec05eb9ac56cc7bf5d85a3a9216356a"
+      rivals: "630d8637d6a3cce1d1ea87070d7a122bd4043421873359b844827075b8dc2867"
       words: "8c9f75c649c0f5f6dfa05b0e7d5f213722c8565e52048c62d2918515ba816e39"
     findings:
-      - finding: "Two nodes answer contrarily on what the disposition ref's tree may hold, and one side of the contradiction is projected into every implementation session as a rule. `materialization`'s answer, at .claude/rules/materialization.md, says \"The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author's words the quotes node keeps, and nothing else\", while `persistence` answers, as `materialization`'s own option `cite-persistence-for-the-disposition-ref` quotes it, \"The ref's tree holds the graphs and only the graphs: the manifest and the node files\". `quotes` is the third party: its recommendation `words-in-a-ledger-on-the-ref` is what put the ledger on the ref, and `materialization`'s `against` records the coupling — \"the enumeration's third term names a file the ref does not carry\"."
+      - finding: "persistence's standing answer: 'The ref\\'s tree holds the graphs and only the graphs: the manifest and the node files.' materialization's standing answer: 'The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author\\'s words the quotes node keeps, and nothing else.' quotes' Facts: 'answer: recommends words-in-a-ledger-on-the-ref (moderate)'. persistence carries '`the-tree-holds-the-ledger-beside-the-graphs` — source commons.systems/disposition-graph/materialization' and does not recommend it."
         kind: "contradiction"
         status: "new"
         since: "2026-09-07"
@@ -32,10 +32,31 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/quotes"
-          - "commons.systems/disposition-graph/materialization"
           - "commons.systems/disposition-graph/persistence"
-      - finding: "Two live options on `quotes`' answer fact are written in vocabulary `authority` has struck and would restore the thing the vocabulary named. `ruling-stays-in-node` reads \"A ratified stamp whose ruling is not in the node is invalid, and the ruling a stamp requires is the one the author gives at that sitting, quoted then; words the author said earlier are the ground a draft rests on and bar no stamp.\" and `the-quotation-is-copied-onto-every-option` reads \"A ratified stamp whose ruling is not in the record is invalid, and the ruling a stamp requires is the one the author gives at that sitting, entered in the ledger then and referenced by the option ruled on\". `authority`'s answer holds that \"Every answer carries its authority in the rulings recorded on its facts, and no stamp is written beside them\" and that \"the deferred stamps the bootstrap wrote were unanswered, as the author classified them on 2026-09-03, and the record no longer carries them\". Neither option carries a `status`, so both are live and either is one ruling from contradicting doctrine."
-        kind: "contradiction"
+          - "commons.systems/disposition-graph/materialization"
+      - finding: "dialogue's standing answer: 'The author\\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\\'s on it move to the parent\\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\\'s `## Disposition`, where their words already are.'; transience 'the author\\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\\'s third term unmaterialized' are dated past."
+        kind: "supersession"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/quotes"
+          - "commons.systems/disposition-graph/dialogue"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/materialization"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/probe-or-node"
+          - "commons.systems/disposition-graph/decomposition"
+          - "commons.systems/disposition-graph/transience"
+      - finding: "authority's standing answer: 'no stamp is written beside them: a node\\'s class is read off those rulings, and a node no ruling grants is unanswered'. Standing answers that still define the node by a stamp: node 'Every node carries a stamp, or it is an open question awaiting its answer'; growth 'a ratification is recorded as the stamp in the author\\'s name with the ruling quoted'; projection 'an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected'; traditions-home 'A tradition root is a node like any other, a question, an answer, a form and a stamp'. quotes' option `stamp-vocabulary-struck-from-the-live-options` reaches only quotes' own options."
+        kind: "vocabulary"
         status: "new"
         since: "2026-09-07"
         supports:
@@ -48,369 +69,141 @@ review:
         nodes:
           - "commons.systems/disposition-graph/quotes"
           - "commons.systems/disposition-graph/authority"
-          - "commons.systems/disposition-graph/what-an-option-row-carries"
-      - finding: "One option row on `quotes` summarizes itself as the contrary of its own content, so the author would rule from a line the record would not apply. The row reads \"Each option carries the quotation itself, concatenated in date order, with no ledger and no reference, and a validator check that copies of one entry agree.\", and the content fence of the same option, `the-quotation-is-copied-onto-every-option`, reads \"When a sitting records a ruling, the author's words are written as an entry of the ledger, `disposition/words/<date>.md` on the disposition ref beside the graphs, verbatim and dated, and the option the author ruled on carries the reference to it\". The summary denies both the ledger and the reference that the content requires."
-        kind: "contradiction"
-        status: "new"
-        since: "2026-09-07"
-        supports:
-          - "question"
-          - "answer"
-          - "options"
-          - "rivals"
-          - "words"
-        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
-        nodes:
-          - "commons.systems/disposition-graph/quotes"
-          - "commons.systems/disposition-graph/what-an-option-row-carries"
+          - "commons.systems/disposition-graph/node"
+          - "commons.systems/disposition-graph/growth"
+          - "commons.systems/disposition-graph/projection"
+          - "commons.systems/disposition-graph/traditions-home"
     pairs:
-      - with: "commons.systems/disposition-graph/alignment-order"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/alignment-page"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "words:words/2026-09-07/4"
           - "cites"
-      - with: "commons.systems/disposition-graph/alignment-target"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/assumption-form"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/attention"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/audience"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/author-questions"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/authority"
         keys:
-          - "term:authority (defines: commons.systems/disposition-graph/authority)"
-          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
           - "depends"
           - "cites"
       - with: "commons.systems/disposition-graph/authors-words-on-the-page"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "words:words/2026-09-07/4"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/capture"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/checkpoint"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/class-recommendation"
         keys:
           - "parent:commons.systems/disposition-graph/authority"
-      - with: "commons.systems/disposition-graph/clean-context-review"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/coverage"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/decomposition"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/delegation"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:main thread (defines: commons.systems/disposition-graph/delegation)"
-          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
       - with: "commons.systems/disposition-graph/dialogue"
         keys:
-          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:persistence (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
           - "words:words/2026-09-07/4"
           - "words:words/2026-09-07/14"
           - "words:words/2026-09-07/15"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/domain-assumptions-reading"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/evaluation"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
-      - with: "commons.systems/disposition-graph/event-sourcing-with-snapshots"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/fidelity"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
-      - with: "commons.systems/disposition-graph/form-vocabulary"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/forms"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/frontier-consistency"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/frontier-metrics"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/graph-topology"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "parent:commons.systems/disposition-graph/authority"
-      - with: "commons.systems/disposition-graph/growth"
-        keys:
-          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/harness-tradition"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/hexis"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/how-a-fact-is-headed"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/instruments"
         keys:
-          - "term:check (defines: commons.systems/disposition-graph/instruments)"
-          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
-          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
-      - with: "commons.systems/disposition-graph/knowledge-store"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/legacy"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
-      - with: "commons.systems/disposition-graph/lockfile"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/materialization"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/model"
-        keys:
-          - "term:disposition (defines: commons.systems/disposition-graph/model)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:node (defines: commons.systems/disposition-graph/model)"
       - with: "commons.systems/disposition-graph/namespaces"
         keys:
-          - "term:id (defines: commons.systems/disposition-graph/namespaces)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
-      - with: "commons.systems/disposition-graph/node"
-        keys:
-          - "term:answer (defines: commons.systems/disposition-graph/node)"
-          - "term:form (defines: commons.systems/disposition-graph/node)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:question (defines: commons.systems/disposition-graph/node)"
-          - "term:rationale (defines: commons.systems/disposition-graph/node)"
       - with: "commons.systems/disposition-graph/persistence"
         keys:
           - "term:disposition ref (defines: commons.systems/disposition-graph/persistence)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
-      - with: "commons.systems/disposition-graph/probe-or-node"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/projection"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:projection (defines: commons.systems/disposition-graph/projection)"
           - "cites"
       - with: "commons.systems/disposition-graph/prose-and-structure"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
       - with: "commons.systems/disposition-graph/purpose"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
       - with: "commons.systems/disposition-graph/purpose-criteria"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/rationale-edge"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/readings"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/reconciliation-reading"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/recording"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
-      - with: "commons.systems/disposition-graph/rejected"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/review"
         keys:
-          - "term:review (defines: commons.systems/disposition-graph/review)"
           - "cites"
       - with: "commons.systems/disposition-graph/review-cost"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "words:words/2026-09-07/4"
           - "words:words/2026-09-07/15"
-      - with: "commons.systems/disposition-graph/review-model"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/review-skills"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/rsi"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/ruling-transport"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/scope"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:order (defines: commons.systems/disposition-graph/scope)"
-          - "term:section (defines: commons.systems/disposition-graph/scope)"
           - "cites"
       - with: "commons.systems/disposition-graph/second-stop"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/self-documentation"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/session-context"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
       - with: "commons.systems/disposition-graph/software-factories"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/spec-driven-development"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/srs-introduction"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/stub-traditions"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
-      - with: "commons.systems/disposition-graph/survey-selection"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/tier"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/traditions-home"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/transience"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:persistence (defines: commons.systems/disposition-graph/transience)"
-          - "term:standing (defines: commons.systems/disposition-graph/transience)"
           - "cites"
-      - with: "commons.systems/disposition-graph/turn-form"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/un-aligned-children"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/unanswered"
-        keys:
-          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
         keys:
           - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "words:words/2026-09-07/4"
           - "words:words/2026-09-07/14"
           - "words:words/2026-09-07/15"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/under"
-        keys:
-          - "term:context (defines: commons.systems/disposition-graph/under)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:under (defines: commons.systems/disposition-graph/under)"
-      - with: "commons.systems/disposition-graph/unit-skills"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/validation-order"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/viable-options"
         keys:
-          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
           - "words:words/2026-09-07/4"
           - "parent:commons.systems/disposition-graph/authority"
           - "cites"
-      - with: "commons.systems/disposition-graph/vocabulary-option-summary"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/vocabulary-view"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
       - with: "commons.systems/disposition-graph/web-routing"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
       - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "parent:commons.systems/disposition-graph/authority"
       - with: "commons.systems/disposition-graph/what-an-option-row-carries"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/where-a-change-request-goes"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/where-the-unconfirmed-indication-goes"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/which-facts-are-listed"
-        keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
+          - "cites"
       - with: "commons.systems/disposition-graph/work-loop"
         keys:
-          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "cites"
-      - with: "commons.systems/public/agency"
-        keys:
-          - "term:agency (defines: commons.systems/public/agency)"
 facts:
   - name: answer
     options:
@@ -832,3 +625,49 @@ Also named: commons.systems/disposition-graph/what-an-option-row-carries.
 Proposed: The survivor is the content, since it is what the record would apply, and the row is rewritten to state it — or, if the row is what was meant, the option is a different one and the content is redrawn to carry no ledger. Beyond the repair, `what-an-option-row-carries` is the node that must make this class of divergence impossible: whatever it answers about the row, the row is derived from the option's content and not written beside it, so a summary cannot contradict the text it summarizes.
 
 Recorded as an option on this node's answer fact: `the-option-row-is-derived-from-its-content` (source review, 2026-09-07).
+
+### Frontier survey, 2026-09-07, of a300a951
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Facts: 'answer: recommends words-in-a-ledger-on-the-ref (moderate)'. The brief resolves ledger references on review-skills ('`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10') and prints on plato-maieutics '(no option on this node references an entry of the ledger of the author\'s words)', so the migration has landed for some nodes and not others, while six nodes still place the words under a section dialogue's standing answer strikes: 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' The answer says nothing about the partial state or which nodes carry words the ledger does not (frontier: supersession).
+- Options: `stamp-vocabulary-struck-from-the-live-options` is scoped to this node's options ('none of them speaks of a ratified stamp'), while the same vocabulary stands in the standing answers of node ('Every node carries a stamp, or it is an open question awaiting its answer'), growth, projection and traditions-home (frontier: vocabulary).
+- Account: 'the option it now recommends — the verbatim ruling stays in the node under Disposition, rolled up at the next sitting — is in tension with the first half' describes a recommendation the Facts line no longer carries; the account's history is dated, so no defect, but recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\'s third term unmaterialized' are the sentences the landed ledger supersedes, and this node is their source.
+
+Strongest counter-argument (moderate): A ledger addressed as words/<date>/<n> gives each entry an ordinal within a day, and an entry entered late for that day, which the migration of words already spread across nodes will do, renumbers what follows it, the same failure author-questions names of probe numbering ('the numbering the accounts improvise renumbers itself whenever one is discharged'). Keeping the words on the node they were said on, referenced by node id and ordinal as the passed-over option had it, at least fixes the ordinal to a file that changes only at that node's sittings. If the ledger stays, the answer should say entries are appended and never inserted, so an ordinal is stable by rule.
+
+The session's reply: Validated on the main thread at graph edc5af91: every quoted locus found verbatim in the node or in the brief's own rendering; each offending sentence checked against the node's recommended content resolved from its option ladder, not only its standing text. f0 rejected on its premise: the migration landed whole at f0741490 and at edc5af91 no node carries a ## Disposition section (grep over both graphs: 0); the brief's '(no option on this node references an entry of the ledger)' on plato-maieutics is a node with no author's words, not an unmigrated one. The proposed option the-migrations-extent-is-stated-on-this-node was struck for that reason. What stands of it is finding 1: five answers still describe the section and two carry 'until it lands' clauses now past. f1 stands (stamp vocabulary in node, growth, projection, traditions-home). f2 stands: the account entry is dated history and no defect; the two superseded clauses are finding 1's. Counter-argument recorded: whether a ledger entry's ordinal is stable by rule is for the author; the session's practice has been append-only, and the answer does not yet say so.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+persistence's standing answer: 'The ref\'s tree holds the graphs and only the graphs: the manifest and the node files.' materialization's standing answer: 'The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author\'s words the quotes node keeps, and nothing else.' quotes' Facts: 'answer: recommends words-in-a-ledger-on-the-ref (moderate)'. persistence carries '`the-tree-holds-the-ledger-beside-the-graphs` — source commons.systems/disposition-graph/materialization' and does not recommend it.
+
+Also named: commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/materialization.
+
+Proposed: materialization and quotes survive as they stand; persistence's recommendation moves to its existing option `the-tree-holds-the-ledger-beside-the-graphs`, so the three nodes say one thing about what the ref's tree holds.
+
+### Frontier finding, 2026-09-07
+
+Kind: supersession.
+
+dialogue's standing answer: 'The author\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\'s on it move to the parent\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\'s `## Disposition`, where their words already are.'; transience 'the author\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\'s third term unmaterialized' are dated past.
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/transience.
+
+Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+authority's standing answer: 'no stamp is written beside them: a node\'s class is read off those rulings, and a node no ruling grants is unanswered'. Standing answers that still define the node by a stamp: node 'Every node carries a stamp, or it is an open question awaiting its answer'; growth 'a ratification is recorded as the stamp in the author\'s name with the ruling quoted'; projection 'an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected'; traditions-home 'A tradition root is a node like any other, a question, an answer, a form and a stamp'. quotes' option `stamp-vocabulary-struck-from-the-live-options` reaches only quotes' own options.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/node, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/traditions-home.
+
+Proposed: authority's vocabulary survives: class, ruling, fact, option. node, growth, projection and traditions-home are amended to define a node by the rulings on its facts, and the record's use of stamp is confined to authority's historical sentence about the stamps the bootstrap wrote.
+
+Recorded as an option on commons.systems/disposition-graph/node's answer fact: `a-node-is-classed-by-the-rulings-on-its-facts` (source review, 2026-09-07).

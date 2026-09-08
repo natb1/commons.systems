@@ -10,16 +10,37 @@ review:
   against: "The amendment's actual content -- delegating the judged set and its comparisons to `survey-selection` and localizing the generator's comparison to the node's survey-block hashes -- answers the author's separate 2026-09-07 instruction to optimize survey cost, not any of the three frontier findings recorded since the last reading. All three findings (contradiction, vocabulary, placement) ask for edits on other nodes (`clean-context-review`, `review-cost`, `decomposition`) and each states this node's own cited sentences are already correct or already the survivor, so the amendment leaves the sentences those findings turn on untouched and unbroken -- but it does not itself act on any of the three. If answering a finding requires an affirmative response rather than mere non-interference, none of the three has actually been engaged by this node's amendment; they remain to be closed at the nodes that own the required edits."
   survey:
     date: 2026-09-07
-    of: e0aa6ef8fffbbfdb2f7af981b751b9c18e915eab
-    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    of: 5ffc5e2781dd76e99f245a5158654f9d086abe84
+    commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "927c47bb607e1ce62ea18f694439509f2b7713eff4b34390182af7f589028c6c"
       answer: "79f4c079f6eca0dbc0a567a239f6d9dafe45e7b412e088120fd7beeee5217898"
-      options: "1adb67eb9edf79e8a13cd62f5c278f93ebf219effbff292503c8a79ef18528be"
-      rivals: "8166ed61514d0468851da402d21759cf6a59abc1f393fc946b80eb1cd2082d70"
+      options: "21437275f1faca6c6a69b2442e57c55958f4ce7816d4dbaa8a9e4f26599820e9"
+      rivals: "0dca327613b576b7908958a6b57299a905be675897648402823ad09b7bfb7a80"
       words: "5eb5e3e7375227ac227ac3fcf646a0dd0774fd16bbfcfd9f200b12f1616cbb32"
     findings:
-      - finding: "The term survey is used with two meanings across the frontier. `frontier-consistency`'s answer defines it as the reading of the whole graph, while `delegation`'s answer, projected at .claude/rules/delegation.md, makes it a kind of subagent unit: \"Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys.\" `review-skills` records the collision on its own face in `align-survey-renamed-for-the-family`: \"the vocabulary conflict behind it is already in the record, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys\". A term the record has made a skill name (`/align-survey`) and a validation subject cannot also name an ordinary unit."
+      - finding: "dialogue's standing answer: 'The author\\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\\'s on it move to the parent\\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\\'s `## Disposition`, where their words already are.'; transience 'the author\\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\\'s third term unmaterialized' are dated past."
+        kind: "supersession"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/dialogue"
+          - "commons.systems/disposition-graph/quotes"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/materialization"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/probe-or-node"
+          - "commons.systems/disposition-graph/decomposition"
+          - "commons.systems/disposition-graph/transience"
+      - finding: "The record's term is option, and growth carries '`rejected-alternative-is-an-option` — source commons.systems/disposition-graph/rejected, passed over' while the brief's vocabulary line still reads 'rejected — term: rejected alternative'. Standing texts using the struck term: frontier-consistency 'it is recorded as an alternative on the node it conflicts with, a proposal under the authority node when it arose outside alignment, and the review says which' and 'it adopts a listed alternative or the node as it stands'; node 'The rationale says why, and which alternatives were rejected and for what reason; the page projects those alternatives beside the stamp.'; transience 'the alternatives pending, each with its source'; projection 'the alternatives the rationale rejected'. node's 'The rationale says why' and prose-and-structure's 'A node\\'s prose is its disposition, its answer, its rationale and its account' also name a `## Rationale` that dialogue strikes."
         kind: "vocabulary"
         status: "new"
         since: "2026-09-07"
@@ -32,11 +53,28 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/frontier-consistency"
-          - "commons.systems/disposition-graph/decomposition"
-          - "commons.systems/disposition-graph/delegation"
-          - "commons.systems/disposition-graph/review-skills"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/node"
+          - "commons.systems/disposition-graph/transience"
+          - "commons.systems/disposition-graph/projection"
+          - "commons.systems/disposition-graph/growth"
+      - finding: "The one-line carriage of an unreached or unchanged node is stated on four nodes. survey-selection: 'a node the judged set reaches but whose read text has not changed since a survey read it, judged or reached, is carried on one line rather than by what it answers'. frontier-consistency: 'a node whose text stands as an earlier survey read it is carried on one line, and a node minted or amended since is carried by what it answers until a survey has read it again', while its Facts 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'. clean-context-review's recommended answer: 'of a node no judged node reaches, what the frontier-consistency node\\'s condition on its text gives, its question alone on one line'. review-cost: option `the-surveys-unreached-node-is-one-line`, of which frontier-consistency's account says 'a rule drafted twice in one day on two nodes is evidence that the seam is in the wrong place'."
+        kind: "redundancy"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/survey-selection"
           - "commons.systems/disposition-graph/clean-context-review"
-      - finding: "Four live options on `frontier-consistency`'s answer fact carry a validation list that ends at fifteen, while the node's account records the sixteenth as adopted into one of them: \"Adopted into `split-survey-from-per-draft` on 2026-09-05: the survey's list names the sixteenth\". The content fences of `split-survey-from-per-draft`, `the-survey-is-given-what-its-validations-read`, `one-line-only-where-a-survey-has-read-it` and `one-line-only-where-the-text-a-survey-read-still-stands` each end at \"15. Merge. The opportunities to merge unanswered nodes as alternate answers to the same question\", with no independence validation after it, and each is written in the struck term — \"the node as it stands or the alternative it names\" and \"it adopts a listed alternative or the node as it stands\". Ruling for any of the four would strike the independence validation and restore the word the recommended answer replaced, without saying it was doing either."
+          - "commons.systems/disposition-graph/review-cost"
+      - finding: "information-hiding's answer: 'They change for different reasons: the first six validations and the fifteenth against the seventh to the fifteenth, one node\\'s verdict against a graph commit and a set of recommendation hashes.' frontier-consistency numbers sixteen validations, and the sibling reading fagan-inspection-roles has 'the first six validations and the fifteenth over one draft\\'s neighbourhood, the seventh to the sixteenth over the whole graph', as clean-context-review has 'on validations seven to sixteen of the frontier-consistency node'."
         kind: "cross-reference"
         status: "new"
         since: "2026-09-07"
@@ -49,8 +87,38 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/frontier-consistency"
-          - "commons.systems/disposition-graph/probe-or-node"
-          - "commons.systems/disposition-graph/graph-topology"
+          - "commons.systems/disposition-graph/information-hiding"
+          - "commons.systems/disposition-graph/fagan-inspection-roles"
+          - "commons.systems/disposition-graph/clean-context-review"
+      - finding: "readings' answer: 'the option\\'s readings are the derived inverse of what the readings bear on' and 'the duty to re-point is stated here and unchecked, unmet across the record at this commit as the account measures'; its option `the-rung-clause-is-stated-once` quotes the rule 'where an option is a lower rung of another, contained in it and not declined, the relation stays on the containing option, since a relation stored on the rung would project as chosen over'. Readings whose `bears` name an option the target no longer recommends: eight under review-skills carry 'option: two-skills-one-package' while review-skills 'recommends the-survey-skill-launches-a-selected-reading (moderate)'; fagan-inspection-roles carries 'option: split-survey-from-per-draft' on frontier-consistency, which 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'; codd-update-anomaly bears on recording#per-fact-after-two-readings while recording recommends `the-confirmation-folds-an-already-accumulated-node`; ibis-issue-based-information bears on readings#relation-per-option while readings 'recommends the-relation-is-projected-onto-the-option-as-one-of-three'; plato-maieutics carries 'commons.systems/disposition-graph/growth#answer#standing (adopted), commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)' while growth's list marks '`turn-form-to-a-child-and-terms-aligned` — source ai, recommended', and plato-maieutics' own option says 'so the record currently derives this tradition as chosen over on `growth` — the opposite of what the reading\\'s own answer says.' Each of these traditions projects today as chosen over on the node it was read for."
+        kind: "stale-recommendation"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/readings"
+          - "commons.systems/disposition-graph/review-skills"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/growth"
+          - "commons.systems/disposition-graph/alignment-page"
+          - "commons.systems/disposition-graph/plato-maieutics"
+          - "commons.systems/disposition-graph/codd-update-anomaly"
+          - "commons.systems/disposition-graph/ibis-issue-based-information"
+          - "commons.systems/disposition-graph/dry-single-source-of-truth"
+          - "commons.systems/disposition-graph/fagan-inspection-roles"
+          - "commons.systems/disposition-graph/information-hiding"
+          - "commons.systems/disposition-graph/literate-programming"
+          - "commons.systems/disposition-graph/multi-call-binary-and-facade"
+          - "commons.systems/disposition-graph/operation-naming-in-telemetry"
+          - "commons.systems/disposition-graph/the-wrong-abstraction"
+          - "commons.systems/disposition-graph/utility-syntax-flag-or-subcommand"
     pairs:
       - with: "commons.systems/disposition-graph/alignment-order"
         keys:
@@ -58,49 +126,15 @@ review:
           - "cites"
       - with: "commons.systems/disposition-graph/alignment-page"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "cites"
-      - with: "commons.systems/disposition-graph/alignment-target"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/aristotle-hexis"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/attention"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/audience"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/author-questions"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
           - "cites"
       - with: "commons.systems/disposition-graph/authority"
         keys:
-          - "term:authority (defines: commons.systems/disposition-graph/authority)"
-          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
-          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
-          - "term:doctrine (defines: commons.systems/disposition-graph/authority)"
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:proposal (defines: commons.systems/disposition-graph/authority)"
-          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
           - "cites"
-      - with: "commons.systems/disposition-graph/authors-words-on-the-page"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/checkpoint"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/class-recommendation"
-        keys:
-          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/clean-context-review"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "words:words/2026-09-03/34"
           - "words:words/2026-09-04/23"
           - "words:words/2026-09-07/5"
@@ -112,7 +146,6 @@ review:
           - "cites"
       - with: "commons.systems/disposition-graph/decomposition"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
           - "words:words/2026-09-04/23"
           - "words:words/2026-09-07/5"
@@ -123,28 +156,9 @@ review:
           - "cites"
       - with: "commons.systems/disposition-graph/delegation"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
           - "cites"
-      - with: "commons.systems/disposition-graph/delegation-bounds-and-sizing"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/dialogue"
         keys:
-          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:existence (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:persistence (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:prune (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:standing answer (defines: commons.systems/disposition-graph/dialogue)"
           - "words:words/2026-09-03/34"
           - "depends"
           - "cites"
@@ -157,121 +171,42 @@ review:
       - with: "commons.systems/disposition-graph/fidelity"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/forms"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/graph-topology"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "cites"
       - with: "commons.systems/disposition-graph/growth"
         keys:
-          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
-          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
           - "term:propose (defines: commons.systems/disposition-graph/growth)"
-          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
-      - with: "commons.systems/disposition-graph/hexis"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/how-a-fact-is-headed"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/instruments"
         keys:
-          - "term:check (defines: commons.systems/disposition-graph/instruments)"
-          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
-          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
           - "cites"
-      - with: "commons.systems/disposition-graph/knowledge-store"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/legacy"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/madr-decision-records"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/materialization"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "cites"
-      - with: "commons.systems/disposition-graph/model"
-        keys:
-          - "term:disposition (defines: commons.systems/disposition-graph/model)"
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:node (defines: commons.systems/disposition-graph/model)"
-      - with: "commons.systems/disposition-graph/namespaces"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:id (defines: commons.systems/disposition-graph/namespaces)"
       - with: "commons.systems/disposition-graph/node"
         keys:
-          - "term:answer (defines: commons.systems/disposition-graph/node)"
-          - "term:form (defines: commons.systems/disposition-graph/node)"
-          - "term:question (defines: commons.systems/disposition-graph/node)"
-          - "term:rationale (defines: commons.systems/disposition-graph/node)"
           - "cites"
-      - with: "commons.systems/disposition-graph/persistence"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/plato-maieutics"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/plato-periagoge"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/probe-or-node"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "cites"
-      - with: "commons.systems/disposition-graph/progressive-disclosure"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/projection"
         keys:
-          - "term:projection (defines: commons.systems/disposition-graph/projection)"
           - "cites"
-      - with: "commons.systems/disposition-graph/purpose"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/purpose-criteria"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/quotes"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/rationale-edge"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/readings"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/recording"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
           - "words:words/2026-09-04/23"
           - "cites"
       - with: "commons.systems/disposition-graph/rejected"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "cites"
-      - with: "commons.systems/disposition-graph/review"
-        keys:
-          - "term:review (defines: commons.systems/disposition-graph/review)"
       - with: "commons.systems/disposition-graph/review-cost"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "words:words/2026-09-07/5"
           - "words:words/2026-09-07/6"
           - "words:words/2026-09-07/7"
@@ -283,7 +218,6 @@ review:
           - "cites"
       - with: "commons.systems/disposition-graph/review-model"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "words:words/2026-09-07/5"
           - "words:words/2026-09-07/6"
           - "words:words/2026-09-07/7"
@@ -292,109 +226,27 @@ review:
           - "cites"
       - with: "commons.systems/disposition-graph/review-skills"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "parent:commons.systems/disposition-graph/clean-context-review"
-          - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/scope"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:order (defines: commons.systems/disposition-graph/scope)"
-      - with: "commons.systems/disposition-graph/second-stop"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/session-context"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
-      - with: "commons.systems/disposition-graph/software-factories"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/spec-driven-development"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/srs-introduction"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
+          - "depends"
       - with: "commons.systems/disposition-graph/survey-selection"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:judged set (defines: commons.systems/disposition-graph/survey-selection)"
           - "words:words/2026-09-07/9"
           - "words:words/2026-09-07/16"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/traditions-home"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/transience"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:liquidation (defines: commons.systems/disposition-graph/transience)"
-          - "term:persistence (defines: commons.systems/disposition-graph/transience)"
-          - "term:shim (defines: commons.systems/disposition-graph/transience)"
-          - "term:standing (defines: commons.systems/disposition-graph/transience)"
           - "cites"
-      - with: "commons.systems/disposition-graph/turn-form"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/un-aligned-children"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
       - with: "commons.systems/disposition-graph/unanswered"
         keys:
-          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
-          - "term:unanswered (defines: commons.systems/disposition-graph/unanswered)"
           - "cites"
       - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
         keys:
-          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
-      - with: "commons.systems/disposition-graph/under"
-        keys:
-          - "term:context (defines: commons.systems/disposition-graph/under)"
-          - "term:under (defines: commons.systems/disposition-graph/under)"
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
       - with: "commons.systems/disposition-graph/unit-skills"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "cites"
-      - with: "commons.systems/disposition-graph/validation-order"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/viable-options"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
-      - with: "commons.systems/disposition-graph/vocabulary-option-summary"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/web-routing"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
-        keys:
-          - "term:bootstrap (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/what-an-option-row-carries"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/where-a-change-request-goes"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/where-the-unconfirmed-indication-goes"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/which-facts-are-listed"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/work-loop"
-        keys:
-          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
 facts:
   - name: answer
     options:
@@ -1458,3 +1310,73 @@ Also named: commons.systems/disposition-graph/probe-or-node, commons.systems/dis
 Proposed: The survivor is the recommended answer's list of sixteen validations in the record's current vocabulary. The four live option fences are re-derived from it, each carrying only its own named change, so that the difference between an option and the answer is the change the option's name states and nothing else. `probe-or-node` is named because it owns the sixteenth validation the fences drop, and `graph-topology` because `sixteenth-validation-reads-the-delegation` makes that validation read the delegation off it.
 
 Recorded as an option on this node's answer fact: `the-live-options-carry-the-sixteenth-validation` (source review, 2026-09-07).
+
+### Frontier survey, 2026-09-07, of 5ffc5e27
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Answer: 'So the words under `## Disposition` are carried for every node, judged, reached or unreached, and the one-answer rule does not touch them' names a section dialogue's standing answer strikes ('no `## Disposition` section') and the ledger replaces (frontier: supersession).
+- Answer, validation 2: 'it is recorded as an alternative on the node it conflicts with, a proposal under the authority node when it arose outside alignment, and the review says which' and validation 3: 'it adopts a listed alternative or the node as it stands' use alternative where the record's term is option; the brief's vocabulary line reads 'rejected — term: rejected alternative' and growth carries `rejected-alternative-is-an-option` passed over (frontier: vocabulary).
+- Facts: 'answer: recommends the-judged-set-and-its-comparisons-move-to-survey-selection (moderate)', while clean-context-review's recommended answer cites this node for the condition the move takes away: 'of a node no judged node reaches, what the frontier-consistency node\'s condition on its text gives, its question alone on one line' (frontier: redundancy, cross-reference).
+- Readings: fagan-inspection-roles bears 'option: split-survey-from-per-draft' on this node's answer fact, which is not the recommended option, so the tradition projects as chosen over here (frontier: stale-recommendation).
+- Cross-reference: information-hiding writes 'the first six validations and the fifteenth against the seventh to the fifteenth' of this node's validations, while fagan-inspection-roles has 'the seventh to the sixteenth over the whole graph' and clean-context-review 'on validations seven to sixteen of the frontier-consistency node' (frontier: cross-reference).
+
+Strongest counter-argument (moderate): Moving the judged set and its comparisons to survey-selection leaves the sixteen validations here and their object there. The seventh validation, 'each node the survey judges against every other node', cannot say what it compares without the judged set, so after the move the instrument's specification is cut across this node, survey-selection and review-cost's bound, which is the seam complaint the account makes against review-cost turned on the recommendation. One node stating both what is judged and what it is judged for, with the selection's mechanics under it, is the smaller cut.
+
+The session's reply: Validated on the main thread at graph edc5af91: every quoted locus found verbatim in the node or in the brief's own rendering; each offending sentence checked against the node's recommended content resolved from its option ladder, not only its standing text. f0 stands: 'words under ## Disposition' is in the recommended content. f1 holds of the standing text only: the recommended content already says 'a listed option', so no amendment is owed here for the vocabulary finding 3, and its stage line names this node for finding 1 alone. f2 stands (clean-context-review cites this node for the condition the recommendation moves; finding 5). f3 stands (fagan-inspection-roles bears on split-survey-from-per-draft; finding 8). f4 stands (information-hiding's 'seventh to the fifteenth'; finding 7). Counter-argument recorded: whether the judged set and the validations belong on one node is the author's on the move this node recommends.
+
+### Frontier finding, 2026-09-07
+
+Kind: supersession.
+
+dialogue's standing answer: 'The author\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\'s on it move to the parent\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\'s `## Disposition`, where their words already are.'; transience 'the author\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\'s third term unmaterialized' are dated past.
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/transience.
+
+Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+The record's term is option, and growth carries '`rejected-alternative-is-an-option` — source commons.systems/disposition-graph/rejected, passed over' while the brief's vocabulary line still reads 'rejected — term: rejected alternative'. Standing texts using the struck term: frontier-consistency 'it is recorded as an alternative on the node it conflicts with, a proposal under the authority node when it arose outside alignment, and the review says which' and 'it adopts a listed alternative or the node as it stands'; node 'The rationale says why, and which alternatives were rejected and for what reason; the page projects those alternatives beside the stamp.'; transience 'the alternatives pending, each with its source'; projection 'the alternatives the rationale rejected'. node's 'The rationale says why' and prose-and-structure's 'A node\'s prose is its disposition, its answer, its rationale and its account' also name a `## Rationale` that dialogue strikes.
+
+Also named: commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/node, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/growth.
+
+Proposed: viable-options survives; the four nodes are amended to say option, and node and prose-and-structure to name the sections dialogue keeps (`## Facts`, `## Account`) rather than rationale and disposition.
+
+### Frontier finding, 2026-09-07
+
+Kind: redundancy.
+
+The one-line carriage of an unreached or unchanged node is stated on four nodes. survey-selection: 'a node the judged set reaches but whose read text has not changed since a survey read it, judged or reached, is carried on one line rather than by what it answers'. frontier-consistency: 'a node whose text stands as an earlier survey read it is carried on one line, and a node minted or amended since is carried by what it answers until a survey has read it again', while its Facts 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'. clean-context-review's recommended answer: 'of a node no judged node reaches, what the frontier-consistency node\'s condition on its text gives, its question alone on one line'. review-cost: option `the-surveys-unreached-node-is-one-line`, of which frontier-consistency's account says 'a rule drafted twice in one day on two nodes is evidence that the seam is in the wrong place'.
+
+Also named: commons.systems/disposition-graph/survey-selection, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/review-cost.
+
+Proposed: survey-selection survives as the rule's home. frontier-consistency's paragraph goes with its recommended move; clean-context-review cites survey-selection instead of frontier-consistency, its option `the-unreached-line-is-conditioned-by-frontier-consistency` being passed over; review-cost's `the-surveys-unreached-node-is-one-line` is passed over with survey-selection as the reason.
+
+Recorded as an option on commons.systems/disposition-graph/clean-context-review's answer fact: `the-unreached-line-is-cited-from-survey-selection` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+information-hiding's answer: 'They change for different reasons: the first six validations and the fifteenth against the seventh to the fifteenth, one node\'s verdict against a graph commit and a set of recommendation hashes.' frontier-consistency numbers sixteen validations, and the sibling reading fagan-inspection-roles has 'the first six validations and the fifteenth over one draft\'s neighbourhood, the seventh to the sixteenth over the whole graph', as clean-context-review has 'on validations seven to sixteen of the frontier-consistency node'.
+
+Also named: commons.systems/disposition-graph/information-hiding, commons.systems/disposition-graph/fagan-inspection-roles, commons.systems/disposition-graph/clean-context-review.
+
+Proposed: fagan-inspection-roles and clean-context-review survive; information-hiding's 'seventh to the fifteenth' becomes 'seventh to the sixteenth'.
+
+### Frontier finding, 2026-09-07
+
+Kind: stale-recommendation.
+
+readings' answer: 'the option\'s readings are the derived inverse of what the readings bear on' and 'the duty to re-point is stated here and unchecked, unmet across the record at this commit as the account measures'; its option `the-rung-clause-is-stated-once` quotes the rule 'where an option is a lower rung of another, contained in it and not declined, the relation stays on the containing option, since a relation stored on the rung would project as chosen over'. Readings whose `bears` name an option the target no longer recommends: eight under review-skills carry 'option: two-skills-one-package' while review-skills 'recommends the-survey-skill-launches-a-selected-reading (moderate)'; fagan-inspection-roles carries 'option: split-survey-from-per-draft' on frontier-consistency, which 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'; codd-update-anomaly bears on recording#per-fact-after-two-readings while recording recommends `the-confirmation-folds-an-already-accumulated-node`; ibis-issue-based-information bears on readings#relation-per-option while readings 'recommends the-relation-is-projected-onto-the-option-as-one-of-three'; plato-maieutics carries 'commons.systems/disposition-graph/growth#answer#standing (adopted), commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)' while growth's list marks '`turn-form-to-a-child-and-terms-aligned` — source ai, recommended', and plato-maieutics' own option says 'so the record currently derives this tradition as chosen over on `growth` — the opposite of what the reading\'s own answer says.' Each of these traditions projects today as chosen over on the node it was read for.
+
+Also named: commons.systems/disposition-graph/readings, commons.systems/disposition-graph/review-skills, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/alignment-page, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/codd-update-anomaly, commons.systems/disposition-graph/ibis-issue-based-information, commons.systems/disposition-graph/dry-single-source-of-truth, commons.systems/disposition-graph/fagan-inspection-roles, commons.systems/disposition-graph/information-hiding, commons.systems/disposition-graph/literate-programming, commons.systems/disposition-graph/multi-call-binary-and-facade, commons.systems/disposition-graph/operation-naming-in-telemetry, commons.systems/disposition-graph/the-wrong-abstraction, commons.systems/disposition-graph/utility-syntax-flag-or-subcommand.
+
+Proposed: readings survives. Each reading named is re-pointed under the rung clause: where the recommended option contains the one borne on, the relation moves to the containing option; where it does not, the reading records diverged on the recommended option with its reason. plato-maieutics' existing option `bears-repointed-to-the-recommended-option` is the same proposal on that node; frontier-consistency's validation 4 gains the re-pointing check readings' `re-pointing-checked` records there.
+
+Recorded as an option on commons.systems/disposition-graph/readings's answer fact: `the-relation-is-derived-through-containment` (source review, 2026-09-07).

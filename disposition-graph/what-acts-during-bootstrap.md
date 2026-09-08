@@ -53,6 +53,13 @@ review:
   survey:
     date: 2026-09-07
     of: ecc0a1e411b5735921b5144dc9a2ba61292af004
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "7b3273b9d0e6cc1605116534c3e680a3cef87c1d138c7d21b25a159f82cd89f4"
+      answer: "b27803608d823d9c3de08b539cfaed70d087b657b66a0576e3f891f8f8878040"
+      options: "2e717fedce37032eaf88bc1f27927e0b81f38a2505c621c0c62e427572b75c27"
+      rivals: "1c8af4153fdade13a633b4e4898c16d60b575c2368b87d59855dd8f007664010"
+      words: "373cf7ac62f9bb1adfa14f15e06f6d27a59971cafa6567018af492ae4d0883ee"
 form: rule
 under:
   - commons.systems/disposition-graph/authority

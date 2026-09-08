@@ -64,6 +64,13 @@ review:
   survey:
     date: 2026-09-07
     of: cb880309df7f02481f673294727e43ad417ba7ff
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "057e7bdb644b3e30c582337fcbbb3464dc003da90d9affc57b8f1a594705c59f"
+      answer: "efdb1b0bce9b245405d155e896281aa8397d59a7328e99fdc986823f3a8066fd"
+      options: "7dcfa3ed1d91540c4f5ab6233ef281a04f2d7613fae7e99fbec9c77b4593eaa1"
+      rivals: "a9bb05786723b265defcfa5998537cf646b3fd45ab4d404b0aea41f9ed28f2b9"
+      words: "22ae1baa272039e8865f1da3029f2aee20213ad7704eaf21f38489343fbbd05c"
 form: rule
 under:
   - commons.systems/disposition-graph/decomposition

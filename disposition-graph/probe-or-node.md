@@ -120,6 +120,13 @@ review:
   survey:
     date: 2026-09-07
     of: 7bd00f2a353005aebe5c3a8f16a0a381deb8ebe6
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "0c9bfdaddafdd74f09b9f878ee81f7c3af056920d35a3117f452e3a10e237de9"
+      answer: "ab6b830870478a9a66671c2ba6c8dc31cf42684e0b5e59e77638171486a1834b"
+      options: "90f7240fcbab26b47ce31fabe84d9089f2b30bab6d83ba2864e9c78357294f23"
+      rivals: "c21ffcb51749c37a94c9c1bd1c1760e0d62156f3af921e34b2c4e665f6af6f49"
+      words: "6d5b46c34ad090e379efc30fdd4800f9b424ecd5fb210c48edf66f8f1c6a2737"
 depends:
   - commons.systems/disposition-graph/graph-topology
   - commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right
@@ -598,3 +605,13 @@ Also named: commons.systems/disposition-graph/frontier-consistency, commons.syst
 Proposed: The survivor is the recommended answer's list of sixteen validations in the record's current vocabulary. The four live option fences are re-derived from it, each carrying only its own named change, so that the difference between an option and the answer is the change the option's name states and nothing else. `probe-or-node` is named because it owns the sixteenth validation the fences drop, and `graph-topology` because `sixteenth-validation-reads-the-delegation` makes that validation read the delegation off it.
 
 Recorded as an option on commons.systems/disposition-graph/frontier-consistency's answer fact: `the-live-options-carry-the-sixteenth-validation` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: supersession.
+
+dialogue's standing answer: 'The author\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\'s on it move to the parent\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\'s `## Disposition`, where their words already are.'; transience 'the author\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\'s third term unmaterialized' are dated past.
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/transience.
+
+Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.

@@ -84,7 +84,7 @@ review:
   survey:
     date: 2026-09-07
     of: 77d3e104e3aae65ad2bc5c59cb040d24459d6cf5
-    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "0ac548d22006fec806b8fea188722d1ebca28a6fb5025222518f708b148d79de"
       answer: "ff5dadd14416e35d9a1e1625a106f33f0bd63363e795adc1f80f34075b61e102"
@@ -1085,3 +1085,15 @@ Also named: commons.systems/disposition-graph/quotes.
 Proposed: The survivor is the content, since it is what the record would apply, and the row is rewritten to state it — or, if the row is what was meant, the option is a different one and the content is redrawn to carry no ledger. Beyond the repair, `what-an-option-row-carries` is the node that must make this class of divergence impossible: whatever it answers about the row, the row is derived from the option's content and not written beside it, so a summary cannot contradict the text it summarizes.
 
 Recorded as an option on commons.systems/disposition-graph/quotes's answer fact: `the-option-row-is-derived-from-its-content` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+author-questions' answer: 'The two senses of reader collide here and the record carries both, the parser of the graph and the clean-context reading\'s subagent, which is a vocabulary finding this answer records rather than settles and leaves to the survey; where this node says reader without qualification it means the parser.' The parser sense: viable-options 'the reader parses an option\'s `#### ` subsection and no content within it'; what-an-option-row-carries 'which the reader of the graph enforces'. The agent sense: review-cost 'A reading is the only reader in this record that can judge whether an answer is right, and it is the most expensive reader the record has'; what-an-option-row-carries 'Where no reader\'s line bears on a fact the row carries, in the line\'s place, one'. recording already has the third term: 'The reviewer recommends and never writes'.
+
+Also named: commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/clean-context-review.
+
+Proposed: recording's term survives for the agent: reviewer, or the reading where the act is meant; reader is kept for the parser, which is what read.mjs is. review-cost, what-an-option-row-carries and clean-context-review substitute; author-questions strikes the sentence that leaves the finding to the survey.
+
+Recorded as an option on commons.systems/disposition-graph/review-cost's answer fact: `reader-is-the-parser-and-reviewer-is-the-reading` (source review, 2026-09-07).

@@ -1,6 +1,6 @@
 ---
 question: What probes for the author does a node carry, and where are they asked?
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -105,8 +105,15 @@ review:
   commit: 92f56ba1ac28f25ad8fd44c946e171a49793c0c3
   against: "The one quantitative bound this answer puts on the author's attention, three open probes on a node, is the one part of it that nothing enforces, and the answer chooses that deliberately: \"The cap binds the movement and is checked by the readings ... and not by the graph's reader\". The tree agrees — read.mjs checks only a probe's shape (line 1387), and apply.mjs, the single actor that sees every probe any reading returns and writes it into the node, says at line 818 \"The cap of three open probes is not checked\" and at line 643 that \"the cap binds the movement and not this mechanical step\". So the bound is kept by whichever session is doing the asking; each reading counts only the node it was handed (this brief: \"Check it on the node you read\"), while the answer itself routes a survey's probe onto nodes the survey is not judging, which is exactly where no reading has counted the list. The refusal is argued against making the cap a parse error, but that is not the only mechanism the record has: apply.mjs already emits a non-fatal message when a write would exceed another of the record's caps, two readings on one answer (line 932), so the instrument that could count for free exists, is precedented, and has been told not to. Two nodes, dialogue and coverage, sit at exactly three open probes on the day of this reading, so the bound is live rather than theoretical, and the failure the answer's own economics predict — asking is free, answering costs the one author — is the one it declines to instrument."
   survey:
-    date: 2026-09-05
+    date: 2026-09-07
     of: 9749b8797588c491c907ecc73acf59d6c486e0b3
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "e4759d48e5bd8e94d34d5eb88ce0d3d3b7c1fc486cfb31634afd1a25560f3b6c"
+      answer: "dc929682f9de2485884e3ab6bd7dbf3289b318cb5c0ec9f9a8cbc14b646b22b6"
+      options: "9d850a744e8eade54a8777767419fc7a9af177b30978633a6f988cf51cb860bc"
+      rivals: "baf683ab2425aa70fe71308dc3b051dd4e1f08906d9603faa0ca9812adc66a7c"
+      words: "e947441469b7721bedfba4f5dbe284c7757538696ff4ef8dacb6a8f3e498887f"
 form: rule
 under:
   - commons.systems/disposition-graph/dialogue
@@ -829,3 +836,25 @@ The session's reply: Taken, and the measurement is the reply's own evidence agai
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/author-questions stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `probes-on-the-node`; the `## Rationale` its `**AI support.**`; 9 `## Disposition` entries became the ledger entries words/2026-09-04/15, words/2026-09-04/16, words/2026-09-04/17, words/2026-09-04/18, words/2026-09-04/19, words/2026-09-04/20, words/2026-09-04/21, words/2026-09-06/4, words/2026-09-06/5, referenced by 16 options the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `probes-per-fact`, `a-node-per-probe`, `an-account-section`, `an-option-on-the-fact`, `questions-as-the-term`, `probes-shown-in-full`, `nothing-on-the-page`, `no-stated-cap`, `reconciliation-passes-an-option-over`, `the-sitting-stops-only-on-intent`, `cap-warned-by-the-instrument`, `cites-turn-form-for-the-three-surfaces`, `promoted-question-placed-by-its-own-question`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `a94fb70c5d5bf96f23c30127610d81148537a7f1` was already past the recommendation and is left as it stood. The survey's pin `3e9ece922ab3f53c55b88a5d838c4e0b0685993e` is re-computed for the encoding as `9749b8797588c491c907ecc73acf59d6c486e0b3`; nothing it read changed.
+
+### Frontier finding, 2026-09-07
+
+Kind: supersession.
+
+dialogue's standing answer: 'The author\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\'s on it move to the parent\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\'s `## Disposition`, where their words already are.'; transience 'the author\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\'s third term unmaterialized' are dated past.
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/transience.
+
+Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+author-questions' answer: 'The two senses of reader collide here and the record carries both, the parser of the graph and the clean-context reading\'s subagent, which is a vocabulary finding this answer records rather than settles and leaves to the survey; where this node says reader without qualification it means the parser.' The parser sense: viable-options 'the reader parses an option\'s `#### ` subsection and no content within it'; what-an-option-row-carries 'which the reader of the graph enforces'. The agent sense: review-cost 'A reading is the only reader in this record that can judge whether an answer is right, and it is the most expensive reader the record has'; what-an-option-row-carries 'Where no reader\'s line bears on a fact the row carries, in the line\'s place, one'. recording already has the third term: 'The reviewer recommends and never writes'.
+
+Also named: commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/what-an-option-row-carries, commons.systems/disposition-graph/clean-context-review.
+
+Proposed: recording's term survives for the agent: reviewer, or the reading where the act is meant; reader is kept for the parser, which is what read.mjs is. review-cost, what-an-option-row-carries and clean-context-review substitute; author-questions strikes the sentence that leaves the finding to the survey.
+
+Recorded as an option on commons.systems/disposition-graph/review-cost's answer fact: `reader-is-the-parser-and-reviewer-is-the-reading` (source review, 2026-09-07).

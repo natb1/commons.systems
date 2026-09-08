@@ -107,6 +107,13 @@ review:
   survey:
     date: 2026-09-07
     of: 5e56e6b8fed51a4739882eb744083fd913ec916e
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "b7be0c0bccbe17b9e3ae32c87cf3c070e291493bb1277d94af19536c80084481"
+      answer: "03740cf9e80201461b02d424af40fb9f6e34011a3a70e47c3bab9fc020a38318"
+      options: "23aa78c221cd280c6183d1f22b4c44e06574fb08ac18f55da09b7a2726d55e0c"
+      rivals: "f62628bf4bb3c890c1a23f71d5620d511ed22defa180ea1509aaec4bc8a0bf26"
+      words: "b372d10c54ff730b0603ff96942cfdb70aa458eb35dccc12738cd4cde8135e75"
 form: rule
 under:
   - commons.systems/disposition-graph/delegation
@@ -642,3 +649,13 @@ The term survey is used with two meanings across the frontier. `frontier-consist
 Also named: commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/delegation, commons.systems/disposition-graph/review-skills, commons.systems/disposition-graph/clean-context-review.
 
 Proposed: The survivor is `frontier-consistency`'s sense: survey is the reading of the frontier, and the skill family keeps the name. `decomposition` already carries the repair as the option `units-are-readings-not-surveys`, so no new option is needed there; `delegation`'s answer loses the word from its list of verbose investigations, which is a sizing clause `delegation-bounds-and-sizing` has already assigned to `unit-sizing`, so the amendment travels with that move rather than reopening the bound.
+
+### Frontier finding, 2026-09-07
+
+Kind: supersession.
+
+dialogue's standing answer: 'The author\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\'s on it move to the parent\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\'s `## Disposition`, where their words already are.'; transience 'the author\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\'s third term unmaterialized' are dated past.
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/transience.
+
+Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.

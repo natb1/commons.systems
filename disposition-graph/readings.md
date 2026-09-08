@@ -10,17 +10,17 @@ review:
   against: "The previous reading's own weak counter-argument -- that the account entry \"Repaired after the re-reading, 2026-09-07\" still states unqualified that the authority fact's case against no longer claims every reading recommends delegated for itself, when that exact sentence was never itself corrected or flagged as imprecise -- remains true of the node after this amendment: nothing in this diff touches that sentence. It is carried forward here rather than re-raised as a new finding, since the previous reading already surfaced it as a weak counter-argument and not as a blocking finding, and this amendment did not purport to address it."
   survey:
     date: 2026-09-07
-    of: 4834c4be234dccbbf1282986e89ff2ab585e1ea7
-    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    of: 6921ee74fa2ccceefa9da7c9e4903cec76af7c9f
+    commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "4a0f94e153e5d5882c6a1da6fa40c28a6329c12a547bd9d8a571aa98d0e8e14c"
       answer: "8c241b0319e99701bbeec4bd526ca2b3a6339e4676816c84441bcdda345d554b"
-      options: "1e8f9bfaa2f1a45d20d90fc4cf965d14cb6d07a56cffb8370452c45fd60e80fe"
-      rivals: "2b4159c4c16fb1cd323aadbb467f5c55487f0ab29bda11fa29290dbe02b0607a"
+      options: "e4ca9f6daa2c57ebe7d384ce8f6ae91102e80818e778fc5876fc5b5f0e7cccfb"
+      rivals: "153210286beb71873ef498a07d06718c16f05194b30983460b6402d5bc3ef0f4"
       words: "295e2be6bffb069f1edaf3e90c25e1b3f8ab831fda9878302a1ccb5f6e812ea9"
     findings:
-      - finding: "One clause of `readings`' derivation is restated verbatim in six reading nodes: \"is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen\" stands in `acceptance-sampling-and-all-or-none`, `fagan-entry-criteria`, `lint-and-the-false-positive-threshold`, `regression-test-selection`, `tolerated-inconsistency` and `verifying-traces-and-early-cutoff`, and `blocking-and-canopies` carries the same sentence. The clause explains a derivation `readings` owns, so an amendment to that derivation must today be chased through six leaves, which is the restatement the ninth validation names."
-        kind: "redundancy"
+      - finding: "readings' answer: 'the option\\'s readings are the derived inverse of what the readings bear on' and 'the duty to re-point is stated here and unchecked, unmet across the record at this commit as the account measures'; its option `the-rung-clause-is-stated-once` quotes the rule 'where an option is a lower rung of another, contained in it and not declined, the relation stays on the containing option, since a relation stored on the rung would project as chosen over'. Readings whose `bears` name an option the target no longer recommends: eight under review-skills carry 'option: two-skills-one-package' while review-skills 'recommends the-survey-skill-launches-a-selected-reading (moderate)'; fagan-inspection-roles carries 'option: split-survey-from-per-draft' on frontier-consistency, which 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'; codd-update-anomaly bears on recording#per-fact-after-two-readings while recording recommends `the-confirmation-folds-an-already-accumulated-node`; ibis-issue-based-information bears on readings#relation-per-option while readings 'recommends the-relation-is-projected-onto-the-option-as-one-of-three'; plato-maieutics carries 'commons.systems/disposition-graph/growth#answer#standing (adopted), commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)' while growth's list marks '`turn-form-to-a-child-and-terms-aligned` — source ai, recommended', and plato-maieutics' own option says 'so the record currently derives this tradition as chosen over on `growth` — the opposite of what the reading\\'s own answer says.' Each of these traditions projects today as chosen over on the node it was read for."
+        kind: "stale-recommendation"
         status: "new"
         since: "2026-09-07"
         supports:
@@ -32,963 +32,365 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/readings"
-          - "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
-          - "commons.systems/disposition-graph/fagan-entry-criteria"
-          - "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
-          - "commons.systems/disposition-graph/regression-test-selection"
-          - "commons.systems/disposition-graph/tolerated-inconsistency"
-          - "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
-      - finding: "Two leaf readings assert a convention of the record that the node owning it does not state. `fagan-entry-criteria` and `lint-and-the-false-positive-threshold` both carry \"The net relation stays adopted, the record's convention being one relation per option with the nuance in the answer\", and `readings`' answer, whose recommendation is `the-relation-is-projected-onto-the-option-as-one-of-three`, carries no such clause. The convention is either doctrine, in which case its owner must state it, or it is not, in which case two readings are deciding their own verdict arithmetic and calling it the record's."
-        kind: "redundancy"
-        status: "new"
-        since: "2026-09-07"
-        supports:
-          - "question"
-          - "answer"
-          - "options"
-          - "rivals"
-          - "words"
-        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
-        nodes:
-          - "commons.systems/disposition-graph/readings"
-          - "commons.systems/disposition-graph/fagan-entry-criteria"
-          - "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
-      - finding: "Two readings at the ruling stage bear on options their targets have left, so the record projects the opposite of what the readings say. `plato-maieutics` records `commons.systems/disposition-graph/growth#answer#standing (adopted)` and `plato-periagoge` records the same, while `growth`'s facts read `answer: recommends turn-form-to-a-child-and-terms-aligned (moderate)`; `plato-maieutics` further records `commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)` while `alignment-page` recommends `the-context-pane-previews-the-selected-option`. Under `readings`' own derivation, chosen over is derived for \"a tradition adopted on an option not chosen\", so both Platonic readings now project as considered and passed over on `growth`. `readings` states the duty that would prevent this and declares it unmet: the re-pointing is \"stated here and unchecked, unmet across the record at this commit\", over the 109 `bears` entries its option `re-pointing-checked` measures."
-        kind: "cross-reference"
-        status: "new"
-        since: "2026-09-07"
-        supports:
-          - "question"
-          - "answer"
-          - "options"
-          - "rivals"
-          - "words"
-        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
-        nodes:
-          - "commons.systems/disposition-graph/readings"
-          - "commons.systems/disposition-graph/plato-maieutics"
-          - "commons.systems/disposition-graph/plato-periagoge"
+          - "commons.systems/disposition-graph/review-skills"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/recording"
           - "commons.systems/disposition-graph/growth"
           - "commons.systems/disposition-graph/alignment-page"
+          - "commons.systems/disposition-graph/plato-maieutics"
+          - "commons.systems/disposition-graph/codd-update-anomaly"
+          - "commons.systems/disposition-graph/ibis-issue-based-information"
+          - "commons.systems/disposition-graph/dry-single-source-of-truth"
+          - "commons.systems/disposition-graph/fagan-inspection-roles"
+          - "commons.systems/disposition-graph/information-hiding"
+          - "commons.systems/disposition-graph/literate-programming"
+          - "commons.systems/disposition-graph/multi-call-binary-and-facade"
+          - "commons.systems/disposition-graph/operation-naming-in-telemetry"
+          - "commons.systems/disposition-graph/the-wrong-abstraction"
+          - "commons.systems/disposition-graph/utility-syntax-flag-or-subcommand"
     pairs:
       - with: "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/alignment-order"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
       - with: "commons.systems/disposition-graph/alignment-page"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/alignment-target"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
       - with: "commons.systems/disposition-graph/anchoring-and-adjustment"
         keys:
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/appellate-review-en-banc"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/approval-directed-agents"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/aristotle-hexis"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/assumption-form"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/attention"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
       - with: "commons.systems/disposition-graph/audience"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/author-questions"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/authority"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:authority (defines: commons.systems/disposition-graph/authority)"
-          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
-          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
-          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
       - with: "commons.systems/disposition-graph/authors-words-on-the-page"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "words:words/2026-09-07/4"
       - with: "commons.systems/disposition-graph/bentham-publicity"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/blocking-and-canopies"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/bootstrap-exit-conditions"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/brooks-surgical-team"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/capture"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/capture-traditions"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/change-reviewed-as-a-diff"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/checkpoint"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/chenery-reasoned-decision"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/chestertons-fence"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/class-recommendation"
-        keys:
-          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/clean-context-review"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/codd-update-anomaly"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/coverage"
         keys:
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/decomposition"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/delegation"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/delegation-bounds-and-sizing"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/deprecation-not-deletion"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/dialogue"
         keys:
-          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:standing answer (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "words:words/2026-09-07/4"
           - "cites"
       - with: "commons.systems/disposition-graph/dissent-and-reconsideration"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/domain-assumptions-reading"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/dry-single-source-of-truth"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/evaluation"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/event-sourcing-derived-view"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/event-sourcing-with-snapshots"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/fagan-entry-criteria"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
       - with: "commons.systems/disposition-graph/fagan-inspection-roles"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/fidelity"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/file-drawer-and-pre-registration"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/form-vocabulary"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/forms"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/frontier-consistency"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/frontier-metrics"
-        keys:
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/graph-topology"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/growth"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
-          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
-      - with: "commons.systems/disposition-graph/hand-written-projection-drift"
-        keys:
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
       - with: "commons.systems/disposition-graph/hansard-verbatim-record"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/harness-tradition"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/hexis"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/how-a-fact-is-headed"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/ibis-issue-based-information"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/information-hiding"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/instruments"
         keys:
-          - "term:check (defines: commons.systems/disposition-graph/instruments)"
-          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
           - "term:re-grasp (defines: commons.systems/disposition-graph/instruments)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
           - "cites"
-      - with: "commons.systems/disposition-graph/knowledge-store"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/legacy"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
           - "cites"
       - with: "commons.systems/disposition-graph/legislative-amendment-in-context"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/level-triggered-reconciliation"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
       - with: "commons.systems/disposition-graph/literate-programming"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/lockfile"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/madr-decision-records"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/mapreduce-and-cross-shard-blindness"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/master-detail-selection"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/materialization"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
       - with: "commons.systems/disposition-graph/model"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:disposition (defines: commons.systems/disposition-graph/model)"
           - "term:disposition graph (defines: commons.systems/disposition-graph/model)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:node (defines: commons.systems/disposition-graph/model)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/montgomery-informed-consent"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/multi-call-binary-and-facade"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/n-version-programming"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/namespaces"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
           - "term:mount (defines: commons.systems/disposition-graph/namespaces)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
           - "cites"
       - with: "commons.systems/disposition-graph/nielsen-user-control-and-freedom"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/node"
         keys:
-          - "term:answer (defines: commons.systems/disposition-graph/node)"
-          - "term:form (defines: commons.systems/disposition-graph/node)"
-          - "term:question (defines: commons.systems/disposition-graph/node)"
-          - "term:rationale (defines: commons.systems/disposition-graph/node)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
       - with: "commons.systems/disposition-graph/non-liquet"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/none-of-the-above-ballot"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/not-proven-third-verdict"
         keys:
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/notarial-minute"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/npm-committed-lockfile"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/ocap-attenuation"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/operation-naming-in-telemetry"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/pareto-frontier"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/peirce-paper-doubt"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/persistence"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
           - "cites"
       - with: "commons.systems/disposition-graph/plato-maieutics"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/plato-periagoge"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/probe-or-node"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/progressive-disclosure"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/projection"
         keys:
-          - "term:projection (defines: commons.systems/disposition-graph/projection)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
           - "cites"
       - with: "commons.systems/disposition-graph/promotor-fidei"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/prose-and-structure"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/purpose"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/purpose-criteria"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/quotes"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/rationale-edge"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/reconciliation-reading"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/recording"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/regression-test-selection"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
       - with: "commons.systems/disposition-graph/rejected"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/review"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
           - "term:blocking finding (defines: commons.systems/disposition-graph/review)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:review (defines: commons.systems/disposition-graph/review)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/review-approval-pinned-to-a-revision"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/review-cost"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/review-model"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/review-skills"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/rfc-pep-status-field"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/roberts-rules-commit-or-refer"
         keys:
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/rsi"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
-      - with: "commons.systems/disposition-graph/ruling-transport"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/scholarly-peer-review"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/scholastic-articulus"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/scope"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/second-stop"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
       - with: "commons.systems/disposition-graph/segregation-of-duties"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/self-contained-specification"
         keys:
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/self-documentation"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/session-context"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/single-subject-rule"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/software-factories"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/spec-driven-development"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/special-verdict-form"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/srs-introduction"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/stub-traditions"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/survey-selection"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
           - "term:mechanical tier (defines: commons.systems/disposition-graph/survey-selection)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/the-wrong-abstraction"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/tier"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/tolerated-inconsistency"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
       - with: "commons.systems/disposition-graph/traditions-home"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "depends"
           - "cites"
       - with: "commons.systems/disposition-graph/transience"
         keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:standing (defines: commons.systems/disposition-graph/transience)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
           - "cites"
-      - with: "commons.systems/disposition-graph/turn-form"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/un-aligned-children"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/unanswered"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:unanswered (defines: commons.systems/disposition-graph/unanswered)"
           - "cites"
       - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
         keys:
           - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "words:words/2026-09-07/4"
       - with: "commons.systems/disposition-graph/under"
         keys:
-          - "term:context (defines: commons.systems/disposition-graph/under)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:under (defines: commons.systems/disposition-graph/under)"
           - "parent:commons.systems/disposition-graph/model"
           - "cites"
-      - with: "commons.systems/disposition-graph/unit-skills"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/utility-syntax-flag-or-subcommand"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/validation-order"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/value-of-information"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
       - with: "commons.systems/disposition-graph/viable-options"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
           - "words:words/2026-09-07/4"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/vocabulary-option-summary"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/vocabulary-view"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/web-routing"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
-      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
-        keys:
-          - "term:bootstrap (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/what-an-option-row-carries"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "words:words/2026-09-07/4"
           - "cites"
-      - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/where-a-change-request-goes"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/where-the-unconfirmed-indication-goes"
-        keys:
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/which-facts-are-listed"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/work-loop"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:bite (defines: commons.systems/disposition-graph/work-loop)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "parent:commons.systems/disposition-graph/model"
       - with: "commons.systems/public/agency"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
           - "term:archē (defines: commons.systems/public/agency)"
-          - "term:capture (defines: commons.systems/public/agency)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/public/aristotle-arche-of-action"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "cites"
       - with: "commons.systems/public/pettit-non-domination"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
           - "cites"
 facts:
   - name: answer
@@ -1036,6 +438,9 @@ facts:
         source: review
         ref: "2026-09-07"
       - name: the-one-relation-convention-is-stated-here
+        source: review
+        ref: "2026-09-07"
+      - name: the-relation-is-derived-through-containment
         source: review
         ref: "2026-09-07"
     recommends: the-relation-is-projected-onto-the-option-as-one-of-three
@@ -1428,6 +833,10 @@ The rule that a relation is not stored on a rung of a ladder — that where an o
 
 A reading records exactly one relation per option it bears on, and where the tradition supports part of an option and diverges on another part the net relation is recorded and the nuance is carried in the reading's answer. It is on the table because two readings, `fagan-entry-criteria` and `lint-and-the-false-positive-threshold`, already attribute this convention to the record in identical words while this node states nothing of it, so the rule is doctrine by leaf assertion or it is not doctrine at all.
 
+#### the-relation-is-derived-through-containment
+
+A reading's relation is stored on the option the tradition was read against and derived onto every option that contains it through the ladder the record stores in `supports`, so a recommendation moved to a higher rung inherits the relation and no re-pointing is owed; on the table because every case the survey found is a recommendation moved to an option containing the one borne on, and the rung clause otherwise makes re-pointing a standing duty.
+
 ### authority
 
 Ratified is recommended because the rule fixes how tradition binds the record, which is the capture-shaped case the record's escalation rule names: a divergence recorded as the author's decision cannot be overruled by the tradition, and a rule that decides what a divergence is decides that for every reading after it. Boldness moderate: the classes a reading may carry are the author's words of 2026-09-02, the rule that a reading is a node and the per-option relation's consequences are the AI's. The case against is delegated: the relations are the AI's readings, each reading node recommends its own class for itself, and the author may hold the rule as loosely as its instances.
@@ -1533,3 +942,28 @@ Also named: commons.systems/disposition-graph/plato-maieutics, commons.systems/d
 Proposed: The survivor is `readings`' re-pointing duty, made checkable: `re-pointing-checked` is the option that carries it, and the two Platonic readings' `bears` entries are re-pointed at the options their targets now recommend before either node is ruled. Nothing merges; what moves is the pointer, and the check moves from prose into the validator so that the twelfth validation is not left to a reader's memory across 109 entries.
 
 Recorded as an option on commons.systems/disposition-graph/plato-maieutics's answer fact: `bears-repointed-to-the-recommended-option` (source review, 2026-09-07).
+
+### Frontier survey, 2026-09-07, of 6921ee74
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Answer: 'the duty to re-point is stated here and unchecked, unmet across the record at this commit as the account measures' is confirmed at edc5af91 beyond the account's measure: eight readings under review-skills bear on `two-skills-one-package` while review-skills 'recommends the-survey-skill-launches-a-selected-reading'; fagan-inspection-roles bears on frontier-consistency#split-survey-from-per-draft while that node 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'; codd-update-anomaly bears on recording#per-fact-after-two-readings while recording recommends `the-confirmation-folds-an-already-accumulated-node`; plato-maieutics bears on 'growth#answer#standing (adopted)' while growth recommends `turn-form-to-a-child-and-terms-aligned`; and this node's own reading ibis-issue-based-information bears on `relation-per-option` while this node 'recommends the-relation-is-projected-onto-the-option-as-one-of-three' (frontier: stale-recommendation).
+- Options: 'where an option is a lower rung of another, contained in it and not declined, the relation stays on the containing option, since a relation stored on the rung would project as chosen over' is the clause that resolves most of the cases above, since each recommended option contains the one borne on; the answer states the clause and no validation applies it, and `re-pointing-checked` is recorded here with the check 'recorded there as an option' on frontier-consistency's validation 4, so the survey records the cases and proposes no third statement of the rule.
+
+Strongest counter-argument (moderate): Projecting a relation onto the option as one of three accumulations takes the option as the unit a tradition speaks to, but the rung clause admits that options nest: a tradition adopted on a rung is adopted on everything that contains the rung. Storing the relation on the containing option makes the derived inverse right today and wrong the day a new rung is drafted above it, so the re-pointing duty is structural rather than a backlog. Deriving the relation through containment, the rung's ladder as the record already stores it in `supports`, would make chosen over derivable without any re-pointing and would end the duty the answer says is unmet.
+
+The session's reply: Validated on the main thread at graph edc5af91: every quoted locus found verbatim in the node or in the brief's own rendering; each offending sentence checked against the node's recommended content resolved from its option ladder, not only its standing text. f0 stands: every case is confirmed in the readings' bears at edc5af91 (eight under review-skills; fagan-inspection-roles on frontier-consistency; codd-update-anomaly on recording; plato-maieutics on growth; ibis-issue-based-information on this node). f1 stands: the rung clause is stated here and no instrument applies it. The option the-relation-is-derived-through-containment is recorded on the answer fact with the reader's reason; it is a live alternative to the recommendation and the author sees both.
+
+### Frontier finding, 2026-09-07
+
+Kind: stale-recommendation.
+
+readings' answer: 'the option\'s readings are the derived inverse of what the readings bear on' and 'the duty to re-point is stated here and unchecked, unmet across the record at this commit as the account measures'; its option `the-rung-clause-is-stated-once` quotes the rule 'where an option is a lower rung of another, contained in it and not declined, the relation stays on the containing option, since a relation stored on the rung would project as chosen over'. Readings whose `bears` name an option the target no longer recommends: eight under review-skills carry 'option: two-skills-one-package' while review-skills 'recommends the-survey-skill-launches-a-selected-reading (moderate)'; fagan-inspection-roles carries 'option: split-survey-from-per-draft' on frontier-consistency, which 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'; codd-update-anomaly bears on recording#per-fact-after-two-readings while recording recommends `the-confirmation-folds-an-already-accumulated-node`; ibis-issue-based-information bears on readings#relation-per-option while readings 'recommends the-relation-is-projected-onto-the-option-as-one-of-three'; plato-maieutics carries 'commons.systems/disposition-graph/growth#answer#standing (adopted), commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)' while growth's list marks '`turn-form-to-a-child-and-terms-aligned` — source ai, recommended', and plato-maieutics' own option says 'so the record currently derives this tradition as chosen over on `growth` — the opposite of what the reading\'s own answer says.' Each of these traditions projects today as chosen over on the node it was read for.
+
+Also named: commons.systems/disposition-graph/review-skills, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/alignment-page, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/codd-update-anomaly, commons.systems/disposition-graph/ibis-issue-based-information, commons.systems/disposition-graph/dry-single-source-of-truth, commons.systems/disposition-graph/fagan-inspection-roles, commons.systems/disposition-graph/information-hiding, commons.systems/disposition-graph/literate-programming, commons.systems/disposition-graph/multi-call-binary-and-facade, commons.systems/disposition-graph/operation-naming-in-telemetry, commons.systems/disposition-graph/the-wrong-abstraction, commons.systems/disposition-graph/utility-syntax-flag-or-subcommand.
+
+Proposed: readings survives. Each reading named is re-pointed under the rung clause: where the recommended option contains the one borne on, the relation moves to the containing option; where it does not, the reading records diverged on the recommended option with its reason. plato-maieutics' existing option `bears-repointed-to-the-recommended-option` is the same proposal on that node; frontier-consistency's validation 4 gains the re-pointing check readings' `re-pointing-checked` records there.
+
+Recorded as an option on this node's answer fact: `the-relation-is-derived-through-containment` (source review, 2026-09-07).

@@ -1,6 +1,6 @@
 ---
 question: What does the alignment session take up when given nothing?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: moderate
@@ -8,8 +8,15 @@ review:
   of: 1c5395eea68a14452e88040c5894830533188fdf
   against: "Taking the highest-ranked unanswered node is right if rank is the author's attention, and it is not: every boost in the record is the AI's and unratified, as attention's own answer now says, and the one order the author did state covers six nodes out of sixty-two. So 'rank answers it without the session's judgment entering' describes a queue the AI itself ordered and presents an AI choice to the author as the record's own. The session's reply — that the page shows the author the whole queue at every visit — is a real answer and is now true of the built page, which weakens but does not dissolve the objection."
   survey:
-    date: 2026-09-05
+    date: 2026-09-07
     of: 6326d8f230a4f6f6021c71dddfc0d6f6eebbbf22
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "4d5ccbde44217aa1c1bc48dca64a34e5c23393212c0168184b0e7a88fa876655"
+      answer: "ee7644da4157472aaea27d2fa02696066661622cb10972efc5e7b652568ae942"
+      options: "2187452cb8ce015fb3d26bc698281dde1ea7d033ed2bddf0c76cee7e853edf7b"
+      rivals: "a7d22be954412b06d9292fe95ad14da769b46e89137f7e9966086d6c0c41ac36"
+      words: "f36b59ba0dbc228801479a8069036226f38d672453820a5749f49d80a8f71508"
 facts:
   - name: answer
     options:
@@ -271,3 +278,13 @@ Recorded as an option on commons.systems/disposition-graph/growth's answer fact:
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/alignment-target stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-03/23, referenced by 1 option the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `ruling-order-not-rank`, `onboarding-walk-from-purpose`, `choose-by-the-oldest-stage`, `choose-by-the-fewest-movements-owed`, `ask-the-author-which-node`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `1c5395eea68a14452e88040c5894830533188fdf` was already past the recommendation and is left as it stood. The survey's pin `b0dea316130efe6397be144452cb593680b1d073` is re-computed for the encoding as `6326d8f230a4f6f6021c71dddfc0d6f6eebbbf22`; nothing it read changed.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+alignment-target's standing answer: 'Given no disposition and no node id, the session reads the frontier and takes the first unanswered node in rank order, this project\'s graph, read from the frontier by its id prefix, before the public graph, and so the purpose node first while it is unanswered'. alignment-order's standing answer: 'The ruling order, derived from the tangle the record carries, and not rank.' alignment-target carries '`ruling-order-not-rank` — source author' and does not recommend it.
+
+Also named: commons.systems/disposition-graph/alignment-order.
+
+Proposed: alignment-order survives; alignment-target's recommendation moves to its existing author-sourced option `ruling-order-not-rank`, and the sentence naming the purpose node first is re-derived from the ruling order or struck.

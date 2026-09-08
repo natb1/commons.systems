@@ -1,6 +1,6 @@
 ---
 question: Where does a tradition node live?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: moderate
@@ -8,8 +8,15 @@ review:
   of: 73b6cca4bf27149632172b5149277d71128f98f3
   against: "Option 2, a graph per tradition, matches the author's stated model exactly — a mount that could be represented by its own graph with its own archē and its own references — and under it a tradition that later acquires its own repository needs no migration, because it already is one. The recommended option pays a directory move and a prefix rewrite instead, which is the liquidation the public graph carries and which the record has just adopted a principle to make owe redirects. The cost of the alternative is many near-empty manifests, which is real and cheap next to a migration the record has now priced twice."
   survey:
-    date: 2026-09-05
+    date: 2026-09-07
     of: 7c2559e6cb2172496ee2b83c26491861915f2982
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "6a6f09f4b6af43a1c0566ee52b19773b9fc385f57181858c3547518f89a3e067"
+      answer: "8144f1213aff793d117fed46d1180b2f01138e03b10704d9d42766e92a046ba1"
+      options: "457a2ce50693958d62b17728ee2a4ad352bbdb5c5898d3886ff8967514568ba6"
+      rivals: "29623a8d6a128f18e342842c6693c52d78558a22ae50bab6b6bb40691bbe3504"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 facts:
   - name: answer
     options:
@@ -193,3 +200,15 @@ Strongest counter-argument (moderate): The recommendation creates a graph before
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/traditions-home stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `one-traditions-graph`. The record wrote no text of its own for `graph-per-tradition`, `nodes-inside-disposition-graph`, `show-the-manifest-entry`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `73b6cca4bf27149632172b5149277d71128f98f3` was already past the recommendation and is left as it stood. The survey's pin `a433c944f05360c1fe7fac6207e2032f6b09eb97` is re-computed for the encoding as `7c2559e6cb2172496ee2b83c26491861915f2982`; nothing it read changed.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+authority's standing answer: 'no stamp is written beside them: a node\'s class is read off those rulings, and a node no ruling grants is unanswered'. Standing answers that still define the node by a stamp: node 'Every node carries a stamp, or it is an open question awaiting its answer'; growth 'a ratification is recorded as the stamp in the author\'s name with the ruling quoted'; projection 'an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected'; traditions-home 'A tradition root is a node like any other, a question, an answer, a form and a stamp'. quotes' option `stamp-vocabulary-struck-from-the-live-options` reaches only quotes' own options.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/node, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/quotes.
+
+Proposed: authority's vocabulary survives: class, ruling, fact, option. node, growth, projection and traditions-home are amended to define a node by the rulings on its facts, and the record's use of stamp is confined to authority's historical sentence about the stamps the bootstrap wrote.
+
+Recorded as an option on commons.systems/disposition-graph/node's answer fact: `a-node-is-classed-by-the-rulings-on-its-facts` (source review, 2026-09-07).

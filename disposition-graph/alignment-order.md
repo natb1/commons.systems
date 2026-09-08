@@ -104,6 +104,16 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: moderate
+review:
+  survey:
+    date: 2026-09-07
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "4fa36454c0bb9860a0f274fc58884a3599079d5833f688a2550040db63025482"
+      answer: "234a057c4b4e673429466e1d638394b68a73c8e165b67ff771ae17f7ff211f0e"
+      options: "01135a1b7284a026dcb98e9b4d22a786c2562fd4b0b1bdde20f99e561c4b665e"
+      rivals: "7d5d85d514dee6f5f07f0c8e1a14ba6fc126c8537e8fffacd43c7ccd8dde0321"
+      words: "2863328a5b853f62aa43eb735803c50fa80fdb85979e787da674f5c564874632"
 under:
   - commons.systems/disposition-graph/alignment-target
   - commons.systems/disposition-graph/attention
@@ -726,3 +736,13 @@ Recorded as an option on commons.systems/disposition-graph/growth's answer fact:
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/alignment-order stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `settle-counts-nodes-only`; 17 `## Disposition` entries became the ledger entries words/2026-09-03/1, words/2026-09-03/2, words/2026-09-03/3, words/2026-09-03/4, words/2026-09-03/5, words/2026-09-03/6, words/2026-09-03/7, words/2026-09-03/8, words/2026-09-03/9, words/2026-09-03/10, words/2026-09-03/11, words/2026-09-03/12, words/2026-09-03/13, words/2026-09-03/14, words/2026-09-03/15, words/2026-09-03/14, words/2026-09-04/1, referenced by 0 options the entry's own date names and by the recommended option for 17 the date named none. The record wrote no text of its own for `draft`, `rank-as-the-alignment-order`, `order-computed-in-session`, `author-states-the-order`, `divergence-named-on-the-ancestor`, `review-names-the-survivor`, `node-nearer-the-root-stands`, `strike-rank-from-this-frontier`, `ancestor-screen-as-rows-to-rule-from`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+alignment-target's standing answer: 'Given no disposition and no node id, the session reads the frontier and takes the first unanswered node in rank order, this project\'s graph, read from the frontier by its id prefix, before the public graph, and so the purpose node first while it is unanswered'. alignment-order's standing answer: 'The ruling order, derived from the tangle the record carries, and not rank.' alignment-target carries '`ruling-order-not-rank` — source author' and does not recommend it.
+
+Also named: commons.systems/disposition-graph/alignment-target.
+
+Proposed: alignment-order survives; alignment-target's recommendation moves to its existing author-sourced option `ruling-order-not-rank`, and the sentence naming the purpose node first is re-derived from the ruling order or struck.

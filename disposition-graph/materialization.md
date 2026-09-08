@@ -1,6 +1,6 @@
 ---
 question: What is materialized implementation, and where does it live?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: weak
@@ -11,7 +11,7 @@ review:
   survey:
     date: 2026-09-07
     of: 1b0d01a13cc96521f432ad8b7358beefc8d0608e
-    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "bbf975e85f1b2cccfc472f9066dfaf0d4297733577fce1765ed9f30155e4a48e"
       answer: "3e2dc664522653db1b02ec2cf0448ed35cec47cc94e76b56176f7f89c3986c7b"
@@ -716,3 +716,23 @@ Two nodes answer contrarily on what the disposition ref's tree may hold, and one
 Also named: commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/quotes.
 
 Proposed: The survivor is one ruling taken across the three nodes in one sitting rather than a repair on either side alone, since each already carries the other's answer as an option: `materialization` carries `cite-persistence-for-the-disposition-ref` and `persistence` carries `the-tree-holds-the-ledger-beside-the-graphs`. Whichever side the author takes, the ledger's location is decided on `quotes` and the other two cite it rather than restating it, so the enumeration lives in one place. No new options are proposed; the mirrors exist.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+persistence's standing answer: 'The ref\'s tree holds the graphs and only the graphs: the manifest and the node files.' materialization's standing answer: 'The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author\'s words the quotes node keeps, and nothing else.' quotes' Facts: 'answer: recommends words-in-a-ledger-on-the-ref (moderate)'. persistence carries '`the-tree-holds-the-ledger-beside-the-graphs` — source commons.systems/disposition-graph/materialization' and does not recommend it.
+
+Also named: commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/quotes.
+
+Proposed: materialization and quotes survive as they stand; persistence's recommendation moves to its existing option `the-tree-holds-the-ledger-beside-the-graphs`, so the three nodes say one thing about what the ref's tree holds.
+
+### Frontier finding, 2026-09-07
+
+Kind: supersession.
+
+dialogue's standing answer: 'The author\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\'s on it move to the parent\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\'s `## Disposition`, where their words already are.'; transience 'the author\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\'s third term unmaterialized' are dated past.
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/transience.
+
+Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.

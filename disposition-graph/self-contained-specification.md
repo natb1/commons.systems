@@ -16,6 +16,16 @@ facts:
       - name: deferred
     recommends: delegated
     boldness: moderate
+review:
+  survey:
+    date: 2026-09-07
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "1c85d7a26fecd8ff0ea3f184df8bbe5ed0378ab19c9d3a91be543b13819d46b4"
+      answer: "4647387f75ac261147190ed09f2ffe6fd53da6e8795ebb73a5a70bc3edbe04e1"
+      options: "8ff3be0ceaedc8ffce6b2f5dd282ede16f3a860186bdf866e3df1be68be323eb"
+      rivals: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 form: reading
 under:
   - commons.systems/disposition-graph/prose-and-structure

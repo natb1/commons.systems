@@ -29,6 +29,15 @@ review:
   date: 2026-09-03
   of: 5a1158c3c67eaa7e81097e7faeb737b46aeb8ede
   against: "The amendment narrows the author's literal instruction while appearing to record it: the author said unanswered nodes are hidden from the browser and listed by the alignment page, and the record now hides only the nodes with no '## Answer' and shows the rest as drafts. The session's defence is sound and the stage is genuinely rendered, so the reversal is disclosed and mitigated — but the answer still states the narrowed rule as though it were the author's, and the clause that would say plainly 'this narrows what you said' exists only as the pending `narrowing-disclosed` alternative. The author is being asked to confirm a change to their own ruling that the text presents as a restatement of it."
+  survey:
+    date: 2026-09-07
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "cdefb59a945de7487f5979d5c7fd925a8c577779f868cbcb3f02063c79a283d8"
+      answer: "775603936a24544fc26faac280a91db81a35b5e6a95c077ddbeb7e4844e9b184"
+      options: "69fbb7fc5fb2e69cd52271cdb1b67313daf360bdd2859629878a46b85aa5ca5d"
+      rivals: "89ce91f6c31e8d875b3b0eefdf55c8d2b3bc9d412fb649470e3211b6c86b4fd9"
+      words: "1b33ce82584ebc06c860c2e0432f04e2677da60c856fb4a2ffda79d0e4dff2ef"
 facts:
   - name: answer
     options:
@@ -735,3 +744,25 @@ Proposed: Strike the eight options and replace each with a citation. `commons.sy
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/projection stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `draft`; 7 `## Disposition` entries became the ledger entries words/2026-09-02/19, words/2026-09-02/20, words/2026-09-02/21, words/2026-09-02/22, words/2026-09-03/65, words/2026-09-03/66, words/2026-09-03/67, referenced by 4 options the entry's own date names and by the recommended option for 3 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `narrowing-disclosed`, `hold-for-self-documentation`, `hyperlink-traditions-in-prose`, `name-what-it-does-not-settle`, `strike-the-field-link-clause`, `absorb-self-documentation`, `shim-carries-framed-viewer`, `a-how-to-read-page-in-the-browser`, `a-vocabulary-page-in-the-browser`, `a-rejected-alternatives-section-apart`, `tradition-linking-cited-to-readings`, `rejected-alternative-is-an-option`, `browser-renders-the-authors-words`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `5a1158c3c67eaa7e81097e7faeb737b46aeb8ede` was already past the recommendation and is left as it stood.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+authority's standing answer: 'no stamp is written beside them: a node\'s class is read off those rulings, and a node no ruling grants is unanswered'. Standing answers that still define the node by a stamp: node 'Every node carries a stamp, or it is an open question awaiting its answer'; growth 'a ratification is recorded as the stamp in the author\'s name with the ruling quoted'; projection 'an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected'; traditions-home 'A tradition root is a node like any other, a question, an answer, a form and a stamp'. quotes' option `stamp-vocabulary-struck-from-the-live-options` reaches only quotes' own options.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/node, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/quotes.
+
+Proposed: authority's vocabulary survives: class, ruling, fact, option. node, growth, projection and traditions-home are amended to define a node by the rulings on its facts, and the record's use of stamp is confined to authority's historical sentence about the stamps the bootstrap wrote.
+
+Recorded as an option on commons.systems/disposition-graph/node's answer fact: `a-node-is-classed-by-the-rulings-on-its-facts` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+The record's term is option, and growth carries '`rejected-alternative-is-an-option` — source commons.systems/disposition-graph/rejected, passed over' while the brief's vocabulary line still reads 'rejected — term: rejected alternative'. Standing texts using the struck term: frontier-consistency 'it is recorded as an alternative on the node it conflicts with, a proposal under the authority node when it arose outside alignment, and the review says which' and 'it adopts a listed alternative or the node as it stands'; node 'The rationale says why, and which alternatives were rejected and for what reason; the page projects those alternatives beside the stamp.'; transience 'the alternatives pending, each with its source'; projection 'the alternatives the rationale rejected'. node's 'The rationale says why' and prose-and-structure's 'A node\'s prose is its disposition, its answer, its rationale and its account' also name a `## Rationale` that dialogue strikes.
+
+Also named: commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/node, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/growth.
+
+Proposed: viable-options survives; the four nodes are amended to say option, and node and prose-and-structure to name the sections dialogue keeps (`## Facts`, `## Account`) rather than rationale and disposition.

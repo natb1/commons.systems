@@ -108,8 +108,15 @@ review:
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "The recommended option still confers, in one ratification, both the derivation of a class from rulings and what an option must carry — the exact bundling the last reading's counter-argument named, and which the amendment's own updated `against` clause now states outright: 'one ratification would confer both the derivation of a class and what an option must carry, which is the bundling the record's own rule that a text answering two questions is two nodes exists to prevent.' The amendment's response is a Rationale paragraph defending the bundle as 'requirement vs. form' and the recorded-but-unadopted `confirmed-is-a-derived-label` split, rather than adopting the split as the recommendation. That is a transparent, reasoned response that puts the tension squarely before the author rather than a resolution of it — which is why it is answered but not closed, and is exactly the kind of call this record reserves for the author's ruling rather than the AI's redraft."
   survey:
-    date: 2026-09-05
+    date: 2026-09-07
     of: 1598c6ec57c8e88ac3a80b15f46d69ba69f93eb2
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "23c44c92093c2f6224c8c28ddc23721aabee228cf6ad690bf57ec13dcee6a6a6"
+      answer: "083510a0ab653a1e7ab52364ba4dcababe7ba29196af795c973bcaeee0fdd7af"
+      options: "5f4ea9b578ea432c628e7f3103a739e204adf709060298011dd5a814d3ddc83e"
+      rivals: "0c7ba6dc73b5cd575e26fa8cddbbd00213960f0371603a0c1306b37167e051b5"
+      words: "6779000987b4dda68d40c6afb52dfc4a829f5be9dd103aefd5e8c22c4804bd81"
 depends:
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
 probes:
@@ -1128,3 +1135,25 @@ Five judged nodes stand at the ruling stage on ground still at the maieutic stag
 Also named: commons.systems/disposition-graph/tolerated-inconsistency, commons.systems/disposition-graph/verifying-traces-and-early-cutoff, commons.systems/disposition-graph/madr-decision-records, commons.systems/disposition-graph/event-sourcing-with-snapshots, commons.systems/disposition-graph/unconfirmed-accumulation, commons.systems/disposition-graph/dialogue.
 
 Proposed: No merge and no survivor: the placement is corrected by the record saying so. Either `dialogue` is advanced to the ruling stage before the five are put to the author, or each of the five states in its answer that it rests on a `dialogue` option still at the maieutic stage and what it would lose if that option moves. The ruling order is derived from the placement, as `alignment-order` requires, and is not recommended here in prose.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+The record's term is option, and growth carries '`rejected-alternative-is-an-option` — source commons.systems/disposition-graph/rejected, passed over' while the brief's vocabulary line still reads 'rejected — term: rejected alternative'. Standing texts using the struck term: frontier-consistency 'it is recorded as an alternative on the node it conflicts with, a proposal under the authority node when it arose outside alignment, and the review says which' and 'it adopts a listed alternative or the node as it stands'; node 'The rationale says why, and which alternatives were rejected and for what reason; the page projects those alternatives beside the stamp.'; transience 'the alternatives pending, each with its source'; projection 'the alternatives the rationale rejected'. node's 'The rationale says why' and prose-and-structure's 'A node\'s prose is its disposition, its answer, its rationale and its account' also name a `## Rationale` that dialogue strikes.
+
+Also named: commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/node, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/growth.
+
+Proposed: viable-options survives; the four nodes are amended to say option, and node and prose-and-structure to name the sections dialogue keeps (`## Facts`, `## Account`) rather than rationale and disposition.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+author-questions' answer: 'The two senses of reader collide here and the record carries both, the parser of the graph and the clean-context reading\'s subagent, which is a vocabulary finding this answer records rather than settles and leaves to the survey; where this node says reader without qualification it means the parser.' The parser sense: viable-options 'the reader parses an option\'s `#### ` subsection and no content within it'; what-an-option-row-carries 'which the reader of the graph enforces'. The agent sense: review-cost 'A reading is the only reader in this record that can judge whether an answer is right, and it is the most expensive reader the record has'; what-an-option-row-carries 'Where no reader\'s line bears on a fact the row carries, in the line\'s place, one'. recording already has the third term: 'The reviewer recommends and never writes'.
+
+Also named: commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/what-an-option-row-carries, commons.systems/disposition-graph/clean-context-review.
+
+Proposed: recording's term survives for the agent: reviewer, or the reading where the act is meant; reader is kept for the parser, which is what read.mjs is. review-cost, what-an-option-row-carries and clean-context-review substitute; author-questions strikes the sentence that leaves the finding to the survey.
+
+Recorded as an option on commons.systems/disposition-graph/review-cost's answer fact: `reader-is-the-parser-and-reviewer-is-the-reading` (source review, 2026-09-07).

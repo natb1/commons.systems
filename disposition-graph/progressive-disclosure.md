@@ -35,6 +35,13 @@ review:
   survey:
     date: 2026-09-07
     of: c1fb82bc0a2c71a1b24f6fc1af0efb1e5e0a6404
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "9807acf9092199c8bc7f4f7690b8a3d3129ae43c90e5be5d6de441c49a9aa659"
+      answer: "31282310ed3ab12db576127fe17315c6b255f5c6e78a59dbabc32731078010c3"
+      options: "81224987789401d8c5fe6ca9616474935a6415182597cef1c52e5147c9e6676f"
+      rivals: "acd45e78c90cea8b533ee2dbe69aec739cb12c5905e7fdcfdad2a7b74f1bc3de"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 form: reading
 under:
   - commons.systems/disposition-graph/alignment-page

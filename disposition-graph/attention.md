@@ -8,8 +8,15 @@ review:
   of: b5cab25eecbb77967324bc260ea5a2d68db896e3
   against: "The node asserts that a teaching order, a work order and a compaction floor coincide because prerequisites come from `under` and importance from rank; they came apart within a day, and this node records it — session-context at boost 2 ranked below the work loop against the author's order of the same day, and the fix was a hand-raised boost and then a whole new field on another node. That is direct evidence that one scalar cannot carry two orders, and scope's `order` field is the admission. The alternative the answer never adopts, that the author states the order and nothing is derived, is the one that actually worked, and it is pending as `author-states-the-order`."
   survey:
-    date: 2026-09-05
+    date: 2026-09-07
     of: 77945e4946b132709b6386e4bd79aad8857e4d5d
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "571dfe5d415eac99c7d964ecb46f47c8d75f4c9672c8b1fafb4b499e383dcc86"
+      answer: "5daa44415433b8f3438e36e167d488bd620db8a35d16762342102decc612e480"
+      options: "fde0be74ffce5de82b279f6de1ef5bc38292b1932a93f832927bf9edec83572c"
+      rivals: "1c481b8a2c0b6b55384ed72e01d699df61f036aea87ef0dae12d75adf674294a"
+      words: "04bfd106c276e824e7a9236acd013c00bbc0901fd2d0515ed58e6114a872bb36"
 facts:
   - name: answer
     options:

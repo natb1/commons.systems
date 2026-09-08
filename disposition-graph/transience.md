@@ -7,6 +7,15 @@ review:
   date: 2026-09-03
   of: 5146c975ea09a8483495b379e9faca8819ce3e11
   against: "The amendment makes the un-aligned disposition a special case of a dialogue that lives on every node, which dissolves the distinction the author asked for. The author introduced 'un-aligned' for a disposition that has not even survived the alignment dialogue, and the amendment answers that a node with an answer carries the same fields. The fields therefore no longer mark the distinction, and the only thing dividing the two is whether the file has an '## Answer' heading — a fact about the file, not about the dialogue. If everything carries the dialogue then 'un-aligned' is a rendering rule for the browser rather than a class of disposition, and the author should be told that before ruling."
+  survey:
+    date: 2026-09-07
+    commit: edc5af91d942319c12174309e388a244de61fa52
+    text:
+      question: "4fc3528b2e244eb13a7ac1c77aa809d44acf0ceb5da875786018442db890636a"
+      answer: "24a89147d616dc42a38c91cb7a3b374b59556221c9b2d559d41a1feca9ddb349"
+      options: "f50f45c348df4135cfa37fc30ead83e53e6e89711a53a49ca7e1adb90b9ac43a"
+      rivals: "21dc33dc524a1d8f98f51139cf39f99a5628a53af7e10cc874fb6cfdb935d833"
+      words: "e1c42fb224f4398daacb20cf0fd681d9ba892018290486f351c862cdf29000c2"
 facts:
   - name: answer
     options:
@@ -772,3 +781,23 @@ Recorded as an option on this node's answer fact: `persistence-gloss-released-to
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/transience stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 2 `## Disposition` entries became the ledger entries words/2026-09-02/37, words/2026-09-03/78, referenced by 0 options the entry's own date names and by the recommended option for 2 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `cite-unanswered-for-the-browser-rule`, `name-the-reduction-divergence`, `instrument-note-as-a-declared-shim`, `say-instrument-not-criterion`, `reduce-un-aligned-paragraph`, `a-transient-kind-of-node`, `a-stored-self-liquidating-class`, `shims-declared-in-the-artifact-alone`, `a-stored-transcript-of-the-dialogue`, `a-queue-kept-outside-the-graph`, `proposal-as-a-state-of-a-ratified-node`, `rejected-alternative-is-an-option`, `persistence-gloss-released-to-dialogue`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `5146c975ea09a8483495b379e9faca8819ce3e11` was already past the recommendation and is left as it stood.
+
+### Frontier finding, 2026-09-07
+
+Kind: supersession.
+
+dialogue's standing answer: 'The author\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\'s on it move to the parent\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\'s `## Disposition`, where their words already are.'; transience 'the author\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\'s third term unmaterialized' are dated past.
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/decomposition.
+
+Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+The record's term is option, and growth carries '`rejected-alternative-is-an-option` — source commons.systems/disposition-graph/rejected, passed over' while the brief's vocabulary line still reads 'rejected — term: rejected alternative'. Standing texts using the struck term: frontier-consistency 'it is recorded as an alternative on the node it conflicts with, a proposal under the authority node when it arose outside alignment, and the review says which' and 'it adopts a listed alternative or the node as it stands'; node 'The rationale says why, and which alternatives were rejected and for what reason; the page projects those alternatives beside the stamp.'; transience 'the alternatives pending, each with its source'; projection 'the alternatives the rationale rejected'. node's 'The rationale says why' and prose-and-structure's 'A node\'s prose is its disposition, its answer, its rationale and its account' also name a `## Rationale` that dialogue strikes.
+
+Also named: commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/node, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/growth.
+
+Proposed: viable-options survives; the four nodes are amended to say option, and node and prose-and-structure to name the sections dialogue keeps (`## Facts`, `## Account`) rather than rationale and disposition.
