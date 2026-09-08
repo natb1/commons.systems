@@ -1,6 +1,6 @@
 ---
 question: What acts while nothing in the record is ratified, and when does that state end?
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -9,6 +9,7 @@ facts:
         ref: "2026-09-05"
         supports:
           - words/2026-09-04/44
+          - words/2026-09-08/22
       - name: deferred-as-the-resting-state
         source: review
         ref: "2026-09-05"
@@ -33,6 +34,11 @@ facts:
       - name: a-standing-direction-acts-by-right
         source: review
         ref: "2026-09-07"
+      - name: the-grant-is-one-reconciliation
+        source: commons.systems/disposition-graph/authority
+        ref: "2026-09-05"
+        supports:
+          - words/2026-09-04/44
     recommends: shim-and-grant
     boldness: high
     against: "Every rule file under `.claude/rules/` that a session loads, this node's own projection among them, is the projection of a node no ruling reaches, and the `session-context` node declares a shim on `CLAUDE.md` and on `.claude/settings.json` and on neither the rules projection nor this file, so this answer says the doctrine the record is running on today acts on nothing, and says it in a file that binds every session while saying it. It leaves a session no account at all of what those files bind it to, and the option that would give one is `projected-doctrine-acts`."
@@ -72,7 +78,7 @@ defines:
   - term: bootstrap exit
     gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
-    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+    gloss: "The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant."
 ---
 
 ## Facts
@@ -95,6 +101,16 @@ and the answer does not, `projected-doctrine-acts`, which would make the
 doctrine the record projects into `.claude/rules/` a third thing that acts; it
 is listed and not recommended, because whether the rule files a session loads
 bind it is the author's to say and not the AI's.
+
+What the clause it replaces bought, and what replacing it costs. The narrow
+clause made every act of reconciliation separately authorised, so that a grant
+could not widen inside the sitting it was given for and the author saw each
+thing done under it before the next was done. The refinement keeps
+explicitness, keeps the sitting boundary, and adds a precondition the narrow
+clause never had, that baseline grounding be established first; what it gives up
+is the per-act check, and a sitting is bounded by nothing but its own length.
+That trade is the author's to make and they made it, and the clause it replaced
+is on the list as `the-grant-is-one-reconciliation` so that the record keeps it.
 
 #### shim-and-grant
 
@@ -141,7 +157,7 @@ defines:
   - term: bootstrap exit
     gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
-    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+    gloss: "The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant."
 ---
 
 ## Answer
@@ -154,10 +170,21 @@ acts by right shrinks with every ruling. A shim declared on the record is
 applied by default, as the evaluation node says, and it stands in for a
 materialization the record has not yet made, as the transience node defines it;
 a prompt is required only to bypass one. And a grant is the author's word, given
-for one named reconciliation of one unanswered node, never assumed, never
-carried over from an earlier grant, and never read from the announcement of one,
-as the authority node says; the grant is what the author's words call bootstrap
-authority, and the two names are one thing. Nothing else acts by right: a
+explicitly for one alignment sitting and reaching every alignment in it, never
+assumed, never read from the announcement of one, and never carried into a later
+sitting, as the authority node says; the grant is what the author's words call
+bootstrap authority, and the two names are one thing. Within the sitting it
+grants two things the narrower clause withheld. It runs on rather than once:
+once the sitting has established baseline grounding on a node through the
+periagogic, maieutic and review movements, reconciliation executes as the AI's
+recommendations evolve, and what is reconciled is applied to the sitting in hand
+rather than held for the next. And it turns the sitting back on itself:
+alignment already sequenced in that sitting is re-visited where newly reconciled
+disposition would change it, so a sitting leaves behind no work its own later
+findings have overtaken. Its one bar is confirmed ratified disposition, which
+reconciliation may not contradict; during bootstrap nothing is ratified, so the
+bar is presently empty, which the record says rather than leaving a reader to
+find out. Nothing else acts by right: a
 recommendation on an unanswered node is a draft and grounds no work, and a class
 the AI writes for itself is not a grant.
 
@@ -225,7 +252,7 @@ defines:
   - term: bootstrap exit
     gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
-    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+    gloss: "The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant."
 ---
 
 ## Answer
@@ -284,7 +311,7 @@ defines:
   - term: bootstrap exit
     gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
-    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+    gloss: "The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant."
 ---
 
 ## Answer
@@ -337,7 +364,7 @@ defines:
   - term: bootstrap exit
     gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
-    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+    gloss: "The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant."
 ---
 
 ## Answer
@@ -377,7 +404,7 @@ defines:
   - term: bootstrap exit
     gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
-    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+    gloss: "The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant."
 ---
 
 ## Answer
@@ -414,7 +441,7 @@ defines:
   - term: bootstrap exit
     gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
-    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+    gloss: "The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant."
 ---
 
 ## Answer
@@ -428,7 +455,7 @@ not a class.
 
 #### a-standing-direction-acts-by-right
 
-Everything `shim-and-grant` says, with a third thing acting by right beside the shim and the grant: a standing direction the author has given about a class of act, which acts on every instance of that class until a ruling confers the class, where a grant acts on the one reconciliation it names. It is on the table because graph-topology and probe-or-node both now take a prune on the author's word "wherever it was given" and cite this node for it, where this answer's grant is "given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant"; either the third limb is written here or those two clauses have no ground.
+Everything `shim-and-grant` says, with a third thing acting by right beside the shim and the grant: a standing direction the author has given about a class of act, which acts on every instance of that class until a ruling confers the class, where a grant acts on the sitting it is given for. It is on the table because graph-topology and probe-or-node both now take a prune on the author's word "wherever it was given" and cite this node for it, where this answer's grant, refined on the author's words of 2026-09-08, is "given explicitly for one alignment sitting and reaching every alignment in it, never assumed, never read from the announcement of one, and never carried into a later sitting". That refinement narrows the gap and does not close it: the words those two nodes rely on were given in an earlier sitting, so reading them as reaching a prune wherever it was given still carries a grant across sittings, which the refined clause forbids as the narrow one did. Either the third limb is written here or those two clauses have no ground.
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
@@ -449,12 +476,62 @@ defines:
   - term: bootstrap exit
     gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
-    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+    gloss: "The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant."
 ---
 
 ## Answer
 
-Everything `shim-and-grant` says, with a third thing acting by right beside the shim and the grant: a standing direction the author has given about a class of act, which acts on every instance of that class until a ruling confers the class, where a grant acts on the one reconciliation it names. It is on the table because graph-topology and probe-or-node both now take a prune on the author's word "wherever it was given" and cite this node for it, where this answer's grant is "given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant"; either the third limb is written here or those two clauses have no ground.
+Everything `shim-and-grant` says, with a third thing acting by right beside the shim and the grant: a standing direction the author has given about a class of act, which acts on every instance of that class until a ruling confers the class, where a grant acts on the sitting it is given for. It is on the table because graph-topology and probe-or-node both now take a prune on the author's word "wherever it was given" and cite this node for it, where this answer's grant, refined on the author's words of 2026-09-08, is "given explicitly for one alignment sitting and reaching every alignment in it, never assumed, never read from the announcement of one, and never carried into a later sitting". That refinement narrows the gap and does not close it: the words those two nodes rely on were given in an earlier sitting, so reading them as reaching a prune wherever it was given still carries a grant across sittings, which the refined clause forbids as the narrow one did. Either the third limb is written here or those two clauses have no ground.
+```
+
+#### the-grant-is-one-reconciliation
+
+Everything `shim-and-grant` says, with the grant's unit the single reconciliation rather than the sitting: the author's word authorises one named reconciliation of one unanswered node, and a second reconciliation in the same sitting needs a second word. This is the clause the record carried until 2026-09-08, kept on the list because what it bought is not bought by the refinement that replaced it.
+
+**AI support.** It makes every act of reconciliation separately authorised, so a grant cannot widen inside the sitting it was given for, and the author sees each thing done under it before the next is done. That is a real guard, and the refinement gives it up: a sitting is bounded by nothing but its own length, and the sitting of 2026-09-08 ran a day.
+
+**AI divergence.** It is the clause two nodes at the ruling stage already read past, and the author refined it on 2026-09-08 rather than confirming it, saying the grant is given to a sitting and reaches all alignment in it. Holding to it would set the record's rule against the author's own articulation of it, which is not a divergence the AI records on its own side.
+
+**Content.**
+
+From: shim-and-grant
+
+```diff
+@@ -10,7 +10,7 @@
+   - term: bootstrap exit
+     gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
+   - term: bootstrap authority
+-    gloss: "The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant."
++    gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
+ ---
+ 
+ ## Answer
+@@ -23,21 +23,10 @@
+ applied by default, as the evaluation node says, and it stands in for a
+ materialization the record has not yet made, as the transience node defines it;
+ a prompt is required only to bypass one. And a grant is the author's word, given
+-explicitly for one alignment sitting and reaching every alignment in it, never
+-assumed, never read from the announcement of one, and never carried into a later
+-sitting, as the authority node says; the grant is what the author's words call
+-bootstrap authority, and the two names are one thing. Within the sitting it
+-grants two things the narrower clause withheld. It runs on rather than once:
+-once the sitting has established baseline grounding on a node through the
+-periagogic, maieutic and review movements, reconciliation executes as the AI's
+-recommendations evolve, and what is reconciled is applied to the sitting in hand
+-rather than held for the next. And it turns the sitting back on itself:
+-alignment already sequenced in that sitting is re-visited where newly reconciled
+-disposition would change it, so a sitting leaves behind no work its own later
+-findings have overtaken. Its one bar is confirmed ratified disposition, which
+-reconciliation may not contradict; during bootstrap nothing is ratified, so the
+-bar is presently empty, which the record says rather than leaving a reader to
+-find out. Nothing else acts by right: a
++for one named reconciliation of one unanswered node, never assumed, never
++carried over from an earlier grant, and never read from the announcement of one,
++as the authority node says; the grant is what the author's words call bootstrap
++authority, and the two names are one thing. Nothing else acts by right: a
+ recommendation on an unanswered node is a draft and grounds no work, and a class
+ the AI writes for itself is not a grant.
+ 
 ```
 
 ### authority
@@ -558,3 +635,43 @@ Recorded as an option on this node's answer fact: `a-standing-direction-acts-by-
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/what-acts-during-bootstrap stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `shim-and-grant`; the `## Rationale` its `**AI support.**`; 2 `## Disposition` entries became the ledger entries words/2026-09-03/89, words/2026-09-04/44, referenced by 1 option the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `deferred-as-the-resting-state`, `projected-doctrine-acts`, `grant-expires-at-exit`, `nothing-acts`, `a-bootstrap-class`, `a-standing-direction-acts-by-right`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `978ae6c02bed0e9281b0b0c76daa5e5c761ba09c` was already past the recommendation and is left as it stood. The survey's pin `102fdff47a95d8e89691c8905d9d1b9a3d3b7ad5` is re-computed for the encoding as `ecc0a1e411b5735921b5144dc9a2ba61292af004`; nothing it read changed.
+### The grant's unit becomes the sitting, on the author's refinement of 2026-09-08
+
+The author refined this answer's grant clause in their own words, `words/2026-09-08/22`,
+and granted the refinement for the sitting that recorded it. Four things changed. The
+grant's unit is the alignment sitting rather than the single named reconciliation, and
+it reaches every alignment in that sitting. It runs on rather than once: after the
+sitting has established baseline grounding on a node through the periagogic, maieutic
+and review movements, reconciliation executes as the AI's recommendations evolve, and
+what is reconciled is applied to the sitting in hand. It obliges the sitting to turn
+back on itself, re-visiting alignment it has already sequenced where newly reconciled
+disposition would change it. And its one bar is named: confirmed ratified disposition,
+which the author observed is presently empty, so the bar binds nothing in this sitting
+and the answer says so rather than letting a reader assume a check is running.
+
+What was given up, named rather than glossed. The clause replaced made every act of
+reconciliation separately authorised, so a grant could not widen inside the sitting it
+was given for. That guard is gone, and nothing bounds a sitting but its own length;
+this one ran a day. What replaces it is not nothing: the grant is still explicit, still
+dies at the sitting's edge, and now carries a precondition the narrow clause never had,
+that baseline grounding be established before reconciliation runs. The trade is the
+author's and they made it. The clause replaced stays on the list as
+`the-grant-is-one-reconciliation`, its content a named change against the
+recommendation rather than a second copy of the node, so the record keeps the position
+and the reason it was left.
+
+What this does not settle. `a-standing-direction-acts-by-right` is still open and its
+argument survives the refinement: `graph-topology` and `probe-or-node` both take a
+prune on the author's word "wherever it was given", and the words they rely on were
+given in an earlier sitting, so relying on them still carries a grant across sittings,
+which the refined clause forbids exactly as the narrow one did. The refinement narrowed
+the gap and did not close it, and that option's quotation of this answer was updated to
+the refined clause rather than left standing against text that no longer exists.
+
+How this was grounded, said plainly. This was not a recommendation the AI reached and
+put to the author; it is the author's own articulation, recorded. The periagogic work
+behind it is one turn: the record's own reason for the narrow clause was read, and what
+it bought was named before it was replaced, which is what the evaluation node requires
+of any replacement. The clean-context reading of the amended text is owed, and the node
+carries `stage: review` with its forward verdict now pinned to a recommendation that
+has moved, which is the state that says so.

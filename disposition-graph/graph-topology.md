@@ -15,19 +15,27 @@ probes:
       the prune because topology is already generally delegated, or as granting
       the prune alone and describing where it sits. On the first reading a
       general delegation exists; the record holds no other place where it was
-      given, so it exists only in that clause. The words of 2026-09-08 name
-      minting, merging, pruning and re-parenting as the fact's business, and
-      this sitting widened the fact from whether a node exists to where it sits,
-      adding the reparent and the fold.
-      `commons.systems/disposition-graph/authority` holds that authority only
-      narrows on the way down, so a delegation cannot widen with the fact it was
-      given on, and which reading is right is the author's to say rather than
-      the AI's to take from a clause.
+      given. The words of 2026-09-08 name minting, merging, pruning and
+      re-parenting as the fact's business, and this sitting widened the fact
+      from whether a node exists to where it sits, adding the reparent and the
+      fold. `commons.systems/disposition-graph/authority` holds that authority
+      only narrows on the way down, so a delegation cannot widen with the fact
+      it was given on, and which reading is right is the author's to say rather
+      than the AI's to take from a clause. What this probe does not turn on,
+      corrected the day it was raised when the record was read again: whether
+      the AI may reconcile topology at all. `words/2026-09-08/11` grants that
+      directly and separately, on any node the author has not confirmed
+      ratified, and this answer already carries it. An earlier draft of this
+      probe said the record held no other place where a general delegation was
+      given, which was false when it was written.
     discharges: >-
-      The class this fact carries. On the general reading `delegated` stands as
-      recommended and covers the reparent and the fold. On the narrow reading
-      the widened fact is not covered, the honest recommendation is `deferred`,
-      and the delegation is recorded on the prune where the record can hold one.
+      The class this fact carries, and nothing beyond it. On the general reading
+      `delegated` stands as recommended and covers the reparent and the fold. On
+      the narrow reading the widened fact is not covered by that delegation, the
+      honest recommendation is `deferred`, and the delegation is recorded on the
+      prune where the record can hold one. Either way the recorder keeps the
+      authority `words/2026-09-08/11` gives it, so no work the record does today
+      waits on this answer.
     source: ai
     raised: 2026-09-08
 facts:
@@ -972,3 +980,35 @@ could have defeated the position it was brought against. Here it did not: it
 qualified the position and left the recommendation standing. That is a weaker
 result than the movement is for, and it is recorded as the result rather than
 dressed as a stronger one.
+### The re-visit the refined grant obliged, 2026-09-08
+
+The author refined the bootstrap grant later the same day, `words/2026-09-08/22`,
+making its unit the sitting and obliging a sitting to re-visit alignment it has already
+sequenced where newly reconciled disposition would change it. This node's authority
+fact was the first thing that obligation reached, and the re-visit found one error and
+one thing that got smaller.
+
+The error. The probe raised on this fact earlier in the sitting said, of a general
+delegation of graph topology, that "the record holds no other place where it was given,
+so it exists only in that clause" of `words/2026-09-06/6`. That was false when it was
+written. `words/2026-09-08/11` grants topology reconciliation directly and on its own
+ground, that a topology move reconciles the graph and not the implementation layer, for
+any node the author has not confirmed ratified; this node's own answer already carried
+that sentence, in the option the answer fact recommends. The probe read the authority
+fact and did not read the answer fact beside it. Its `why` and its `discharges` are
+corrected in place rather than the probe withdrawn, because the question it asks is
+still open: what class this fact carries is not settled by the author having granted
+the act.
+
+What got smaller. The probe's stakes. Before the correction it read as though a narrow
+answer would leave the recorder without authority to reparent or to fold; it would not.
+On either reading the recorder keeps what `words/2026-09-08/11` gives it, and what the
+class decides is whether the author is asked again, not whether the work may be done.
+That is a smaller question and the probe now says so.
+
+What the refined grant changes about the sitting's own account. The entry above this
+one said the sitting's topology work stood on the bootstrap grant rather than on the
+delegation. That stands and is now better founded: under the refinement the grant is
+given to the sitting and reaches every alignment in it, so the topology work, the
+dialogue work and the grant work of 2026-09-08 all stand on one grant rather than on a
+grant read as stretching to cover them.

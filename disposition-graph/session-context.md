@@ -53,6 +53,11 @@ facts:
       - name: skills-among-what-a-session-loads
         source: commons.systems/disposition-graph/unit-skills
         ref: "2026-09-07"
+      - name: the-harness-memory-is-a-fourth-thing-loaded
+        source: commons.systems/disposition-graph/session-state
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/21
     recommends: standing
     boldness: low
   - name: authority
@@ -464,6 +469,45 @@ are what a session loads when it invokes one, so that the enumeration covers
 every file that instructs a session and not only the three it names. Raised on
 `unit-skills`, which cites this node for the rule that a rule living only in a
 file is invisible while adding five such files.
+```
+
+#### the-harness-memory-is-a-fourth-thing-loaded
+
+The standing answer with the harness's own store named: a memory private to one account
+and one path is loaded into every session in this checkout, so the enumeration either
+names it and says what liquidates it, or the record's own test puts it on the frontier
+as a prune-by-default proposal. Raised on `session-state`, where the author proposed
+that store as the staging store's mechanism.
+
+**AI support.** It is an observation and not a proposal: the store is loaded today, and
+the answer's word is "nothing else". What has changed since the record last looked at
+this is what makes re-raising it more than thrashing. `standing`'s own reading examined
+the harness's memory in 2026-09-02 and set it aside on the ground that it "is private to
+one account and one path, so it can carry nothing the record needs". The author's words
+of 2026-09-08 propose it carry something the record does need, their own words while a
+sitting has not yet classified them, and that strikes the reason the option was left.
+
+**AI divergence.** The enumeration may be about what projects the instruction a session
+works under rather than about every byte that reaches a context, and the harness's memory
+projects nothing, in which case this is a category confusion and not a gap. Naming it
+also legitimises a store the record cannot see, cannot validate and cannot review, which
+is a larger concession than the sentence it adds looks like.
+
+**Content.**
+
+From: standing
+
+```diff
+@@ -22,3 +22,9 @@
+ ## Answer
+ 
+ From three projections and nothing else. Rules, one file per global-tier node under `.claude/rules/`, carry the doctrine every session works under; the projector regenerates them, each headed by the node it projects, and a rule no node projects is unsupported implementation. `CLAUDE.local.md`, written into a bite's worktree at provisioning and never committed, carries the ancestry of the node the bite serves, pinned at a graph commit. `CLAUDE.md`, committed at the root, is the orientation page an AI session reads first: what this repository is, where its record lives, and how a session reads and writes it, projected from the purpose node and from the projection node. It states no rule of its own, because a rule that lives only there is invisible to the projector and to review. The one function `CLAUDE.md` serves that rules do not is orientation: it is the surface an arriving session, or the AI a newcomer arrives with, reads first, and the harness loads it by directory, so a nested checkout inherits it. Anything in any of the three that no node projects is on the frontier as a prune-by-default proposal.
++
++The enumeration is exclusive and the record checks it against the harness it runs on.
++Where the harness loads a store of its own into every session, a memory private to one
++account and one path among them, that store is a fourth thing a session loads: it is
++named here and liquidated, or it is on the frontier as a prune-by-default proposal
++like anything else no node projects.
 ```
 
 ## Account

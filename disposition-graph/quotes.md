@@ -924,3 +924,22 @@ would be rewritten every time a reading of it moved, and the entry is the
 author's verbatim word, which nothing later may edit. That is the quotation's
 half of `which-side-carries-the-reference`; the reading's half, where the same
 edge is written from the other side as `bears`, stays open.
+### The store this answer names has a node, 2026-09-08
+
+This answer's refinement of 2026-09-08 says that words directing a sitting are held in
+the session's own staging store, which survives compaction and is not on this ref, and
+it gives that store no mechanism. The author named a candidate the same day, the
+harness's own session-scoped memory tools, and asked that it be sequenced early because
+a sitting that compacts loses whatever only its context held. The mechanism is not this
+node's question: it reaches past the ledger to everything a sitting must not lose, and
+every sitting after this one needs the answer, so it is
+`commons.systems/disposition-graph/session-state`, minted under `transience`, and this
+answer's "staging store" is the term that node defines.
+
+What the new node found and this one should know. The author's candidate collides with
+`commons.systems/disposition-graph/session-context`, whose answer is that a session
+loads three projections and nothing else; a harness memory is loaded by the harness and
+is therefore a fourth. That collision is the new node's first probe and is the author's
+to settle. The new node recommends a file whose path a global rule fixes, which is
+reached through the rules projection and so is not a fourth thing, and it names the
+path so that a session which has lost the thread can still find the store.
