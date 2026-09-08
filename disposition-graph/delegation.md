@@ -36,6 +36,9 @@ facts:
       - name: the-model-is-named-in-every-brief
         source: ai
         ref: "2026-09-08"
+      - name: the-brief-is-bound-as-the-subagent-is
+        source: ai
+        ref: "2026-09-08"
       - name: fixed-model-for-every-task
         source: ai
         ref: "6e9efb8c"
@@ -176,6 +179,36 @@ defines:
 ## Answer
 
 Every session has a main thread, the thread that holds the session's work, launches its units, and reads what they return; a subagent is a session the main thread launches for one unit or one lookup, given its brief and nothing else. The alignment session's main thread holds the interview and the record: it interviews the author, writes and amends nodes, reviews what subagents return, and lands, and it runs on the most capable model at full effort. A reconciliation session's main thread runs on the larger model until the reconciliation skill's instructions are defined well enough for the smaller one, which is the recommendation the author asked the AI to make and the skill to carry; the recommendation is stated here, and the skill encodes it, so the rule stands when the shim the skill is goes. Everything else is delegated: a lookup needs only its question and its answer, and anything larger is a unit. A unit is one deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output; a unit that needs a second contract is two units. Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys. The subagent reports a conclusion and the exact commands it ran; the main thread reads the conclusion and never the context. The model follows the kind of work: the smaller model for mechanical tooling, tests, format work, and anything whose contract determines the answer; the larger model for design and judgment, such as a layout or a survey that classifies what it reads; the smallest for lookups. The effort is stated in the brief, and so is the model: a subagent is never launched on the harness's default, since a default is not a sizing and a brief that leaves the model unnamed has not sized the work. A subagent never runs state-changing version control, never edits a node or the record's scaffolding, writes only the files its brief names, and works only in the worktree it was given. A reconciliation session is bound toward the record as the work-loop node bounds it, and that node owns the bound; a subagent never edits a node.
+```
+
+
+#### the-brief-is-bound-as-the-subagent-is
+
+`the-model-is-named-in-every-brief` with the bounds extended to the brief itself. Raised from this sitting's own practice on 2026-09-08 and not from the author's words: of the thirteen briefs the sitting wrote, one pair was divided by the conclusion each unit was to reach rather than by the tradition each was to read, each handed the side it would argue and a return order that put its own side last; and two units examining one recommendation were given two different retyped texts of it, neither of them the record's bytes. Nothing in the answer as it stands forbids either, which is what the option says.
+
+**AI support.** Read the answer's bounds as a list and they are all one kind: the subagent never runs state-changing version control, never edits a node, writes only the files its brief names, works only in the worktree it was given, and reports a conclusion with the commands behind it. `delegation-bounds-and-sizing` classifies the last three as capture-shaped, each being a clause by which the main thread can check what a subagent did. That reading is right and it is half the account. Delegation has two parties, and every bound the record has written binds the one that answers; the party that asks is unbound. A main thread that wants a conclusion does not need to break any of these clauses — it writes the brief, and the brief decides what the unit reads, how the object is described, which side the unit is given, and in what order the answers are laid out. The subagent's independent reading is the whole reason the record delegates rather than deciding in the main thread; a brief the main thread has framed toward its own conclusion returns that conclusion wearing the subagent's authority, and the check the delegation was meant to be is gone. That is `class-recommendation`'s capture limb exactly: the party that would set the answer is the party the answer is meant to check. It is also, unlike the clauses already written, not detectable from the return — a retyped object and a conclusion-split pair both produce a report that reads as sound, and the only place the defect is visible is the brief, which the record does not keep. The two clauses are the smallest thing that makes the asking side checkable, and the first of them is nearly free: citing a node and a pin is shorter than retyping it, and it is what the record's own brief builder already does.
+
+**AI divergence.** This is a rule written from one sitting's defects by the party that committed them, on no words of the author's, and the record should be told that plainly rather than left to infer it. The generalisation may be too wide in both clauses. The first forbids the paraphrase, but a brief that must render a long node whole to ask a narrow question about one clause of it will either carry text the unit does not need or split into more units, and the cost lands on every brief to prevent a defect measured twice. The second forbids handing a unit the side it is to argue, and a deliberately adversarial pairing — one unit briefed to attack, one to defend — is a technique with a long tradition and real yield, which this clause would prohibit by name; what actually went wrong in the sitting was not that the sides were assigned but that the assignment was undisclosed and the return order was tilted, and a narrower clause requiring the split to be stated in both briefs and in the report would catch that at less cost. Against both: the brief is not in the record, so neither clause is checkable by anything but the main thread's own honesty, which makes this a rule addressed to a party that cannot be audited — and a bound nothing can check is a different kind of thing from the five bounds beside it, all of which the record can test after the fact.
+
+```markdown
+---
+question: How is work divided between the main thread and subagents?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - term: main thread
+    gloss: "The thread that holds the session's work, launches its units, and reads what they return."
+  - term: unit
+    gloss: "One deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output."
+  - term: subagent
+    gloss: "A session the main thread launches for one unit or one lookup, given its brief and nothing else."
+---
+
+## Answer
+
+Every session has a main thread, the thread that holds the session's work, launches its units, and reads what they return; a subagent is a session the main thread launches for one unit or one lookup, given its brief and nothing else. The alignment session's main thread holds the interview and the record: it interviews the author, writes and amends nodes, reviews what subagents return, and lands, and it runs on the most capable model at full effort. A reconciliation session's main thread runs on the larger model until the reconciliation skill's instructions are defined well enough for the smaller one, which is the recommendation the author asked the AI to make and the skill to carry; the recommendation is stated here, and the skill encodes it, so the rule stands when the shim the skill is goes. Everything else is delegated: a lookup needs only its question and its answer, and anything larger is a unit. A unit is one deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output; a unit that needs a second contract is two units. Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys. The subagent reports a conclusion and the exact commands it ran; the main thread reads the conclusion and never the context. The brief is bound as the subagent is, and for the same reason: every other bound here binds the subagent, and the brief is the main thread's, so a main thread that wanted a conclusion could have it without breaking one of them. Two clauses close that. The brief renders the object under examination from the record and never retypes it, citing the node and the pin, and where it must carry the text, the text is the record's bytes and not the main thread's account of them, since a unit given a paraphrase has examined the paraphrase. And where one question is put to more than one unit, the units are divided by their object and never by the conclusion each is to reach: a brief that hands its unit the side it is to argue, or that orders the return so one side is stated last, has settled the question the units were launched to open. The model follows the kind of work: the smaller model for mechanical tooling, tests, format work, and anything whose contract determines the answer; the larger model for design and judgment, such as a layout or a survey that classifies what it reads; the smallest for lookups. The effort is stated in the brief, and so is the model: a subagent is never launched on the harness's default, since a default is not a sizing and a brief that leaves the model unnamed has not sized the work. A subagent never runs state-changing version control, never edits a node or the record's scaffolding, writes only the files its brief names, and works only in the worktree it was given. A reconciliation session is bound toward the record as the work-loop node bounds it, and that node owns the bound; a subagent never edits a node.
 ```
 
 
@@ -477,3 +510,34 @@ now records as an option for the author to rule on, made in place and keeping
 the ordinal, the text and the reason; until that ruling the entry stands with
 nothing referencing it, and the validator's finding is the record saying so out
 loud rather than a defect to repair.
+
+
+### The asking side of a delegation is unbound, 2026-09-08
+
+The option `the-brief-is-bound-as-the-subagent-is` was recorded in the sitting of
+2026-09-08 under the author's grant of that day, on the AI's own finding and on no
+words of the author's. The recommendation was not moved: `authority` gives the AI
+leave to add an option to any fact and requires it to record as an option anything
+that would contradict doctrine or exceed its scope, and what the finding proposes is
+a new bound on a global-tier rule, which is the author's to rule on.
+
+The finding was made by reading this sitting's own thirteen briefs, extracted and
+classified in the sitting. Two defects were in them. One pair of units was divided by
+the conclusion each was to reach rather than by the tradition each was to read, each
+handed the side it would argue and a return order that stated its own side last. And
+two units examining one recommendation were given two different retyped texts of it,
+neither of them the record's bytes. Neither breaks any clause of the answer as it
+stands, which is the finding: every bound the answer carries binds the subagent, and
+`delegation-bounds-and-sizing` reads three of them as capture-shaped because each is
+a clause by which the main thread can check what a subagent did. That reading is
+right and it is one side of the account. The brief is the main thread's, nothing
+binds it, and a brief framed toward a conclusion returns that conclusion wearing the
+subagent's authority.
+
+The AI records that it is the party that committed both defects and the party
+proposing the rule against them, and that the option's divergence says so. The
+narrower reading is live and is stated there: the second clause would forbid
+deliberately adversarial pairing, which is a technique with a tradition behind it,
+and what actually went wrong may have been the undisclosed assignment and the tilted
+return order rather than the assignment itself. `turn-form` carries the consequence
+of the same finding where the work is presented rather than divided.

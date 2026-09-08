@@ -32,6 +32,9 @@ facts:
       - name: a-turn-that-reports-a-prune
         source: review
         ref: "2026-09-07"
+      - name: a-form-is-not-satisfied-by-its-shape
+        source: ai
+        ref: "2026-09-08"
     recommends: a-turn-that-reports-an-impediment
     boldness: moderate
     against: "The rule is drawn from a single turn the author disliked, and their own words in that message call the four forms what a prompt is expected to take rather than what every turn must be; the hardening into a bound is the AI's, and its cost is paid where it cannot be seen, in the turns a future session does not make. The impediment turn answers only the sitting that cannot continue: a session that has found something the author would want to know, and that is neither probe nor direction nor acknowledgement, is still told to write it to the record and let the projections carry it, and surviving in a record this size is not the same as reaching the author when it matters."
@@ -503,6 +506,125 @@ under:
 Everything `a-turn-that-reports-an-impediment` says, with a fourth thing standing outside the rule: a turn reporting what the AI has deleted under a delegation — the node, the survivor that keeps its question, and the reason the question was closed — given at the next sitting and asking nothing. It is on the table because graph-topology's option `prunes-reported-to-the-author` proposes exactly that surface and declines to adopt it on the ground that "which surfaces reach the author is `turn-form`'s question for the sitting", and this answer's list of what stands outside the rule is exhaustive and does not reach it.
 ```
 
+#### a-form-is-not-satisfied-by-its-shape
+
+Everything `a-turn-that-reports-an-impediment` says, with the rule reaching what a
+turn is made of and not its shape alone. Raised from this sitting's own practice on
+2026-09-08 and not from the author's words: the sitting divided one pair of units by
+the conclusion each was to reach rather than by the tradition each was to read, and
+handed each the side it would argue. Every turn that rested on those units was well
+formed under the rule as it stands.
+
+**AI support.** The rule's own account says what it is for: it bounds "what the AI may
+put before the author of its own findings", and the exemptions are all things that are
+not the AI's account. That is a bound on the surface, and the surface is the last place
+the AI's account enters. What determines a probe's content is the work behind it, and
+the rule reaches none of that. A session that wants a particular answer has no need to
+break the four forms; it writes the units that ground the probe, and the probe it then
+asks is well formed, is honestly labelled, and carries the conclusion anyway. This is
+worse than a fifth form would be, because a fifth form is visible and this is not: the
+author reads a turn whose shape is exactly right, and there is nothing in the turn to
+read the defect off, the brief being neither shown to them nor kept by the record. The
+clause costs a session nothing it should not already be paying — `delegation`'s option
+`the-brief-is-bound-as-the-subagent-is` states the same requirement where the work is
+divided, and this states its consequence where the work is presented — and it gives
+the author's own check something to bite on, since the author cannot audit a brief but
+can be told that the rule requires one.
+
+**AI divergence.** The clause is unenforceable by anyone but the session it binds, which
+makes it a different kind of clause from the four forms: those are readable off the turn,
+and this is readable off nothing. A rule the author cannot check is a rule that reports
+the AI's honesty rather than constraining it, and stating it may buy the appearance of a
+guard where there is none — which is the failure mode `movements` names, a movement that
+is always made being one that can be made nominally. It also generalises from two units
+of one sitting, both the AI's own, and the narrower reading is available: what went wrong
+was not that the turn's grounding was unbound but that the sitting divided its units badly,
+which `delegation` already answers, so this node may be gaining a clause to record a defect
+whose home is elsewhere. Against that: the two nodes bound different acts, and a defect
+with two homes is recorded in both or found in neither.
+
+```markdown
+---
+question: What form does a turn of the alignment dialogue addressed to the author take?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+## Answer
+
+Three surfaces bound what reaches the author, and on them every turn of the
+alignment dialogue addressed to the author takes one of four forms and no fifth.
+The periagogic movement establishes common grounding in the record; the maieutic
+movement clarifies ambiguities in the author's intent; the alignment page takes
+the confirmation of a disposition's facts. So such a turn is a periagogic probe,
+which turns them back to the record for the ground of a question; a maieutic
+probe, which asks what they intend where the record leaves it open; a direction to
+the alignment page, where a disposition's facts stand for confirmation; or an
+acknowledgement of a confirmation, which says which rulings were recorded and,
+where the response moved the node, that it moved and why, as
+`commons.systems/disposition-graph/recording` requires of the turn that makes the
+move. A session with none of the four to give, and no impediment to report, has
+nothing to stop for and proceeds. The readings and what they return, the
+instruments the sitting runs, the measurements it takes, and the mechanical and
+encoding defects it finds and repairs are the sitting's own: it corrects them and
+passes through without asking, and their appearance in a turn addressed to the
+author is noise to be minimised and not thoroughness.
+
+Three things stand outside the rule. A turn the author has expressly asked for
+takes the form they asked for: the same words that give the four forms end by
+asking for a listing of the AI's recommendations queued for reconciliation, so a
+rule that forbade what the author had just requested would be a rule read against
+the party it exists to serve. What a reconciliation session outputs, a listing or
+a report included, is outside the rule altogether, which binds the alignment
+dialogue and nothing else; what form a reconciliation's own output takes is
+`commons.systems/disposition-graph/work-loop`'s question and is not decided here.
+And a turn that reports an impediment is outside it: where the sitting cannot
+continue — the landing will not land, the record will not validate, the worktree
+is reaped under the session, the instruction contradicts a ruling already recorded
+— the session says in one line that it cannot continue and what stopped it, and
+asks nothing. It is outside the rule because it is not the AI's account put before
+the author's but the sitting's inability to give them any of the four; without it
+the session with no turn of the four to give is sent to the sentence above, which
+tells it to proceed, and proceeding in silence is the one wrong act there.
+
+The rule is stated here and once. The two nodes that carry it from one side are
+amended to cite this node rather than restating half of it.
+`commons.systems/disposition-graph/author-questions` carries the probe's side, as
+`the-sitting-stops-only-on-intent`: a sitting stops for the author only where
+there is a question about their intent, so a session with no probe to raise has
+nothing to stop for. That option today restates the three surfaces in full, and
+the amendment is recorded on that node as the option
+`cites-turn-form-for-the-three-surfaces`, for the author to rule on and not yet
+made. `commons.systems/disposition-graph/alignment-page` carries the page's side,
+in the page-scope clause of its recommended answer, which the option
+`page-collects-only-the-confirmation` records: the page's scope is the final
+confirmation and, of every other movement, a preview and a read-only indicator,
+and every other thing the author has to say is given in the interview; that clause
+is amended in this sitting to cite this node where it states that side. Each is
+this rule seen from one surface, and neither is the whole of it, since neither
+says that the three surfaces together bound what may reach the author at all.
+
+What the author's words ask for, beyond the record of the rule, is that the
+alignment skill be reconciled to it, and that reconciliation is what makes the
+rule act rather than merely stand: the skill's turns to the author are the four
+forms, and what it learns from a reading, an instrument or a repair is written to
+the record and not reported to the author.
+
+A turn takes its form in substance and not only in shape. The three surfaces bound
+what reaches the author, and nothing here bounds how what reaches them was made:
+a probe is a probe because the session does not yet know the answer, so a probe
+resting on a unit whose brief was written toward the answer the probe carries has
+the shape of the first form and the function of the AI's own account, which is the
+one thing the rule exists to keep off these surfaces. The defect is not detectable
+in the turn. It is upstream of it, in a brief the author never sees and the record
+does not keep, and it is invisible precisely because the turn is well formed. So
+the rule reaches the turn's grounding as it reaches its shape: a session may put a
+probe before the author only where the work behind it was divided by its object,
+and where it was not, what the session has is a finding, and the finding is written
+to the record.
+```
+
+
 ### authority
 
 Ratified, on the capture-shaped limb of
@@ -569,3 +691,25 @@ The survey's finding named this node and is recorded as the option `a-turn-that-
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/turn-form stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `four-forms`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `a-turn-that-reports-an-impediment`; 3 `## Disposition` entries became the ledger entries words/2026-09-06/5, words/2026-09-07/18, words/2026-09-07/19, referenced by 2 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `expected-not-required`, `three-forms-no-acknowledgement`, `rule-on-growth`, `a-turn-that-reports-a-prune`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `387386abd5048685a94a39df8346873c76a4cc04` is re-computed for the encoding as `7443e62c32e1349585432dbfeb53c047785ead32`; nothing it read changed. The survey's pin `387386abd5048685a94a39df8346873c76a4cc04` is re-computed for the encoding as `7443e62c32e1349585432dbfeb53c047785ead32`; nothing it read changed.
+
+
+### A well-formed turn can carry the AI's account, 2026-09-08
+
+The option `a-form-is-not-satisfied-by-its-shape` was recorded in the sitting of
+2026-09-08 under the author's grant of that day, on the AI's own finding and on no
+words of the author's; the recommendation was not moved.
+
+The finding is the same one that produced `delegation`'s option
+`the-brief-is-bound-as-the-subagent-is`, seen from this node's side. This rule bounds
+the surfaces on which the AI may put its own account before the author. The sitting
+divided one pair of units by the conclusion each was to reach and handed each the
+side it would argue, and every turn resting on those units was well formed under the
+rule as it stands. So the bound holds at the surface and the AI's account enters
+before it, in the work that grounds the turn, where nothing reaches it.
+
+Why the defect is recorded in two places rather than one: the two nodes bound
+different acts, `delegation` the dividing of the work and this node the putting of it
+before the author, and a defect with two homes is recorded in both or found in
+neither. The option's divergence carries the case against, that a clause readable off
+nothing is a different kind of clause from four that are readable off the turn, and
+that stating it may buy the appearance of a guard where there is none.
