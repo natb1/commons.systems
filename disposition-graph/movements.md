@@ -628,7 +628,7 @@ devil's-advocate conditions, "underscoring the value and importance of
 authenticity and difficulty in cloning such role-playing techniques"; an AI
 arguing a position it does not hold because a convened tradition requires it is
 role-played dissent, which is the condition that underperformed, and that bears
-on the expert paradigm and on `expert-instructions` when it is minted.
+on the expert paradigm and on `expert-instructions`, minted 2026-09-08.
 
 **The probes the reading generated, and where they went.** The reading generated
 nine. Three went onto `round-termination` when it was minted, and the rest were

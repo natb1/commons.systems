@@ -551,8 +551,9 @@ The author struck the cap on 2026-09-08 at `words/2026-09-08/32`, on the ground
 that a cutoff which routes content into prose creates variance in encoding, and
 the four are now in the `probes` fields of their homes: the divergence-kind
 probe on `unconfirmed-accumulation`, the single-valued-answer probe on
-`authority`, the reading-or-role probe on `movements`, which is the expert
-paradigm's only home until `expert-instructions` is minted, and the acquiescence
+`authority`, the reading-or-role probe on `movements`, which owns the expert
+paradigm itself where `expert-instructions` owns the text an expert is given,
+and the acquiescence
 probe on this node, which now stands at four. The paragraph is kept as the
 record of the reading's yield and of why the four sat in prose for a day.
 
