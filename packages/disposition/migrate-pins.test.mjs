@@ -28,9 +28,11 @@ import { readGraph } from './read.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONTENT_DIR = path.join(HERE, 'fixtures', 'content');
-// The scratch this unit was given; `mkdtemp` under it, never beside the
-// record.
-const SCRATCH = '/home/n8/.claude/jobs/55639327/tmp';
+// A scratch of the machine's own, `mkdtemp` under it, never beside the
+// record. The absolute path of the session that first wrote this unit was
+// carried here until 2026-09-08, when it named a directory that no longer
+// existed and the suite could not pass on any machine.
+const SCRATCH = os.tmpdir();
 
 const STALE = 'a'.repeat(40);
 
@@ -260,7 +262,3 @@ describe('migratePins with no sidecar', () => {
     assert.equal(sidecar.pins['example.test/main/ladder'], fixture.want.get('ladder').old, 'left where it was');
   });
 });
-
-// A note on the scratch: `os.tmpdir()` is not used, because this unit was
-// given one directory to write in and writes nowhere else.
-void os;

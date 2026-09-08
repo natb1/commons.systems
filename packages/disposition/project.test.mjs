@@ -1002,7 +1002,7 @@ test("factsHtml renders the answer fact's options with source, ref, prose, and t
   // A reserved fact reads the same way, its option names its vocabulary.
   const pruneNode = graph.nodes.find((n) => n.slug === "prune-node");
   const facts = R.factsHtml(pruneNode);
-  assert.ok(facts.includes(">existence</span>"), "the existence fact is named");
+  assert.ok(facts.includes(">topology</span>"), "the topology fact is named");
   assert.ok(facts.includes(">prune</span>") && facts.includes(">keep</span>"), "both of its options");
   assert.ok(facts.includes("recommended · boldness moderate"), "and the one recommended");
   assert.ok(!facts.includes("keeps its full authority"), "no options pending on its answer, so no note");
@@ -1254,7 +1254,7 @@ describe("check(): the new 'defines' shape and the gloss it may carry", () => {
 
 describe("withOptionSentences: optionText carried into the data the page reads", () => {
   test("attaches the standing answer's '## Answer', another option's own prose, null where nothing is recorded, and a vocabulary option's gloss from the node that defines it -- without mutating the graph given it", () => {
-    const glossNode = { id: "m/g/gloss", defines: [{ term: "widget", gloss: "A small reusable part." }] };
+    const glossNode = { id: "m/g/gloss", defines: [{ term: "ratified", gloss: "A small reusable part." }] };
     const mainNode = {
       id: "m/g/main",
       answer: "What stands, in full.",
@@ -1272,9 +1272,9 @@ describe("withOptionSentences: optionText carried into the data the page reads",
         },
         {
           name: "authority",
-          recommends: "widget",
+          recommends: "ratified",
           boldness: "low",
-          options: [{ name: "widget" }, { name: "unglossed-term" }],
+          options: [{ name: "ratified" }, { name: "deferred" }],
         },
       ],
     };
@@ -1297,11 +1297,11 @@ describe("withOptionSentences: optionText carried into the data the page reads",
 
     const authorityOptions = main.facts[1].options;
     assert.deepEqual(
-      authorityOptions.find((o) => o.name === "widget").sentence,
+      authorityOptions.find((o) => o.name === "ratified").sentence,
       { text: "A small reusable part.", from: "m/g/gloss" },
       "a vocabulary option's sentence is the gloss on the node that defines the term",
     );
-    assert.equal(authorityOptions.find((o) => o.name === "unglossed-term").sentence, null, "no node glosses this term");
+    assert.equal(authorityOptions.find((o) => o.name === "deferred").sentence, null, "no node glosses this term");
 
     assert.equal(mainNode.facts[0].options[0].sentence, undefined, "the graph given it is never mutated");
   });
@@ -2221,27 +2221,27 @@ test("what a tradition says of an option is on that option's row, with its accou
   assert.ok(narrower.includes('<span class="badge diverged">diverged</span>'), "and the account names the relation");
 });
 
-test("--alignment asks the prune as the existence fact, not as an answer option or a caption", async () => {
+test("--alignment asks the prune as the topology fact, not as an answer option or a caption", async () => {
   const graph = await readGraph(resolve(HERE, "fixtures/valid-options"));
   const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
   const prune = nodeBySlug(graph, "prune-node");
   assert.deepEqual(prune.answerFact.options.map((o) => o.name), ["standing"],
     "fixture precondition: no answer option proposes the deletion");
-  assert.equal(prune.facts.find((f) => f.name === "existence").recommends, "prune",
-    "fixture precondition: the existence fact proposes it");
+  assert.equal(prune.facts.find((f) => f.name === "topology").recommends, "prune",
+    "fixture precondition: the topology fact proposes it");
   assert.equal(prune.fence, null, "fixture precondition: recommending the option that stands quotes no fence");
   const article = itemHtml(html, prune.id);
 
-  assert.ok(article.includes('data-fact="existence"'), "the prune is a fact of its own");
-  const existenceFs = factHtml(article, "existence");
-  assert.ok(existenceFs.includes('data-option="keep"') && existenceFs.includes('data-option="prune"'), "both options");
-  assert.ok(existenceFs.includes("recommended, "), "with the recommended one marked");
-  assert.ok(existenceFs.includes("Nothing here survives as a node of its own"), "the fact's own reason, in the recommended row's drill-down");
+  assert.ok(article.includes('data-fact="topology"'), "the prune is a fact of its own");
+  const topologyFs = factHtml(article, "topology");
+  assert.ok(topologyFs.includes('data-option="keep"') && topologyFs.includes('data-option="prune"'), "both options");
+  assert.ok(topologyFs.includes("recommended, "), "with the recommended one marked");
+  assert.ok(topologyFs.includes("Nothing here survives as a node of its own"), "the fact's own reason, in the recommended row's drill-down");
   assert.ok(!article.includes("Confirm prunes the node"), "and no caption of its own");
   assert.ok(!article.includes("The edit"), "no edit, since the recommendation adopts the option that stands");
 
   const fresh = itemHtml(html, nodeBySlug(graph, "fresh-node").id);
-  assert.ok(!fresh.includes('data-fact="existence"'), "a node nobody proposes to delete asks no existence fact");
+  assert.ok(!fresh.includes('data-fact="topology"'), "a node nobody proposes to delete asks no topology fact");
 });
 
 test("the stage chip carries the node's readiness, and the review keeps no section of its own", async () => {
@@ -3067,6 +3067,12 @@ test("with nothing staged the instruction is the bare /align, and both routes st
 const CONTENT_PAGE = await readGraph(resolve(HERE, "fixtures/content-page"));
 const contentItem = (slug) => pageItem(slug, CONTENT_PAGE);
 
+// A fixture of its own, apart from CONTENT_PAGE: its nodes need none of
+// CONTENT_PAGE's other nodes, and adding their weight there would have
+// diluted the whole-graph payload-size ratio the tests below (`the payload's
+// own weight`) hold CONTENT_PAGE to.
+const TOPOLOGY_PAGE = await readGraph(resolve(HERE, "fixtures/topology"));
+
 test("the fixture holds both encodings side by side", () => {
   const enc = (slug) => nodeBySlug(CONTENT_PAGE, slug).encoding;
   assert.equal(enc("ruling-content"), "content");
@@ -3208,6 +3214,72 @@ test("the browser reads a content node's answer, its options' content, and the l
   assert.ok(html.includes('id="words-2026-09-07-1"') && html.includes('id="words-2026-09-07-2"'));
   assert.ok(html.includes("Author quotes are kept in a ledger outside the graph"));
   assert.ok(html.includes("Asked what the right-hand column of the alignment page holds."), "with the line saying what was asked");
+});
+
+/* -------------------------------------------- topology's per-option vocabulary
+ *
+ * `topology` widened `answer` and `persistence`'s per-node rule: `keep` and
+ * `prune` are reserved vocabulary, closed like `authority`'s three classes,
+ * and any other option name is a freely-named placement option that owns a
+ * `#### <option>` subsection and carries its own sentence and content
+ * exactly as an `answer` or `persistence` option does. The rule the reader
+ * and the derivation apply is per-option (`isVocabularyOption`), not
+ * per-fact, and these tests hold the browser projection to the same rule. */
+
+test("a topology fact's freely-named placement option renders its own sentence and its content, and stands once confirmed", () => {
+  const html = build(TEMPLATE, excludeUnaligned(withDerivedAnswers(TOPOLOGY_PAGE)));
+  const json = JSON.parse(html.match(/<script type="application\/json" id="graph">([\s\S]*?)<\/script>/)[1].replace(/\\u003c/g, "<"));
+  const node = json.nodes.find((n) => n.slug === "topology-content");
+  const fact = node.facts.find((f) => f.name === "topology");
+
+  // The confirmed placement option owns a subsection, so it stands -- the
+  // same treatment an answer or persistence option gets, and the one the
+  // per-fact rule this replaces would have refused a `topology` fact.
+  assert.equal(fact.stands, "fold-into-a-different-node");
+
+  const placement = fact.options.find((o) => o.name === "fold-into-a-different-node");
+  assert.ok(placement.sentence.text.startsWith("This question is not one this node should keep asking on its own"));
+  assert.ok(placement.sentence.text.includes("**The content it would make the node say.**"), "the option's own content is rendered");
+  assert.ok(placement.sentence.text.includes("Folded into the node it refines, and no longer a question of its own."), "resolved from the option's content fence");
+  assert.ok(placement.sentence.text.includes("**AI support.**"));
+
+  // The reserved option beside it takes its sentence from the glossary
+  // alone, carries no content, and does not stand even though it recommends
+  // nothing and confirms nothing here -- the contrast the next test covers.
+  const keep = fact.options.find((o) => o.name === "keep");
+  assert.equal(keep.sentence.text, "The node stays in the record, its question still its own.");
+  assert.ok(!keep.sentence.text.includes("**The content"));
+});
+
+test("a topology fact offering only keep and prune renders them from the glossary and gains no content or stands", () => {
+  const html = build(TEMPLATE, excludeUnaligned(withDerivedAnswers(TOPOLOGY_PAGE)));
+  const json = JSON.parse(html.match(/<script type="application\/json" id="graph">([\s\S]*?)<\/script>/)[1].replace(/\\u003c/g, "<"));
+  const node = json.nodes.find((n) => n.slug === "topology-vocabulary-only");
+  const fact = node.facts.find((f) => f.name === "topology");
+
+  // `prune` is confirmed, and reserved vocabulary is never the option that
+  // holds a node's own text: the fact gains no `stands` despite the ruling.
+  assert.equal(fact.stands, null);
+
+  const keep = fact.options.find((o) => o.name === "keep");
+  const prune = fact.options.find((o) => o.name === "prune");
+  assert.equal(keep.sentence.text, "The node stays in the record, its question still its own.");
+  assert.equal(prune.sentence.text, "The node leaves the record, its question answered elsewhere or not at all.");
+  assert.ok(!prune.sentence.text.includes("**The content"), "confirmed reserved vocabulary still carries no content");
+});
+
+test("an authority fact renders exactly as it did before topology widened: closed vocabulary, no subsection, no stands", () => {
+  const html = build(TEMPLATE, excludeUnaligned(withDerivedAnswers(TOPOLOGY_PAGE)));
+  const json = JSON.parse(html.match(/<script type="application\/json" id="graph">([\s\S]*?)<\/script>/)[1].replace(/\\u003c/g, "<"));
+  const node = json.nodes.find((n) => n.slug === "topology-content");
+  const fact = node.facts.find((f) => f.name === "authority");
+
+  // `ratified` is confirmed, but authority's classes are closed vocabulary
+  // like topology's `keep`/`prune`: the fact gains no `stands`, and the
+  // option's sentence is the glossary's alone, with no content appended.
+  assert.equal(fact.stands, null);
+  const ratified = fact.options.find((o) => o.name === "ratified");
+  assert.equal(ratified.sentence.text, "The author ruled on this answer directly, in the alignment dialogue.");
 });
 
 /* ------------------------------------------------ the payload's own weight

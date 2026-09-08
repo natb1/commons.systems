@@ -29,6 +29,8 @@ import { readWords, resolveReference, unreferencedEntries } from './words.mjs';
 import {
   blobSha1,
   canonicalizeId,
+  CLOSED_VOCABULARY_FACTS,
+  CONFERRABLE_CLASSES,
   confirmedOption,
   deriveAncestors,
   deriveCeiling,
@@ -46,21 +48,25 @@ import {
   divergesFromRecommendation,
   factByName,
   factMoved,
+  isVocabularyOption,
   moved,
   nodeEncoding,
   onFrontier,
-  PER_NODE_FACTS,
   proposal,
+  RESERVED_FACT_OPTIONS,
   reviewStale,
   ruledOption,
-  VOCABULARY_FACTS,
+  TOPOLOGY_VOCABULARY,
 } from './derive.mjs';
 
-// Which encoding a node is written in, and which option its rulings confirm,
-// are derivations like any other and live in `derive.mjs`, where the hashes
-// need them; they are re-exported here so a consumer that reads the graph
-// through this module has them under one import.
-export { confirmedOption, nodeEncoding };
+// Which encoding a node is written in, which option its rulings confirm, and
+// the reserved vocabulary a fact's options may draw on are derivations like
+// any other and live in `derive.mjs`, where the hashes need them too; they
+// are re-exported here so a consumer that reads the graph through this
+// module has them under one import.
+export {
+  confirmedOption, nodeEncoding, CONFERRABLE_CLASSES, RESERVED_FACT_OPTIONS, TOPOLOGY_VOCABULARY, isVocabularyOption,
+};
 
 // ---------------------------------------------------------------------------
 // vocabulary
@@ -83,8 +89,10 @@ export const FORMS = ['target', 'rule', 'assumption', 'arche', 'reading'];
 // The four fact names, in the order '## Facts' presents them when a node
 // carries them all: the answer, whose options are the candidate answers to
 // the node's question, and the reserved three. No fifth is minted without a
-// ruling on the dialogue node.
-export const FACT_NAMES = ['answer', 'authority', 'existence', 'persistence'];
+// ruling on the dialogue node. A topology fact is minted on a node when a
+// second placement becomes viable; where one placement is viable there is
+// no fact, and the node's place is a field of it.
+export const FACT_NAMES = ['answer', 'authority', 'topology', 'persistence'];
 // `against` is the AI's own case against the option the fact recommends,
 // written when the recommendation is recorded, so a reader sees the argument
 // the recommendation had to beat rather than only the argument for it.
@@ -108,10 +116,6 @@ export const RULING_KEYS = ['response', 'date', 'of', 'reason'];
 export const RULING_REQUIRED_KEYS = ['response', 'date', 'of'];
 // `deny` is never stored: a denial is a kickback with the author's words.
 export const RULING_RESPONSES = ['confirm', 'edit'];
-// The classes a ruling on the `authority` fact confers. `deferred` is one of
-// them since 2026-09-04: it is a class the author confers, not one the AI
-// writes for itself.
-export const CONFERRABLE_CLASSES = ['ratified', 'delegated', 'deferred'];
 // The named sources of an option. Any other non-empty string is read as the
 // id of the node, or the name of the instrument, that raised it.
 export const OPTION_SOURCES = ['author', 'ai', 'review'];
@@ -210,18 +214,16 @@ export const DEFINES_KEYS = ['term', 'gloss'];
 // node as it would stand, and a stamp, the facts, and the dialogue's own
 // state are not part of that.
 export const FENCE_FORBIDDEN_KEYS = ['authority', 'facts', 'stage', 'review', 'depends', 'probes'];
-// Whether the node keeps its answer once the question is settled, or is
-// derived from what stands elsewhere. Free text per node, unlike the two
-// vocabulary facts: what persistence would mean here is this node's own.
-export const EXISTENCE_OPTIONS = ['keep', 'prune'];
-// The vocabulary facts and their option names. Both are vocabulary rather
-// than slugs, which is why their options carry no `#### <option>` subsection:
-// `ratified` means the same on every node, so its sentence is written once on
-// the node that defines the term and projected from there
-// (commons.systems/disposition-graph/dialogue,
-// `every-option-carries-its-sentence`). `persistence` names its options
-// freely and is not one of these.
-export const RESERVED_FACT_OPTIONS = { authority: CONFERRABLE_CLASSES, existence: EXISTENCE_OPTIONS };
+// `authority` is closed: a ruling confers one of exactly three classes and
+// nothing else is legal there. `topology` is open: `keep` and `prune` are
+// the record's own vocabulary and carry no subsection, but a node may also
+// offer a named placement option -- folding the node into another, or
+// standing it under different questions -- which is this node's own and
+// carries a `#### <option>` subsection like any answer option. `persistence`
+// names its options freely and reserves none. `CONFERRABLE_CLASSES`,
+// `RESERVED_FACT_OPTIONS`, `TOPOLOGY_VOCABULARY`, `CLOSED_VOCABULARY_FACTS`
+// and `isVocabularyOption` live in `derive.mjs`, which needs them for the
+// hashes; the first four are re-exported above.
 
 const FRONTMATTER_KEY_SET = new Set(FRONTMATTER_KEYS);
 const FORM_SET = new Set(FORMS);
@@ -231,8 +233,7 @@ const OPTION_KEY_SET = new Set(OPTION_KEYS);
 const OPTION_STATUS_SET = new Set(OPTION_STATUSES);
 const RULING_KEY_SET = new Set(RULING_KEYS);
 const RULING_RESPONSE_SET = new Set(RULING_RESPONSES);
-const VOCABULARY_FACT_SET = new Set(VOCABULARY_FACTS);
-const PER_NODE_FACT_SET = new Set(PER_NODE_FACTS);
+const CLOSED_VOCABULARY_FACT_SET = new Set(CLOSED_VOCABULARY_FACTS);
 const DEFINES_KEY_SET = new Set(DEFINES_KEYS);
 const BEARS_KEY_SET = new Set(BEARS_KEYS);
 const RELATION_SET = new Set(RELATIONS);
@@ -244,6 +245,7 @@ const REVIEW_STRENGTH_SET = new Set(REVIEW_STRENGTHS);
 const REVIEW_KEY_SET = new Set([...REVIEW_DRAFT_KEYS, 'survey']);
 const ANSWER_OWED_NOTE = 'every answer option but the one that stands says in prose what it would answer';
 const PERSISTENCE_OWED_NOTE = 'every persistence option says in prose what keeping the node that shape would mean';
+const TOPOLOGY_OWED_NOTE = 'every topology option but keep and prune says in prose what that placement would mean';
 const SURVEY_STAGE_SET = new Set(SURVEY_STAGES);
 const SHIM_KEY_SET = new Set(SHIM_KEYS);
 const PROBE_KEY_SET = new Set(PROBE_KEYS);
@@ -471,7 +473,8 @@ function readDependsList(fm, problems) {
  * recommends, and the author's ruling on the option they chose. The `answer`
  * fact's options are the candidate answers to the node's own question; the
  * reserved three -- `authority`, the class a ruling would confer;
- * `existence`, keep or prune; `persistence`, present or derived -- are the
+ * `topology`, where the node's place in the graph is decided: `keep`,
+ * `prune`, or a named placement; `persistence`, present or derived -- are the
  * decisions about the answer that are not questions under it, since a
  * decision that *is* a question is a child node
  * (commons.systems/disposition-graph/dialogue).
@@ -643,14 +646,16 @@ function readFacts(raw, problems) {
           ok = false;
         }
       }
-    } else if (Object.prototype.hasOwnProperty.call(RESERVED_FACT_OPTIONS, entry.name)) {
+    } else if (CLOSED_VOCABULARY_FACT_SET.has(entry.name)) {
+      // `authority` is the only closed fact today: its entire option
+      // namespace is the three conferrable classes, and any other name is
+      // rejected outright. `topology` is not closed -- `keep`/`prune` are
+      // reserved, but a node may also offer a freely-named placement option
+      // beside them, so it never reaches this branch (see RESERVED_FACT_OPTIONS
+      // above and CLOSED_VOCABULARY_FACTS in derive.mjs).
       const vocabulary = RESERVED_FACT_OPTIONS[entry.name];
       if (!optionNames.every((n) => vocabulary.includes(n))) {
-        problems.push(
-          entry.name === 'authority'
-            ? `fact 'authority' may only offer the classes a ruling confers: ${vocabulary.join(', ')}`
-            : `fact '${entry.name}' may only offer its own vocabulary: ${vocabulary.join(', ')}`,
-        );
+        problems.push(`fact '${entry.name}' may only offer the classes a ruling confers: ${vocabulary.join(', ')}`);
         ok = false;
       }
     }
@@ -762,9 +767,9 @@ function readFacts(raw, problems) {
  * -- and is omitted where there is nothing to say and nothing owed, so the
  * `### ` headings must be a subsequence of the fact names rather than a
  * match: every one names a fact, none repeats, and they read in the facts'
- * order. What is owed is one `#### <option>` per option of a per-node fact,
- * so such a fact's `### ` heading is omitted only where it has no owed
- * option at all.
+ * order. What is owed is one `#### <option>` per option that is not itself
+ * reserved vocabulary (`isVocabularyOption`, in derive.mjs), so such a fact's
+ * `### ` heading is omitted only where it has no owed option at all.
  *
  * Under `### answer` and `### persistence`, one `#### <option>` subsection
  * per option says what that option would answer and why it is on the table:
@@ -773,10 +778,13 @@ function readFacts(raw, problems) {
  * `every-option-carries-its-sentence`). The one exemption is the answer
  * option named by `stands`, whose text is the `## Answer` section itself, so
  * the option headings must match the option list exactly but for that one.
- * A vocabulary fact -- `authority`, `existence` -- carries no `#### `
- * subsections at all: its option names mean the same on every node, so the
+ * `authority` is a closed vocabulary fact and carries no `#### ` subsections
+ * at all: its three option names mean the same on every node, so the
  * sentence is written once on the node that defines the term and projected
- * from there.
+ * from there. `topology` is mixed: `keep` and `prune` are reserved the same
+ * way, but a node may also offer a freely-named placement option beside
+ * them, and that option owes a `#### ` subsection exactly like an answer
+ * option, since its meaning is this node's own.
  *
  * @param {string} sectionText
  * @param {Array<object>|null} facts - the parsed facts in order, or null
@@ -854,16 +862,17 @@ function parseFactsSection(sectionText, facts, problems) {
     checkOptionHeadings(facts[at], heading, problems);
   }
 
-  // A per-node fact's options state themselves in prose, so a fact with such
-  // an option needs its '### <fact>' subsection at all.
+  // An option that owns its subsection states itself in prose, so a fact
+  // with such an option needs its '### <fact>' subsection even where it has
+  // nothing else to say.
   for (const fact of facts) {
-    if (!PER_NODE_FACT_SET.has(fact.name) || seen.has(fact.name)) continue;
+    if (seen.has(fact.name)) continue;
     const owed = owedOptionSubsections(fact);
     if (owed.length === 0) continue;
     problems.push(
       `'## Facts' has no '### ${fact.name}' subsection, so ${owed.map((n) => `'#### ${n}'`).join(', ')} `
       + `${owed.length === 1 ? 'is' : 'are'} missing; `
-      + (fact.name === ANSWER_FACT ? ANSWER_OWED_NOTE : PERSISTENCE_OWED_NOTE),
+      + (fact.name === ANSWER_FACT ? ANSWER_OWED_NOTE : fact.name === 'topology' ? TOPOLOGY_OWED_NOTE : PERSISTENCE_OWED_NOTE),
     );
   }
 
@@ -871,25 +880,38 @@ function parseFactsSection(sectionText, facts, problems) {
 }
 
 /**
+ * Whether one option of one fact owns a `#### <option>` subsection: every
+ * option does, but for the answer option named by `stands`, whose text is
+ * the `## Answer` section, and an option that is itself reserved vocabulary
+ * (`isVocabularyOption`, in derive.mjs) -- the classes on `authority`, or
+ * `keep`/`prune` on `topology` -- whose sentence is the gloss on the node
+ * that defines the term.
+ *
+ * @param {object} fact
+ * @param {string} optionName
+ * @returns {boolean}
+ */
+function ownsSubsection(fact, optionName) {
+  return optionName !== fact.stands && !isVocabularyOption(fact.name, optionName);
+}
+
+/**
  * The `#### <option>` subsections one fact owes under its `### <fact>`
- * heading: every option of a per-node fact, but for the answer option named
- * by `stands`, whose text is the `## Answer` section; none at all for a
- * vocabulary fact, whose option names mean the same on every node.
+ * heading: every option that owns one (`ownsSubsection`), in the fact's own
+ * option order.
  *
  * @param {object} fact
  * @returns {string[]} the option names, in the fact's own option order.
  */
 function owedOptionSubsections(fact) {
-  if (!PER_NODE_FACT_SET.has(fact.name)) return [];
-  return fact.options.filter((o) => o.name !== fact.stands).map((o) => o.name);
+  return fact.options.filter((o) => ownsSubsection(fact, o.name)).map((o) => o.name);
 }
 
 /**
  * The `#### <option>` headings under one `### <fact>` subsection: an exact
- * match against the fact's options in order for a per-node fact, but for the
- * answer option named by `stands`, which may be omitted (its text is
- * `## Answer`) and may be written anyway; none at all for a vocabulary fact,
- * whose option name means the same on every node and whose sentence is the
+ * match, in order, against the options that own one (`ownsSubsection`); none
+ * at all for a closed vocabulary fact (`CLOSED_VOCABULARY_FACT_SET`), whose
+ * every option name means the same on every node and whose sentence is the
  * gloss on the node that defines the term.
  *
  * @param {object} fact
@@ -897,8 +919,7 @@ function owedOptionSubsections(fact) {
  * @param {string[]} problems
  */
 function checkOptionHeadings(fact, heading, problems) {
-  const optionNames = fact.options.map((o) => o.name);
-  if (VOCABULARY_FACT_SET.has(fact.name)) {
+  if (CLOSED_VOCABULARY_FACT_SET.has(fact.name)) {
     for (const name of heading.options) {
       problems.push(
         `'### ${fact.name}' has '#### ${name}', which a vocabulary fact's options do not carry; `
@@ -908,8 +929,21 @@ function checkOptionHeadings(fact, heading, problems) {
     return;
   }
 
-  const expected = optionNames.filter((n) => n !== fact.stands);
-  const found = heading.options.filter((n) => n !== fact.stands);
+  // A mixed fact's own vocabulary members (`keep`/`prune` on `topology`) own
+  // no subsection either, but unlike a closed fact this is not the whole of
+  // its option namespace, so a stray one is called out on its own rather
+  // than by rejecting every heading present.
+  for (const name of heading.options) {
+    if (isVocabularyOption(fact.name, name)) {
+      problems.push(
+        `'### ${fact.name}' has '#### ${name}', which a vocabulary fact's options do not carry; `
+        + `'${name}' means the same on every node, so its sentence is the gloss on the node that defines the term`,
+      );
+    }
+  }
+
+  const expected = owedOptionSubsections(fact);
+  const found = heading.options.filter((n) => ownsSubsection(fact, n));
   const span = Math.max(expected.length, found.length);
   for (let i = 0; i < span; i += 1) {
     if (expected[i] !== found[i]) {
@@ -1485,8 +1519,8 @@ export function surveyJudges(graph) {
  * `## Facts`; a named change names another option of the same fact; and the
  * whole resolution is acyclic with every hunk applying exactly.
  *
- * Mutates each option of the per-node facts with what it read; pushes one
- * message per problem.
+ * Mutates each option that is not itself reserved vocabulary
+ * (`isVocabularyOption`) with what it read; pushes one message per problem.
  *
  * @param {Array<object>} facts - the parsed facts, prose already attached.
  * @param {{id: string, graph: string, slug: string, path: string}} ctx
@@ -1496,8 +1530,8 @@ export function surveyJudges(graph) {
  */
 function parseContentOptions(facts, ctx, question, stage, problems) {
   for (const fact of facts) {
-    if (!PER_NODE_FACT_SET.has(fact.name)) continue;
     for (const option of fact.options) {
+      if (isVocabularyOption(fact.name, option.name)) continue;
       const label = `fact '${fact.name}' option '${option.name}'`;
       const parsed = parseOptionSubsection(option.prose, label, problems);
       option.sentence = parsed.sentence;
@@ -1531,8 +1565,8 @@ function parseContentOptions(facts, ctx, question, stage, problems) {
   // same fact, and the resolution it opens is walked below.
   const unresolvable = new Set();
   for (const fact of facts) {
-    if (!PER_NODE_FACT_SET.has(fact.name)) continue;
     for (const option of fact.options) {
+      if (isVocabularyOption(fact.name, option.name)) continue;
       const content = option.content;
       if (content === null) continue;
       const label = `fact '${fact.name}' option '${option.name}'`;
@@ -1557,8 +1591,8 @@ function parseContentOptions(facts, ctx, question, stage, problems) {
   // says so, and saying it twice is not a second defect.
   const resolvable = { id: ctx.id, facts };
   for (const fact of facts) {
-    if (!PER_NODE_FACT_SET.has(fact.name)) continue;
     for (const option of fact.options) {
+      if (isVocabularyOption(fact.name, option.name)) continue;
       if (option.content === null || unresolvable.has(`${fact.name}\n${option.name}`)) continue;
       try {
         option.resolved = resolveOptionContent(resolvable, fact.name, option.name);

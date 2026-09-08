@@ -59,7 +59,7 @@ import { createHash } from 'node:crypto';
 
 /**
  * @typedef {Object} Fact
- * @property {'answer'|'authority'|'existence'|'persistence'} name
+ * @property {'answer'|'authority'|'topology'|'persistence'} name
  * @property {Option[]} options
  * @property {string|null} recommends
  * @property {string|null} boldness
@@ -71,14 +71,57 @@ import { createHash } from 'node:crypto';
  */
 
 /**
- * The facts whose options are a fixed vocabulary rather than text written per
- * node. `ratified` means the same on every node it appears on, so its
- * sentence is written once, on the node that defines the term, and projected
- * from there; the option itself carries no `#### <option>` subsection
- * (commons.systems/disposition-graph/dialogue,
- * `every-option-carries-its-sentence`).
+ * The classes a ruling on the `authority` fact confers. `deferred` is one of
+ * them since 2026-09-04: it is a class the author confers, not one the AI
+ * writes for itself.
  */
-export const VOCABULARY_FACTS = ['authority', 'existence'];
+export const CONFERRABLE_CLASSES = ['ratified', 'delegated', 'deferred'];
+
+/**
+ * `topology`'s own reserved vocabulary. `keep` and `prune` mean the same on
+ * every node they appear on, so their sentence is written once, on the node
+ * that defines the term, and projected from there
+ * (commons.systems/disposition-graph/dialogue,
+ * `every-option-carries-its-sentence`); neither carries a `#### <option>`
+ * subsection. `topology` also takes freely-named placement options -- folding
+ * the node into another, or standing it under different questions -- which
+ * are this node's own and carry a `#### <option>` subsection like any answer
+ * option, so this list is not `topology`'s whole option namespace, only the
+ * reserved part of it.
+ */
+export const TOPOLOGY_VOCABULARY = ['keep', 'prune'];
+
+/**
+ * The reserved vocabulary each fact draws on, where it has one.
+ * `RESERVED_FACT_OPTIONS[factName]` is the fixed list of option names that
+ * mean the same on every node wherever they appear on that fact.
+ * `CLOSED_VOCABULARY_FACTS`, below, says which of these facts' entire option
+ * namespace is this list (`authority`) and which offer it beside options of
+ * their own (`topology`).
+ */
+export const RESERVED_FACT_OPTIONS = { authority: CONFERRABLE_CLASSES, topology: TOPOLOGY_VOCABULARY };
+
+/**
+ * The facts whose *entire* option namespace is reserved vocabulary: an
+ * option outside `RESERVED_FACT_OPTIONS[name]` is illegal there. `authority`
+ * is the only one -- a ruling confers one of exactly three classes and
+ * nothing else. `topology` has reserved vocabulary too (`keep`, `prune`) but
+ * is not closed by it: a node may also offer a named placement option, so an
+ * option outside `TOPOLOGY_VOCABULARY` is not thereby illegal.
+ */
+export const CLOSED_VOCABULARY_FACTS = ['authority'];
+
+/**
+ * Whether `optionName`, on the fact named `factName`, is one of that fact's
+ * reserved options -- `ratified`/`delegated`/`deferred` on `authority`, or
+ * `keep`/`prune` on `topology` -- and so means the same on every node and
+ * carries no `#### <option>` subsection of its own. False for every other
+ * fact/option pair, `topology`'s own placement options included.
+ */
+export function isVocabularyOption(factName, optionName) {
+  const vocabulary = RESERVED_FACT_OPTIONS[factName];
+  return Array.isArray(vocabulary) && vocabulary.includes(optionName);
+}
 
 /**
  * The facts whose options say in their own prose what they would answer: the
@@ -86,6 +129,14 @@ export const VOCABULARY_FACTS = ['authority', 'existence'];
  * persistence, whose option names are written per node too. Every option of
  * these owes a `#### <option>` subsection, but for the one named by `stands`,
  * whose sentence is the `## Answer` section itself.
+ *
+ * `topology` is deliberately not one of these: whether one of its options
+ * owes a subsection is read per option, with `isVocabularyOption`, since
+ * `keep` and `prune` do not and a named placement does. This list stays
+ * `answer`/`persistence` for a second reason too --
+ * `legacyContentFactRecommendationHash`, below, reads it to reproduce a pin
+ * exactly as the record computed it before this widening, and a pin already
+ * written is never recomputed under today's rule.
  */
 export const PER_NODE_FACTS = ['answer', 'persistence'];
 
@@ -314,11 +365,11 @@ export function glossary(graph) {
  * - the answer option named by `stands` yields the node's `## Answer`, which
  *   is its text; a projection reads its first sentences exactly as it reads
  *   every other option's from its subsection, so the row is no longer bare;
- * - any other answer option, and every persistence option, yields its
- *   `#### <option>` prose;
- * - an authority or existence option yields the gloss of the term its name
- *   is, from the node that defines it, since those names are the graph's own
- *   vocabulary.
+ * - an authority option, or a `keep`/`prune` option on `topology`, yields the
+ *   gloss of the term its name is, from the node that defines it, since
+ *   those names are the graph's own vocabulary (`isVocabularyOption`);
+ * - any other answer option, every persistence option, and a named placement
+ *   option on `topology`, yields its `#### <option>` prose.
  *
  * Null where nothing is recorded -- an option whose subsection is empty, or a
  * term no node has glossed. A caller that wants to say something in that case
@@ -338,12 +389,12 @@ export function optionText(graph, node, fact, option) {
     const answer = node?.answer ?? '';
     return answer.trim().length > 0 ? { text: answer, from: node.id } : null;
   }
-  if (PER_NODE_FACT_SET.has(fact.name)) {
-    const prose = option.prose ?? '';
-    return prose.trim().length > 0 ? { text: prose, from: node.id } : null;
+  if (isVocabularyOption(fact.name, option.name)) {
+    const defined = glossary(graph).get(option.name) ?? null;
+    return defined === null ? null : { text: defined.gloss, from: defined.node };
   }
-  const defined = glossary(graph).get(option.name) ?? null;
-  return defined === null ? null : { text: defined.gloss, from: defined.node };
+  const prose = option.prose ?? '';
+  return prose.trim().length > 0 ? { text: prose, from: node.id } : null;
 }
 
 /**
@@ -729,7 +780,9 @@ export function deriveStandingHash(node) {
  * recommended content, so the pin moves. A resolution that failed is a
  * validator problem on the node and leaves `resolved` null, which hashes as
  * the empty string, as does a `sentence` no fact writes on its options --
- * the reader fills both in for the per-node facts alone.
+ * the reader fills both in for every option that is not itself reserved
+ * vocabulary (`isVocabularyOption`): every answer and persistence option,
+ * and a `topology` option other than `keep`/`prune`.
  *
  * @param {DeriveNode} node
  * @param {Fact} fact

@@ -66,7 +66,7 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
       "asks": "<the question in one line, put open and never as a choice between drafted answers>",
       "why": "<why the record cannot answer it, naming the locus you read and what it leaves open>",
       "discharges": "<what an answer would settle and which recommendation on this node it would move>",
-      "fact": "answer" | "authority" | "existence" | "persistence" | null
+      "fact": "answer" | "authority" | "topology" | "persistence" | null
     }
   ],
   "facts_check": "<what the diff changed about what each fact recommends, its boldness, what stands, and the fence, in one to three sentences>" | null,

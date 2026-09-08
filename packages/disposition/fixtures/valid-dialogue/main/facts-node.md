@@ -25,7 +25,7 @@ facts:
       - name: delegated
     recommends: delegated
     boldness: low
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune

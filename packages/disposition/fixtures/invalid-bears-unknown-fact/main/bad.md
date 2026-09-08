@@ -4,7 +4,7 @@ form: reading
 source: A tradition the fixture cites
 bears:
   - node: example.test/main/root
-    fact: existence
+    fact: topology
     option: keep
     relation: adopted
 under:

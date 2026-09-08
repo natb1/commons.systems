@@ -9,6 +9,6 @@ Still open.
 
 ## Facts
 
-### existence
+### topology
 
 A subsection with no facts list behind it to explain.

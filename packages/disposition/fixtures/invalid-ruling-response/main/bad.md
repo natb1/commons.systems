@@ -2,7 +2,7 @@
 question: May a ruling record a denial?
 stage: periagogic
 facts:
-  - name: existence
+  - name: topology
     options:
       - name: keep
         ruling:

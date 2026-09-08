@@ -6,7 +6,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: f1ddedd9d315621be162e861754cb95c1c6da037
+  of: b13b1f3d702a3cdcdd5a1ca7d45626e93fc30601
 facts:
   - name: answer
     options:
@@ -16,7 +16,7 @@ facts:
     recommends: standing
     boldness: moderate
     stands: standing
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune
@@ -45,7 +45,7 @@ against the parent's.
 
 ## Facts
 
-### existence
+### topology
 
 Prune the node: the question is the parent's question asked twice, and the
 one sentence of this answer the parent does not already carry moves into it.
@@ -53,7 +53,7 @@ Nothing here survives as a node of its own.
 
 ## Account
 
-Pruning is the 'existence' fact and never an answer option: an answer option
+Pruning is the 'topology' fact and never an answer option: an answer option
 is a candidate answer to this node's question, and deleting the node answers
 nothing. The answer fact therefore recommends the option that stands and
-quotes no fence, while the existence fact carries the proposal to prune.
+quotes no fence, while the topology fact carries the proposal to prune.

@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 // (commons.systems/disposition-graph/dialogue,
 // `every-option-carries-its-sentence`): a projection reads them from here and
 // never carries a sentence of its own for any option.
-import { glossary, optionText, confirmedOption } from "./derive.mjs";
+import { glossary, optionText, confirmedOption, isVocabularyOption } from "./derive.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MARKER = "<!--DG:GRAPH-->";
@@ -103,9 +103,35 @@ function encodingOf(node) {
   return node?.encoding === "content" ? "content" : "legacy";
 }
 
-// The facts whose options say what they would answer in their own text, and
-// so the facts whose options carry content: read.mjs's `PER_NODE_FACTS`.
-const PER_NODE_FACT_NAMES = new Set(["answer", "persistence"]);
+// Whether one option owns a `#### <option>` subsection and so says what it
+// would answer in its own text, carrying its own sentence and content,
+// rather than reading a fixed sentence off the glossary. The rule is per
+// option, not per fact (commons.systems/disposition-graph/dialogue,
+// `every-option-carries-its-sentence`): every option owns a subsection except
+// reserved vocabulary (derive.mjs's `isVocabularyOption`,
+// `RESERVED_FACT_OPTIONS`) -- `ratified`/`delegated`/`deferred` on
+// `authority`, `keep`/`prune` on `topology` -- so a freely-named `topology`
+// placement option owns a subsection exactly as an `answer` or `persistence`
+// option does.
+//
+// read.mjs's own `ownsSubsection` (not exported, and not imported here --
+// this file's `--input` path stays free of read.mjs's static 'yaml' import,
+// see `loadGraph`) also excludes the option `stands` names on a legacy node,
+// whose text lives in `## Answer` rather than a subsection. Every call below
+// runs only where `encodingOf(node) === "content"`, and there `stands` is
+// never present on a node as parsed -- a fact with a present `stands` is what
+// makes `nodeEncoding` call a node legacy in the first place -- so that
+// exclusion is always vacuous here. It would also be wrong to apply
+// literally once `withDerivedAnswers` has run: it writes `stands` onto a
+// content-encoded fact's own copy to mark the confirmed option for
+// `standsName` and the browser's ordering, re-using the field name for a
+// purpose `read.mjs` never gave it, one this function must not read back as
+// "owns no subsection". `isVocabularyOption` alone, never `.stands`, is
+// therefore the whole of the rule this file needs, imported from the module
+// that owns it rather than copied.
+function ownsSubsection(fact, optionName) {
+  return !isVocabularyOption(fact.name, optionName);
+}
 
 function factByName(node, name) {
   return (node?.facts ?? []).find((f) => f && f.name === name) ?? null;
@@ -189,12 +215,14 @@ function derivedRationale(node) {
 }
 
 /* An option's own sentence: what it would answer, in its own words. In the
- * content encoding the reader parses it out of the `#### <option>`
+ * content encoding, an option that owns a `#### <option>` subsection
+ * (`ownsSubsection`) has the reader parse its sentence out of that
  * subsection, ahead of the AI's accumulations and the content itself, and it
- * is that sentence and never the whole subsection a row leads with. In the
- * legacy encoding it is `optionText`'s, the one home of it. */
+ * is that sentence and never the whole subsection a row leads with. Every
+ * other option -- reserved vocabulary on a content node, and any option at
+ * all on a legacy node -- is `optionText`'s, the one home of it. */
 function optionSaid(nodes, node, fact, option) {
-  if (encodingOf(node) === "content" && PER_NODE_FACT_NAMES.has(fact.name)) {
+  if (encodingOf(node) === "content" && ownsSubsection(fact, option.name)) {
     const said = typeof option?.sentence === "string" ? option.sentence : "";
     return said.trim() === "" ? null : { text: said, from: node.id };
   }
@@ -559,9 +587,14 @@ export function excludeUnaligned(graph) {
  */
 /* `graph`, with every content-encoded node carrying the answer its options
  * decide: the `## Answer` and `## Rationale` of the resolved content of the
- * option last confirmed, or of the one recommended where none is, and the
- * confirmed option's name on `stands`, which every projection reads as the
- * label on the choice that holds the record's text.
+ * option last confirmed, or of the one recommended where none is, and --
+ * on every fact, not only `answer` -- the confirmed option's name on
+ * `stands` where that option owns a subsection (`ownsSubsection`), which
+ * every projection reads as the label on the choice that holds this node's
+ * own text. A fact whose confirmed option is reserved vocabulary (an
+ * `authority` class, or `topology`'s `keep`/`prune`) gets no `stands`: that
+ * option's sentence is the glossary's, never this node's own text, so
+ * nothing here holds the record's text for it to label.
  *
  * Nothing is stored for any of it -- the confirmed option is read off the
  * rulings and the answer is read off the confirmed option
@@ -580,9 +613,8 @@ export function withDerivedAnswers(graph) {
     const answer = derivedAnswer(n);
     const rationale = derivedRationale(n);
     const facts = (n.facts || []).map((f) => {
-      if (!PER_NODE_FACT_NAMES.has(f.name)) return f;
       const holds = confirmedOption(n, f.name);
-      return holds === null ? f : { ...f, stands: holds };
+      return holds === null || !ownsSubsection(f, holds) ? f : { ...f, stands: holds };
     });
     const next = { ...n, facts };
     if (answer !== null) next.answer = answer;
@@ -594,17 +626,18 @@ export function withDerivedAnswers(graph) {
 }
 
 /* What one option's row in the browser says, as markdown: its own sentence,
- * and -- in the content encoding, where the option carries the node it would
- * make -- the content it resolves to, named against its base where it is a
- * change rather than a whole, the entries of the author's words it rests on
- * and diverges from, resolved from the ledger and quoted verbatim, and the
- * AI's own accumulated support and divergence. A legacy option says what it
- * has always said. The browser renders an option's sentence and nothing
- * else of it, so everything the content encoding added to an option reaches
- * the page through here. */
+ * and -- in the content encoding, for an option that owns a subsection
+ * (`ownsSubsection`) and so carries the node it would make -- the content it
+ * resolves to, named against its base where it is a change rather than a
+ * whole, the entries of the author's words it rests on and diverges from,
+ * resolved from the ledger and quoted verbatim, and the AI's own accumulated
+ * support and divergence. A legacy option, and reserved vocabulary on a
+ * content node, says only what it has always said. The browser renders an
+ * option's sentence and nothing else of it, so everything the content
+ * encoding added to an option reaches the page through here. */
 function browserOptionSentence(graph, n, f, o) {
   const said = optionSaid(graph, n, f, o);
-  if (encodingOf(n) !== "content" || !PER_NODE_FACT_NAMES.has(f.name)) return said;
+  if (encodingOf(n) !== "content" || !ownsSubsection(f, o.name)) return said;
 
   const parts = said ? [said.text] : [];
   const content = optionContentText(o);

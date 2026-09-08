@@ -8,7 +8,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-04
-  of: 10bdd93cbe1f0657f65eb748ec976b465949e675
+  of: 921df0dad1a04099084045f69bf3194eb249c3c1
   against: The passed status is the AI accounting for its own judgment, which the author may claim.
 facts:
   - name: answer
@@ -34,7 +34,7 @@ facts:
       - name: delegated
     recommends: ratified
     boldness: low
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune

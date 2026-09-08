@@ -2,7 +2,7 @@
 question: Does the same option name twice fail?
 stage: periagogic
 facts:
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: keep

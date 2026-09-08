@@ -1,0 +1,5 @@
+module: example.test
+ref: disposition
+graphs:
+  main:
+    about: the fixture topology's own per-option vocabulary tests read

@@ -367,7 +367,7 @@ function dependsText(node) {
 
 /**
  * The terms one node defines, each with the gloss it wrote for it -- the
- * one sentence a vocabulary fact's option (`authority`/`existence`) shows
+ * one sentence a vocabulary fact's option (`authority`/`topology`) shows
  * wherever that term is offered, so a passed-over or missing gloss here is
  * a gap this brief should catch. `(no gloss yet)` where the node named the
  * term but wrote no sentence for it.

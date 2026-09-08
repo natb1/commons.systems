@@ -2,7 +2,7 @@
 question: May a fact state a boldness and recommend nothing?
 stage: periagogic
 facts:
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune

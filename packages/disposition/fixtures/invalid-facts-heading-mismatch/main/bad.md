@@ -2,7 +2,7 @@
 question: Must a Facts subsection name a fact on the node?
 stage: periagogic
 facts:
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune

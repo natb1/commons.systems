@@ -2,7 +2,7 @@
 question: Does a facts entry with no options fail?
 stage: periagogic
 facts:
-  - name: existence
+  - name: topology
     recommends: keep
     boldness: low
 ---

@@ -2,7 +2,7 @@
 question: Does a fact recommending an option it does not offer fail?
 stage: periagogic
 facts:
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune

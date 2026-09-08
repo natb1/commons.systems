@@ -13,7 +13,7 @@ facts:
     options:
       - name: ratified
       - name: delegated
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune

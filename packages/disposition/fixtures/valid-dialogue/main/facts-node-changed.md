@@ -9,7 +9,7 @@ facts:
         source: ai
         ref: 2026-09-03
     stands: standing
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune

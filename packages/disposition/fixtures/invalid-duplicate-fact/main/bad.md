@@ -2,10 +2,10 @@
 question: Does the same fact twice fail?
 stage: periagogic
 facts:
-  - name: existence
+  - name: topology
     options:
       - name: keep
-  - name: existence
+  - name: topology
     options:
       - name: prune
 ---
