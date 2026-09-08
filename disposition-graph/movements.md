@@ -243,6 +243,8 @@ facts:
           - words/2026-09-08/8
           - words/2026-09-08/9
           - words/2026-09-08/10
+        diverges:
+          - words/2026-09-08/36
       - name: periagoge-maieutic-review-in-sequence
         source: commons.systems/disposition-graph/growth
         ref: "2026-09-02"
@@ -710,3 +712,27 @@ the article is confirmed and the placement of the quotation on p. 717 is not, th
 article being closed access. The citation was amended in both places at once,
 because a locus improved where it was argued and left thin where it is also used is
 the defect this record repaired on `recording` the same day.
+
+### The probe's type covers two movements of three, 2026-09-08
+
+`words/2026-09-08/36` types every probe at step 4a and carries the type into the
+standard report at step 7, and the two values are periagogic and maieutic. This node
+recommends three movements and `defines` the third as elenctic. The two do not fit, and
+the misfit is recorded here because it is caused by this node's count and not by the
+encoding that carries the type.
+
+Either reading of the entry leaves something unsaid. If the type names the movement the
+probe serves, it is one value short, and a probe that tests what has already been drawn
+out -- which is what the elenctic movement does -- has no type to carry. If the type
+names two things a probe may do rather than three movements it may serve, then the
+elenctic movement proceeds by some instrument that is not a probe, and the record does
+not say what that instrument is; this node's answer describes the movement without
+naming what it is conducted with.
+
+Recorded as a divergence rather than as an option, and the recommendation does not
+move. What would resolve it is either a third value, which is a change to
+`author-questions`' encoding, or a statement here of what the elenctic movement uses,
+which is a change to this node's answer; which of the two is right depends on whether
+the elenctic movement asks the author anything at all, and that is a question about
+this node's own subject that the entry does not touch. The divergence names the
+conflict so that whichever node is worked next meets it.
