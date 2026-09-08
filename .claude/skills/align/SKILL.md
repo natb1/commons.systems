@@ -1095,7 +1095,10 @@ whose blind spots a reading hunts is the main thread and a reader below the
 main thread's model finds what the main thread already saw. That model is
 named by the review skill at the launch and by no text that outlives the
 launch, so a substitute, where the model the node fixes is unavailable, is
-named there too; the effort is stated in the brief. Every unit returns
+named there too — a clause `review-model`'s recommended answer names
+unsupported implementation until the author rules on
+`fallback-when-the-model-is-unavailable`, as the review step above says and
+as this third mention of it did not; the effort is stated in the brief. Every unit returns
 its conclusion as data with the commands it ran and writes nothing to the
 record; the main thread integrates and writes. A disposition that asks one
 question runs one design unit and one review of the draft, with the
