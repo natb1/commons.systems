@@ -12,7 +12,20 @@
 //   (a) every `### ` section of `## Account` that precedes the section of the
 //       last clean-context reading on the node -- that reading's section and
 //       everything after it is what a re-reading is given
-//       (commons.systems/disposition-graph/review-cost), so it stays;
+//       (commons.systems/disposition-graph/review-cost), so it stays.
+//
+//       "Precedes" is position and not date, and that is the whole of the
+//       invariant this rule rests on: an account section is APPENDED, so file
+//       order is chronological order and the two never disagree. A session
+//       that writes a new section at the head of `## Account` instead breaks
+//       the invariant, and its section is struck however new it is -- the
+//       reachability guard below does not catch that, because such text is
+//       genuinely on the ref. The rule is the right one and is not changed
+//       here; what was missing was that it rested on an invariant nothing
+//       stated and nothing checked, found by reading this file in the sitting
+//       of 2026-09-08. So the invariant is written down here, and
+//       `dateInversions` below checks it where the headings carry dates,
+//       rather than trusting the next session to have read this;
 //   (b) a superseded `review` block. The encoding the reader accepts today
 //       carries at most one `review` mapping in the frontmatter and has no
 //       shape for a second (`read.mjs`, REVIEW_KEY_SET: the five draft keys
@@ -161,6 +174,45 @@ function foldableSections(lines) {
   const last = lastReadingIndex(sections);
   if (last < 0) return [];
   return sections.slice(0, last).filter((s) => !isManifestHeading(s.heading));
+}
+
+/**
+ * Where the position rule and the dates disagree on one account, as refusal
+ * entries. A section the fold would strike whose heading carries a date later
+ * than the last reading's is a section written out of order: the append
+ * invariant above is broken, and striking it would end text newer than the
+ * reading it is being folded behind.
+ *
+ * Silent where either heading carries no date, which is about a twelfth of the
+ * record's account headings: a guard that fires only on a difference it can
+ * actually read is never wrong, and is worth more than no guard at all. It is
+ * a check on the invariant and not a second selection rule -- it never widens
+ * what the fold strikes, and only ever refuses.
+ *
+ * @param {string[]} lines - the `## Account` body, as `foldableSections` takes it
+ * @returns {{heading: string, reason: string}[]}
+ */
+export function dateInversions(lines) {
+  const sections = accountSections(lines);
+  const last = lastReadingIndex(sections);
+  if (last < 0) return [];
+  const readingDate = headingDate(sections[last].heading);
+  if (readingDate === null) return [];
+  const out = [];
+  for (const s of sections.slice(0, last)) {
+    if (isManifestHeading(s.heading)) continue;
+    const d = headingDate(s.heading);
+    if (d !== null && d > readingDate) {
+      out.push({
+        heading: s.heading,
+        reason: `dated ${d}, later than the last clean-context reading's `
+          + `${readingDate}: an account section stands before a reading older `
+          + 'than it is, so it was not appended. Move the section after the '
+          + 'reading rather than folding it',
+      });
+    }
+  }
+  return out;
 }
 
 /** Character offset of the start of each line of `text`. */
@@ -390,7 +442,7 @@ export async function accumulate(graphDir, opts = {}) {
     // refused where any one of its sections is not byte for byte in the
     // node's file at the ref.
     const at = await fileAtRef(root, remote, node.path);
-    const refused = [];
+    const refused = dateInversions(body);
     if (at === null) {
       for (const f of folds) {
         refused.push({ heading: f.heading, reason: `no ${node.path} at ${remote}` });

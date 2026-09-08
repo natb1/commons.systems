@@ -16,7 +16,9 @@ import { after, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { accumulate, foldable, isReadingHeading, parseArgs } from './accumulate.mjs';
+import {
+  accumulate, dateInversions, foldable, isReadingHeading, parseArgs,
+} from './accumulate.mjs';
 import { readGraph } from './read.mjs';
 import { validate } from './validate.mjs';
 
@@ -101,6 +103,72 @@ describe('foldable', () => {
   });
 });
 
+describe('dateInversions', () => {
+  const account = (...headings) => headings.flatMap((h) => [`### ${h}`, '', 'body', '']);
+
+  test('silent where the account is in order', () => {
+    assert.deepEqual(dateInversions(account(
+      'Minted, 2026-09-01',
+      'Amended, 2026-09-02',
+      'Clean-context review, 2026-09-05, of 1111',
+      'Reply, 2026-09-06',
+    )), []);
+  });
+
+  test('names a section standing before a reading older than it is', () => {
+    const found = dateInversions(account(
+      'Minted, 2026-09-01',
+      'Amended, 2026-09-09',
+      'Clean-context review, 2026-09-05, of 1111',
+    ));
+    assert.deepEqual(found.map((r) => r.heading), ['Amended, 2026-09-09']);
+    assert.match(found[0].reason, /dated 2026-09-09, later than .* 2026-09-05/);
+  });
+
+  test('reads the LAST reading, and says nothing about what stays', () => {
+    // 09-09 precedes the last reading and is later than it: an inversion.
+    // 09-08 follows it and is never a candidate, late as it is.
+    const found = dateInversions(account(
+      'Clean-context review, 2026-09-02, of 1111',
+      'Amended, 2026-09-09',
+      'Clean-context review, 2026-09-05, of 2222',
+      'Amended again, 2026-09-08',
+    ));
+    assert.deepEqual(found.map((r) => r.heading), ['Amended, 2026-09-09']);
+  });
+
+  test('silent where either heading carries no date', () => {
+    assert.deepEqual(dateInversions(account(
+      'Amended',
+      'Clean-context review, 2026-09-05, of 1111',
+    )), []);
+    // a reading heading with no date is not a reading at all, so nothing folds
+    assert.deepEqual(dateInversions(account(
+      'Amended, 2026-09-09',
+      'Clean-context review',
+    )), []);
+  });
+
+  test('silent where no reading has read the node', () => {
+    assert.deepEqual(dateInversions(account('Minted, 2026-09-01')), []);
+    assert.deepEqual(dateInversions([]), []);
+  });
+
+  test('never fires on the manifest, whose fold lines carry dates of their own', () => {
+    // the manifest heading carries no date, and the later dates in its body
+    // are the folded sections' and not the manifest's
+    assert.deepEqual(dateInversions([
+      '### Manifest',
+      '',
+      '- Folded: Amended, 2026-09-09, at 1111',
+      '',
+      '### Clean-context review, 2026-09-05, of 2222',
+      '',
+      'body',
+    ]), []);
+  });
+});
+
 describe('isReadingHeading', () => {
   test('accepts the forms the record has actually written', () => {
     for (const h of [
@@ -130,7 +198,7 @@ describe('accumulate', () => {
 
     assert.equal(report.commit, sha);
     assert.equal(report.summary.nodesFolded, 3); // folds, fenced, manifest-already
-    assert.equal(report.summary.nodesRefused, 0);
+    assert.equal(report.summary.nodesRefused, 1); // out-of-order
     assert.equal(report.summary.sectionsFolded, 5);
     assert.ok(report.summary.bytesStruck > 0);
 
@@ -168,6 +236,22 @@ describe('accumulate', () => {
     assert.ok(!ids.includes('example.test/main/no-reading'));
   });
 
+  test('a node whose sections are out of order is refused whole', async () => {
+    const { dir } = await repo();
+    const file = path.join(dir, 'main', 'out-of-order.md');
+    const before = await readFile(file, 'utf8');
+    const report = await accumulate(dir, { remote: 'HEAD' });
+    assert.equal(await readFile(file, 'utf8'), before);
+
+    const node = report.nodes.find((n) => n.id === 'example.test/main/out-of-order');
+    assert.deepEqual(node.folded, []);
+    // the reachability guard sees nothing wrong: the text IS on the ref
+    assert.deepEqual(node.refused.map((r) => r.heading), ['Amended, 2026-09-09']);
+    assert.match(node.refused[0].reason, /not appended/);
+    // and the section that would have folded cleanly is spared with it
+    assert.ok(before.includes('### Minted, 2026-09-01'));
+  });
+
   test('a second manifest line goes under the heading the first fold wrote', async () => {
     const { dir, sha } = await repo();
     await accumulate(dir, { remote: 'HEAD' });
@@ -194,7 +278,8 @@ describe('accumulate', () => {
 
   test('is idempotent: the second run changes no byte and folds nothing', async () => {
     const { dir, git } = await repo();
-    const files = ['folds.md', 'fenced.md', 'manifest-already.md', 'no-reading.md', 'no-account.md'];
+    const files = ['folds.md', 'fenced.md', 'manifest-already.md', 'no-reading.md',
+      'no-account.md', 'out-of-order.md'];
     await accumulate(dir, { remote: 'HEAD' });
     const once = await Promise.all(files.map((f) => readFile(path.join(dir, 'main', f), 'utf8')));
 
@@ -206,7 +291,9 @@ describe('accumulate', () => {
     const second = await accumulate(dir, { remote: 'HEAD' });
     assert.equal(second.summary.sectionsFolded, 0);
     assert.equal(second.summary.nodesFolded, 0);
-    assert.equal(second.summary.nodesRefused, 0);
+    // the out-of-order node is refused on every run, which is the point: a
+    // refusal is a standing report and not a one-off the second run forgets
+    assert.equal(second.summary.nodesRefused, 1);
     const twice = await Promise.all(files.map((f) => readFile(path.join(dir, 'main', f), 'utf8')));
     assert.deepEqual(twice, once);
   });
@@ -226,7 +313,7 @@ describe('accumulate', () => {
     assert.equal(entry.refused.length, 1);
     assert.match(entry.refused[0].reason, /not byte-for-byte/);
     assert.equal(entry.bytesBefore, entry.bytesAfter);
-    assert.equal(report.summary.nodesRefused, 1);
+    assert.equal(report.summary.nodesRefused, 2); // and out-of-order
     // the other nodes still fold: the refusal is per node
     assert.equal(report.summary.nodesFolded, 2);
   });
@@ -301,7 +388,7 @@ describe('accumulate', () => {
 
     const result = await validate(dir);
     assert.equal(result.ok, true, result.message);
-    assert.equal(result.message, 'ok: 5 nodes');
+    assert.equal(result.message, 'ok: 6 nodes');
     const after_ = await readGraph(dir);
     for (const n of after_.nodes) {
       assert.equal(n.recommendationHash, beforeHashes.get(n.id), n.id);
