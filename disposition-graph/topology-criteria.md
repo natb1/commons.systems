@@ -180,3 +180,28 @@ set this answer is the party the answer exists to constrain, which is its captur
 limb. Two limbs fire, so the test returns ratified, and a ruling of ratified here
 stops the parent's delegation for this node alone while leaving it to reach the
 nodes beneath, as `commons.systems/disposition-graph/authority` provides.
+### Whether a parallel projection would make the rules deterministic, 2026-09-08
+
+The author asked whether some parallel projection, such as a vector space, would
+produce more deterministic rules for graph topology, `words/2026-09-08/14`.
+Measured against the record's own findings at graph commit `5cacddde`, the
+answer is no, and the reason is not accuracy.
+
+Determinism comes from the predicate this node's answer states, read off the act
+of ruling. A coordinate is a free parameter, and a verdict resting on one cannot
+be re-derived from the ref by a second party, because the coordinates are not in
+the ref. Similarity is also not the relation the three acts turn on: a split is
+one node answering two questions, a merge is two nodes answering one, and a
+reparent is a node under the wrong question, and two nodes may be near
+neighbours in any embedding while raising none of those between them.
+
+The measurement bears it out. The instrument the record already runs nominates
+candidate pairs by key; against the 278 pairs the record's own survey findings
+name, it recalls 139, half of them, or 69.5 per cent once the
+stale-recommendation findings are set aside, at 10.6 per cent precision. The 92
+stale-recommendation pairs it misses are found by comparing a pin against a
+commit, which no embedding would find, and one key, the shared parent, is the
+sole ground of 554 of the pairs it nominates. So nomination is suggestion, and
+suggestion is legitimate and already runs; what the record refuses is a verdict
+from a projection it cannot re-derive. The divergence this node already records
+on its recommended option is the same one, and this entry is its measurement.

@@ -93,6 +93,17 @@ facts:
     recommends: ratified
     boldness: low
     against: "The author's words of 2026-09-07 ask the AI to make its own recommendation about how to optimize and to fold it into the reconciliation, which reads as the delegation of right-sizing their words of 2026-09-04 already gave; a class that returns every later adjustment of the survey's selection to the author spends the attention they asked to be spared."
+  - name: topology
+    options:
+      - name: keep
+      - name: prune
+      - name: under-the-dialogue-as-well-as-the-review
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/6
+    recommends: keep
+    boldness: low
 probes:
   - id: probe-finding-reports-or-launches
     asks: >-
@@ -752,6 +763,18 @@ From: the-frozen-set-is-the-closure-the-survey-read
 
 Ratified, on the capture-shaped limb of `class-recommendation`'s test and on that limb alone. This node decides how much of the record the survey is shown, and the survey is the only reader whose object is the AI's whole frontier judged against itself; the party that would set the answer is the party the answer checks. Two features make it the sharp case. A narrowing is invisible in the record's own terms — a survey that reads less returns fewer findings, and fewer findings on a frontier are indistinguishable from a cleaner frontier — so being wrong here leaves no trace the author could read. And a clean mechanical tier is an affirmative signal that something was checked, so a tier the AI sizes can make the record look audited exactly where it stopped auditing. The parent's authority fact recommends ratified on the identical limb and the identical ground, that a rule letting the drafter narrow the review's object is capture-shaped and that a review reading too little looks cheaper and no worse, and no ruling has reached either node; this node is that rule one step narrower, so a delegation here would reach past the ratification recommended there. Not irreversible: nothing here deletes, swaps or lands; the gate opens, the selection widens, and a design changed back at the next sitting leaves the graph as it was — which is where this node and the accumulation node part, since a fold does not. Not expensive, or weakly so: a wrong selection is paid in a survey that missed something, recovered by the whole survey this answer schedules. Boldness low: the test is stated and the limb is the parent's own.
 
+### topology
+
+Keep, and the question the author raised is recorded rather than acted on. This node sits under `review-cost`, which sits under `clean-context-review`, so on the record's own shape the survey is part of the review apparatus: it exists to bound what a reading is shown. The author asked whether the survey duplicates the periagogic movement, and the placement answers that it cannot, because on this topology the survey is not in the dialogue at all. That answer is too easy, and the option beside `keep` says why. Prune is not argued: the survey's selection is a live question with an instrument behind it, and nothing here proposes that the node stop existing.
+
+#### under-the-dialogue-as-well-as-the-review
+
+A second `under` edge, to the node that owns the dialogue's movements, keeping the edge to `review-cost`. Raised from the author's question of 2026-09-08, whether the survey function of the alignment dialogue is redundant with periagoge.
+
+**AI support.** A survey reads the record and returns what is in it: dispositions that overlap, options no words of the author reach, pins gone stale, two nodes saying incompatible things. That is grounding, and grounding is what the periagogic movement turns the author to. The record produces it, spends a reading's worth of tokens on it, and hands it to a reviewer. So the two are not redundant in kind, a movement not being an instrument and an instrument not turning anyone, and they are redundant in fact wherever a survey's findings never reach the author: the record has bought the reading and used it once, and the periagoge that would have used it reads the graph again. The second edge is what makes the survey's output owed to the dialogue as well as to the review, and it is what would let the record answer "is the survey redundant" from its own shape rather than from an argument.
+
+**AI divergence.** Authority narrows on the way down, so a second parent changes which classes reach this node, and a node under two parents can be reached by two at the same distance, which the authority node resolves by taking the narrower but which is a complication bought here for a reason about where an output goes rather than about who may rule. The cheaper repair is not topological: say on the survey's own answer that its findings are delivered to the author as well as to the reviewer, which costs one clause and no edge, and leaves the question of what the survey is for where it already sits. The move is not made here in any case, and the recommendation stays at `keep`. The author has said that the topology authority recorded this sitting did not progress through periagogic grounding as they expected and that the record may need to return to it; re-parenting a node on the strength of that recording, before the return, would be the AI acting on an authority the author has just flagged as under-grounded.
+
 ## Account
 
 ### Manifest
@@ -908,3 +931,19 @@ The whole reading this node's recommendation calls a backfill ran once in this s
 The four options recorded on the answer fact at effda5f6 under the author's words of 2026-09-08 (words/2026-09-08/1) are materialized at implementation commit f7a80fcd, measured with `brief.mjs --survey disposition` and no `--force-tier`: the tier is divided by kind, four checks refusing the brief (an unresolved reference, two options of one name, unresolvable option content, a reference to no entry of the author's words) and four reported into the brief under the heading "What the record already knows about itself" and never gating (a recommendation past its pin, a term without a path, a duplicated passage, an unfolded account section), so the brief is written on the graph as it stands with no bypass, which at graph commit 981f5367 is 0 gating findings over the 4 gating checks and 179 findings reported over the 4 reporting checks; the hub bound holds for the citation key as for the term key, at the same tenth; the frozen set is unchanged in the instrument, since the third rung changes no mechanism; and the pin a reading or a survey writes is the hash of what binds the node, the fact's name, its recommendation, the recommended option's sentence, its resolved content, the words it supports or diverges from, and each option's name and status, with the question folded at the node, and nothing else. Beside them the brief was compacted, the node under review rendered once and each option by its case, a neighbour by the answer its recommended option resolves to, the open probes in a block of their own, and a kicked-back node given a fresh whole reading rather than a delta; and the apply divides a finding across nodes per node, holds a merge or a decomposition whole or not at all, discards per support, and writes its reply per node. The narrowed pin is also the option `a-pin-covers-what-binds-the-node` on the dialogue node, recorded and recommended there on the same words, since the pin's definition is that node's; the authority node defines no pin and needed nothing. The one-time migration `migrate-pins.mjs` ran on the graph and the sidecar at 981f5367: 236 pins rewritten to the new form, 56 left stale because they were stale in the old, 17 already in the new, 72 node files touched on their `of` lines alone, and the frontier reading as it did before the narrowing, 21 of 35 ready to rule and none awaiting the survey. The first delta at this instrument, written dry at 981f5367, judges 3 nodes, carries 6 by what they answer and 52 on one line, freezes 73 on their pins, and is 343,298 bytes over 1,827 lines, against the 680,585 bytes of the backfill; that is the bound the author's words of 2026-09-07 asked for, measured once and owed again at the first delta that runs. The three skills that operate the reviews were reconciled at b22cbe52. Every option this entry names is unanswered and the recommendation on this node stands at the top rung, `a-pin-moves-on-what-binds-the-node`, for the author's choice at confirmation.
 
 The entry above headed "The backfill ran, 2026-09-07, on graph commit edc5af91" overstates what the backfill carried. Counted from the graph at 981f5367: the survey pin at edc5af91 stands on 68 nodes, 8 judged whole and 60 carried by what each answers, and the other 86 of the 154 were carried on one line, not by what they answer. The sentence stands as written, since an account entry is not rewritten once committed, and this entry is its correction.
+### Is the survey redundant with periagoge, 2026-09-08
+
+The author asked it in one line, `words/2026-09-08/6`, and the record answers it
+from its own topology: this node is under `review-cost` under
+`clean-context-review`, so the survey is an instrument of the review and is not
+a movement of the dialogue, and an instrument cannot be redundant with a
+movement. Recorded as this node's topology fact rather than as an option on its
+answer, because the question is about where the survey sits and not about how it
+narrows what it reads, which is this node's question and is unmoved by it. The
+easy answer is not the whole one. What a survey returns is grounding, which is
+what the periagogic movement turns the author to, so the two are redundant in
+fact wherever a survey's findings stop at the reviewer; the option beside `keep`
+carries that argument and the cheaper non-topological repair beside it. The
+recommendation stays at `keep` and no edge moves, on the author's own note that
+the topology authority recorded this sitting wants periagogic grounding before
+the record leans on it.

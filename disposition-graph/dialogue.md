@@ -79,7 +79,7 @@ probes:
     asks: >-
       Does a node carry only the answer and authority facts, with everything
       else moved under fact options, or does a node such as agency carry no
-      existence or persistence fact only because its dialogue has not reached
+      topology or persistence fact only because its dialogue has not reached
       the ruling?
     fact: answer
     why: >-
@@ -332,12 +332,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -426,7 +426,7 @@ unsupported implementation on the day it was ruled. So the draft block carries s
 keys with four required, and the survey block six of its own, and the two readings'
 commits are carried by one rule.
 
-**`existence` and `persistence` stay conditional, and the asymmetry with
+**`topology` and `persistence` stay conditional, and the asymmetry with
 `authority` is a decision and not an oversight.** Every ruling decides a class,
 since a confirmation on the answer fact confers ratified and delegated and deferred
 are conferred only by a ruling on the authority fact, so the class must be askable
@@ -550,12 +550,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -597,12 +597,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -644,12 +644,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -691,12 +691,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -738,12 +738,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -805,12 +805,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -887,12 +887,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -969,12 +969,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1024,7 +1024,7 @@ is a sentence no one ruled on.
 
 Reserved aspect names: `answer` while a node has not been split, `authority`
 for the class a confirmation confers, `persistence` where the recommendation
-would change the node's shape, and `existence` with the choices keep and prune,
+would change the node's shape, and `topology` with the choices keep and prune,
 which replaces the prune alternative. A choice carries its `name`, `source`,
 `ref`, the dates of the author's words it rests on, the text of its fragment,
 and the choices it `excludes` by aspect and name. The review is per aspect, so
@@ -1064,12 +1064,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1094,7 +1094,7 @@ is a sentence no one ruled on.
 
 Reserved aspect names: `answer` while a node has not been split, `authority`
 for the class a confirmation confers, `persistence` where the recommendation
-would change the node's shape, and `existence` with the choices keep and prune,
+would change the node's shape, and `topology` with the choices keep and prune,
 which replaces the prune alternative. A choice carries its `name`, `source`,
 `ref`, the dates of the author's words it rests on, the text of its fragment,
 and the choices it `excludes` by aspect and name. The review is per aspect, so
@@ -1181,12 +1181,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1263,12 +1263,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1281,7 +1281,7 @@ Its question, its fields, its facts with their options, and its answer as it sta
 
 One rule governs where a decision lives, and it is the node node's and not a new one. A decision the author is to rule on separately is a question, and a question is a node: "If a text answers two questions, it is two nodes." So a text carrying several such decisions is decomposed into children, not into an inner structure that would repeat inside the node what the node already is. The record already provides for the children of an open question, since "a reading, a refinement, or any other node may sit under an open question, and does not have to wait for the question to be answered", and it already makes the result legible, since "a node's ceiling is its nearest ratified ancestor", so a ratified child under an unruled parent is exactly a decision the author has confirmed inside a question they have not. What remains on the node itself are the decisions that are not questions under it but facts about its answer, and those are the `facts` below.
 
-`facts`, every decision on the node, as data, each with a `name`, its `options`, the one it `recommends` with the `boldness` of that recommendation, low, moderate, or high, how much of it rests on the AI's own knowledge against the record and the author's words, and, on the answer fact, `stands`, the option whose full text the answer section holds. Four names are reserved and no others are minted without a ruling here: `answer`, whose options are the candidate answers to this node's own question; `authority`, the class a ruling would confer, ratified, delegated, or deferred, which is why no recommendation carries a class of its own; `existence`, keep or prune, which is where a proposal to prune the node is recorded rather than as an option of a special shape that answers no question; and `persistence`, present only where the recommendation would change the node's shape, declaring or liquidating a shim or adding or dropping evidence, its options being those shapes, and otherwise derived from the shape and asking nothing. An option carries its `name`; on the answer fact its `source`, the author's words in the disposition, the AI, the clean-context review, or the instrument or node that raised it outside alignment, and its `ref`, the date of the words or of the review, the graph commit, or the instrument or node; and its `ruling` once the author has given one. An option is viable, and stays on the list, while nothing on the list dominates it on the record's criteria, in the AI's judgment; an option the AI no longer holds viable leaves the list, and the option that displaced it says why. `## Facts` holds one subsection per fact, in the same order, opening with the reason for its recommendation, and under the answer fact one subsection per option, in the same order, saying in prose what the option would answer and why it is on the table; the option that stands needs none, since its text is the answer. A recommendation may be recorded at any stage of the dialogue, as the author ruled on 2026-09-04, and is required from the review stage on, since a node cannot be reviewed without one; a recommendation withheld until a stage boundary is a recommendation held in a session, which the first requirement above forbids. The AI may add an option or move a recommendation in alignment, in reconciliation, and in the loop on itself, within the scope its class allows, as the authority, evaluation and work-loop nodes say.
+`facts`, every decision on the node, as data, each with a `name`, its `options`, the one it `recommends` with the `boldness` of that recommendation, low, moderate, or high, how much of it rests on the AI's own knowledge against the record and the author's words, and, on the answer fact, `stands`, the option whose full text the answer section holds. Four names are reserved and no others are minted without a ruling here: `answer`, whose options are the candidate answers to this node's own question; `authority`, the class a ruling would confer, ratified, delegated, or deferred, which is why no recommendation carries a class of its own; `topology`, keep or prune, which is where a proposal to prune the node is recorded rather than as an option of a special shape that answers no question; and `persistence`, present only where the recommendation would change the node's shape, declaring or liquidating a shim or adding or dropping evidence, its options being those shapes, and otherwise derived from the shape and asking nothing. An option carries its `name`; on the answer fact its `source`, the author's words in the disposition, the AI, the clean-context review, or the instrument or node that raised it outside alignment, and its `ref`, the date of the words or of the review, the graph commit, or the instrument or node; and its `ruling` once the author has given one. An option is viable, and stays on the list, while nothing on the list dominates it on the record's criteria, in the AI's judgment; an option the AI no longer holds viable leaves the list, and the option that displaced it says why. `## Facts` holds one subsection per fact, in the same order, opening with the reason for its recommendation, and under the answer fact one subsection per option, in the same order, saying in prose what the option would answer and why it is on the table; the option that stands needs none, since its text is the answer. A recommendation may be recorded at any stage of the dialogue, as the author ruled on 2026-09-04, and is required from the review stage on, since a node cannot be reviewed without one; a recommendation withheld until a stage boundary is a recommendation held in a session, which the first requirement above forbids. The AI may add an option or move a recommendation in alignment, in reconciliation, and in the loop on itself, within the scope its class allows, as the authority, evaluation and work-loop nodes say.
 
 A `ruling` is the author's act on the option they chose, recorded on it: the `response`, confirm or edit, the `date`, and `of`, the hash of the fact's recommendation it answered, the recommended option with its reason and, on the answer fact, its text, so that a recommendation moved after the ruling shows as moved on the frontier and the page. A denial is never a ruling: it is a kickback with the author's words. Only the author rules, on the alignment page or in prose, and the AI writes no ruling and no class for itself.
 
@@ -1334,12 +1334,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1403,12 +1403,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1446,7 +1446,7 @@ The two exemptions go, so that every option of every fact carries in prose
 what it would answer, which is what `viable-options` already requires of an
 option and what this node and the reader currently exempt. Measured, 168 of
 the graph's 407 options carry no such prose: 114 on the authority fact, 38 the
-option that stands, 12 on existence and 4 on persistence. The exemptions have
+option that stands, 12 on topology and 4 on persistence. The exemptions have
 two different reasons and both fail. A reserved fact's choices were held to be
 vocabulary rather than slugs and to need no gloss, and the projector's answer
 to that was a hardcoded sentence table, which is implementation no disposition
@@ -1498,12 +1498,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1516,7 +1516,7 @@ The two exemptions go, so that every option of every fact carries in prose
 what it would answer, which is what `viable-options` already requires of an
 option and what this node and the reader currently exempt. Measured, 168 of
 the graph's 407 options carry no such prose: 114 on the authority fact, 38 the
-option that stands, 12 on existence and 4 on persistence. The exemptions have
+option that stands, 12 on topology and 4 on persistence. The exemptions have
 two different reasons and both fail. A reserved fact's choices were held to be
 vocabulary rather than slugs and to need no gloss, and the projector's answer
 to that was a hardcoded sentence table, which is implementation no disposition
@@ -1546,7 +1546,7 @@ other four clauses.
 #### authority-fact-on-every-node
 
 Every node carrying a stage carries an answer fact and an authority fact. This
-node states the conditionality of `existence`, which appears where a prune is
+node states the conditionality of `topology`, which appears where a prune is
 proposed, and of `persistence`, present only where the recommendation would
 change the node's shape, and states none for the other two; the validator
 enforces neither. Measured, eighteen nodes carrying a stage carry no authority
@@ -1594,12 +1594,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1609,7 +1609,7 @@ defines:
 ## Answer
 
 Every node carrying a stage carries an answer fact and an authority fact. This
-node states the conditionality of `existence`, which appears where a prune is
+node states the conditionality of `topology`, which appears where a prune is
 proposed, and of `persistence`, present only where the recommendation would
 change the node's shape, and states none for the other two; the validator
 enforces neither. Measured, eighteen nodes carrying a stage carry no authority
@@ -1664,12 +1664,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1731,12 +1731,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1749,7 +1749,7 @@ Its question, its fields, its facts with their options, and its answer as it sta
 
 One rule governs where a decision lives, and it is the node node's and not a new one. A decision the author is to rule on separately is a question, and a question is a node: "If a text answers two questions, it is two nodes." So a text carrying several such decisions is decomposed into children, not into an inner structure that would repeat inside the node what the node already is. The record already provides for the children of an open question, since "a reading, a refinement, or any other node may sit under an open question, and does not have to wait for the question to be answered", and it already makes the result legible, since "a node's ceiling is its nearest ratified ancestor", so a ratified child under an unruled parent is exactly a decision the author has confirmed inside a question they have not. What remains on the node itself are the decisions that are not questions under it but facts about its answer, and those are the `facts` below.
 
-`facts`, every decision on the node, as data, each with a `name`, its `options`, the one it `recommends` with the `boldness` of that recommendation, low, moderate, or high, how much of it rests on the AI's own knowledge against the record and the author's words, and, on the answer fact, `stands`, the option whose full text the answer section holds. Four names are reserved and no others are minted without a ruling here: `answer`, whose options are the candidate answers to this node's own question; `authority`, the class a ruling would confer, ratified, delegated, or deferred, which is why no recommendation carries a class of its own; `existence`, keep or prune, which is where a proposal to prune the node is recorded rather than as an option of a special shape that answers no question; and `persistence`, present only where the recommendation would change the node's shape, declaring or liquidating a shim or adding or dropping evidence, its options being those shapes, and otherwise derived from the shape and asking nothing. An option carries its `name`; on the answer fact its `source`, the author's words in the disposition, the AI, the clean-context review, or the instrument or node that raised it outside alignment, and its `ref`, the date of the words or of the review, the graph commit, or the instrument or node; and its `ruling` once the author has given one. An option is viable, and stays on the list, while nothing on the list dominates it on the record's criteria, in the AI's judgment; an option the AI no longer holds viable leaves the list, and the option that displaced it says why. `## Facts` holds one subsection per fact, in the same order, opening with the reason for its recommendation, and under the answer fact one subsection per option, in the same order, saying in prose what the option would answer and why it is on the table; the option that stands needs none, since its text is the answer. A recommendation may be recorded at any stage of the dialogue, as the author ruled on 2026-09-04, and is required from the review stage on, since a node cannot be reviewed without one; a recommendation withheld until a stage boundary is a recommendation held in a session, which the first requirement above forbids. The AI may add an option or move a recommendation in alignment, in reconciliation, and in the loop on itself, within the scope its class allows, as the authority, evaluation and work-loop nodes say.
+`facts`, every decision on the node, as data, each with a `name`, its `options`, the one it `recommends` with the `boldness` of that recommendation, low, moderate, or high, how much of it rests on the AI's own knowledge against the record and the author's words, and, on the answer fact, `stands`, the option whose full text the answer section holds. Four names are reserved and no others are minted without a ruling here: `answer`, whose options are the candidate answers to this node's own question; `authority`, the class a ruling would confer, ratified, delegated, or deferred, which is why no recommendation carries a class of its own; `topology`, keep or prune, which is where a proposal to prune the node is recorded rather than as an option of a special shape that answers no question; and `persistence`, present only where the recommendation would change the node's shape, declaring or liquidating a shim or adding or dropping evidence, its options being those shapes, and otherwise derived from the shape and asking nothing. An option carries its `name`; on the answer fact its `source`, the author's words in the disposition, the AI, the clean-context review, or the instrument or node that raised it outside alignment, and its `ref`, the date of the words or of the review, the graph commit, or the instrument or node; and its `ruling` once the author has given one. An option is viable, and stays on the list, while nothing on the list dominates it on the record's criteria, in the AI's judgment; an option the AI no longer holds viable leaves the list, and the option that displaced it says why. `## Facts` holds one subsection per fact, in the same order, opening with the reason for its recommendation, and under the answer fact one subsection per option, in the same order, saying in prose what the option would answer and why it is on the table; the option that stands needs none, since its text is the answer. A recommendation may be recorded at any stage of the dialogue, as the author ruled on 2026-09-04, and is required from the review stage on, since a node cannot be reviewed without one; a recommendation withheld until a stage boundary is a recommendation held in a session, which the first requirement above forbids. The AI may add an option or move a recommendation in alignment, in reconciliation, and in the loop on itself, within the scope its class allows, as the authority, evaluation and work-loop nodes say.
 
 A `ruling` is the author's act on the option they chose, recorded on it: the `response`, confirm or edit, the `date`, and `of`, the hash of the fact's recommendation it answered, the recommended option with its reason and, on the answer fact, its text, so that a recommendation moved after the ruling shows as moved on the frontier and the page. A denial is never a ruling: it is a kickback with the author's words. Only the author rules, on the alignment page or in prose, and the AI writes no ruling and no class for itself.
 
@@ -1802,12 +1802,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1852,12 +1852,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1901,12 +1901,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1950,12 +1950,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -1999,12 +1999,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2049,12 +2049,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2100,12 +2100,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2150,12 +2150,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2200,12 +2200,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2249,12 +2249,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2298,12 +2298,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2347,12 +2347,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2396,12 +2396,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2454,12 +2454,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2520,12 +2520,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2551,7 +2551,7 @@ nowhere.
 
 The recommended answer with a glossed `defines` entry for each of the four fact
 names this node reserves, so that every fact name resolves to a sentence saying
-what the fact decides. Three of the four are not written today. `existence` is
+what the fact decides. Three of the four are not written today. `topology` is
 glossed here already. `authority` is glossed on
 `commons.systems/disposition-graph/authority`, which is the node the author's
 bullet of 2026-09-04 names as the heading's link target, and it stays there. The
@@ -2572,7 +2572,7 @@ on what the fact decides:
   lets a recorded answer act, conferred only by a ruling of the author's on one
   of a node's facts and never by a mark, a command, or a class the AI writes for
   itself", already says this; this option writes no second entry for it.)
-- `existence`: the fact that asks whether the node stays in the record, with the
+- `topology`: the fact that asks whether the node stays in the record, with the
   choices keep and prune; it appears where a prune is proposed. (Stands here
   today, unchanged.)
 - `persistence`: the fact whose options are the shapes the node would keep,
@@ -2616,12 +2616,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2632,7 +2632,7 @@ defines:
 
 The recommended answer with a glossed `defines` entry for each of the four fact
 names this node reserves, so that every fact name resolves to a sentence saying
-what the fact decides. Three of the four are not written today. `existence` is
+what the fact decides. Three of the four are not written today. `topology` is
 glossed here already. `authority` is glossed on
 `commons.systems/disposition-graph/authority`, which is the node the author's
 bullet of 2026-09-04 names as the heading's link target, and it stays there. The
@@ -2653,7 +2653,7 @@ on what the fact decides:
   lets a recorded answer act, conferred only by a ruling of the author's on one
   of a node's facts and never by a mark, a command, or a class the AI writes for
   itself", already says this; this option writes no second entry for it.)
-- `existence`: the fact that asks whether the node stays in the record, with the
+- `topology`: the fact that asks whether the node stays in the record, with the
   choices keep and prune; it appears where a prune is proposed. (Stands here
   today, unchanged.)
 - `persistence`: the fact whose options are the shapes the node would keep,
@@ -2719,12 +2719,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2800,12 +2800,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2864,12 +2864,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -2923,12 +2923,12 @@ defines:
   - gloss
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: confirmed
     gloss: "Confirmed is the label on the option of a fact that the author last ruled with the response confirm; it is derived from the rulings as the class is and stored nowhere, and it is the one name the record keeps for what the author's words of 2026-09-07 call standing."
   - term: persistence
@@ -2940,15 +2940,15 @@ Its question, its fields, its facts with their options and the content each opti
 
 One rule governs where a decision lives, and it is the node node's and not a new one. A decision the author is to rule on separately is a question, and a question is a node: "If a text answers two questions, it is two nodes." So a text carrying several such decisions is decomposed into children, not into an inner structure that would repeat inside the node what the node already is. The record already provides for the children of an open question, since "a reading, a refinement, or any other node may sit under an open question, and does not have to wait for the question to be answered", and it already makes the result legible, since "a node's ceiling is its nearest ratified ancestor", so a ratified child under an unruled parent is exactly a decision the author has confirmed inside a question they have not. What remains on the node itself are the decisions that are not questions under it but facts about its answer, and those are the `facts` below.
 
-`facts`, every decision on the node, as data, each with a `name`, its `options`, the one it `recommends` with the `boldness` of that recommendation, and `against`, the strongest case against that recommendation in one line and in the AI's own words. The recommendation is the judgment that weighs the support and the divergence recorded on each option, and the fact's own reason is where that weighing is written. No key names the option confirmed: confirmed is a label, the option on the fact the author last ruled with the response confirm, derived from the rulings as the class is derived from them, and written nowhere. The word standing is not used of an option: the author's words of 2026-09-07 make it one thing with confirmed and the record keeps the one name. Boldness is low, moderate, or high: how much of the recommendation rests on the AI's own knowledge against the record and the author's words, so that high boldness is low confidence, which is the direction the author gave the term on 2026-09-03 and the direction the growth node's option `boldness-reversed` brings that node's own definition to. Four names are reserved and no others are minted without a ruling here: `answer`, whose options are the candidate answers to this node's own question; `authority`, the class a ruling would confer, ratified, delegated, or deferred, which is why no recommendation carries a class of its own; `existence`, keep or prune, which is where a proposal to prune the node is recorded rather than as an option of a special shape that answers no question; and `persistence`, whose options are the shapes the node would keep, present only where the recommendation would change its shape and otherwise derived from the shape and asking nothing.
+`facts`, every decision on the node, as data, each with a `name`, its `options`, the one it `recommends` with the `boldness` of that recommendation, and `against`, the strongest case against that recommendation in one line and in the AI's own words. The recommendation is the judgment that weighs the support and the divergence recorded on each option, and the fact's own reason is where that weighing is written. No key names the option confirmed: confirmed is a label, the option on the fact the author last ruled with the response confirm, derived from the rulings as the class is derived from them, and written nowhere. The word standing is not used of an option: the author's words of 2026-09-07 make it one thing with confirmed and the record keeps the one name. Boldness is low, moderate, or high: how much of the recommendation rests on the AI's own knowledge against the record and the author's words, so that high boldness is low confidence, which is the direction the author gave the term on 2026-09-03 and the direction the growth node's option `boldness-reversed` brings that node's own definition to. Four names are reserved and no others are minted without a ruling here: `answer`, whose options are the candidate answers to this node's own question; `authority`, the class a ruling would confer, ratified, delegated, or deferred, which is why no recommendation carries a class of its own; `topology`, keep or prune, which is where a proposal to prune the node is recorded rather than as an option of a special shape that answers no question; and `persistence`, whose options are the shapes the node would keep, present only where the recommendation would change its shape and otherwise derived from the shape and asking nothing.
 
-A node that carries facts at all carries the answer fact and the authority fact: the answer because the node's own question is what a dialogue on it is for, and the authority because a ruling on that fact is how delegated and deferred are conferred, so a node without it offers the author one exit where the record gives three. A node may carry no fact, and then it stands at the periagogic or the maieutic stage, where nothing has been proposed yet and a class would be conferred on nothing; from the review stage on there is a recommendation to read, so there are facts, and those two are among them. That `existence` and `persistence` are conditional where `authority` is not is a decision and not an accident of the encoding: every ruling decides a class, so the class is asked wherever a ruling can be given, while a prune and a change of shape are decided only where one is proposed, and a choice nobody has raised is not a candidate the record lists.
+A node that carries facts at all carries the answer fact and the authority fact: the answer because the node's own question is what a dialogue on it is for, and the authority because a ruling on that fact is how delegated and deferred are conferred, so a node without it offers the author one exit where the record gives three. A node may carry no fact, and then it stands at the periagogic or the maieutic stage, where nothing has been proposed yet and a class would be conferred on nothing; from the review stage on there is a recommendation to read, so there are facts, and those two are among them. That `topology` and `persistence` are conditional where `authority` is not is a decision and not an accident of the encoding: every ruling decides a class, so the class is asked wherever a ruling can be given, while a prune and a change of shape are decided only where one is proposed, and a choice nobody has raised is not a candidate the record lists.
 
 An option carries its `name`; on the answer fact its `source`, the author's words, the AI, the clean-context review, or the instrument or node that raised it outside alignment, and its `ref`, the date of the words or of the review, the graph commit, or the instrument or node; a `status`, which is `passed` and nothing else, with the `reason` it was passed over, wherever the AI holds it dominated on the record's criteria; its `supports` and its `diverges`, the entries of the author's words that bear each way on it, written as references into the ledger the quotes node keeps, an entry being referenced by any number of options on any number of nodes; and its `ruling` once the author has given one. An option must be recorded when the author's words support it or diverge from it, when a tradition supports it or diverges from it, or when the AI weighed it for any reason, its own assessment of viability included: the trigger is an act that leaves a trace, so an option the AI considered and rejected in its head is recordable by rule and not by conscience. Which entries of the author's words a node retains follows from those references and is the quotes node's rule, cited here and not restated, as what viability is and whether a candidate ever leaves the list are the viable-options node's, whose terms this answer uses.
 
 An option on the answer fact is a candidate answer to this node's question, whole or a named change to another, so that a ruling for a change is a ruling for that text with that change. Every option of the answer fact carries its content, so that a projection can render the node as it would stand under any option the author selects, which is what the alignment page's context pane does. It carries it in one of two forms and no third: whole, as a fenced `markdown` block holding the node as it would stand under it, its frontmatter without the dialogue's own keys and without the facts, and its `## Answer`; or as a named change to another option of the same fact, a line naming that option followed by a fenced `diff` block of unified-diff hunks against that option's resolved content. A hunk carries an `@@ -l,s +l,s @@` header, context lines prefixed by one space, removals by `-` and additions by `+`, with three lines of context each side where the text allows; it is applied strictly, at the line its header names, every context and removal line matching byte for byte, with no fuzz and no offset search, so a hunk that does not apply exactly is an error of the record and is never re-anchored. The resolution is acyclic and a cycle is a finding, as it is in `depends`. Hunks are produced by diffing the two resolved texts and never written by hand. Every text is stored once: a ladder of options that each add a clause to the one above stores one text and the clauses, and the difference the prose used to assert is data the projections apply and the validator resolves.
 
-Every option of every fact has that sentence, and the record holds it in one place for each kind of option. An option of the answer or the persistence fact has a `#### <option>` subsection under its fact in `## Facts`, carrying in this order and no other: its sentence, in prose, what it would answer; a paragraph led `**AI support.**` and a paragraph led `**AI divergence.**`, the AI's accumulated support for the option and its accumulated divergence from it, each kept whatever the fact recommends, so that the case for an option the AI declined is not written only by the act of declining it; and, on the answer fact, its content in one of the two forms above. Every option has a subsection, the one the author last confirmed included, since its content is an option's content like any other and no section stands outside the facts to hold it. What the traditions say of an option is not written there: it is the derived inverse of what the readings bear on, as the readings node has it, and the projections show it beside the other two accumulations, headed support or divergence like them. So an option carries three accumulations and no more, and each is stored once in the place that owns it: the AI's on the option, the traditions' on the reading's `bears` entries and projected from them, and the author's own in the ledger and projected through the option's `supports` and `diverges`. An option of the two facts whose options are the record's own vocabulary, `authority` and `existence`, has no subsection at all: its name is a term, and its sentence is the gloss on the node that defines the term. A gloss is the sentence a `defines` entry carries beside its term, written as the term and the gloss together, saying what the term means and so what confirming that choice would mean; it is written once, on the defining node, and read from there, ratified, delegated and deferred on the authority node and keep and prune here. No projection carries a sentence of its own for an option: a sentence that lives only in a projection is a rule no node projects, and the same sentence written again on every node that carries the fact would drift.
+Every option of every fact has that sentence, and the record holds it in one place for each kind of option. An option of the answer or the persistence fact has a `#### <option>` subsection under its fact in `## Facts`, carrying in this order and no other: its sentence, in prose, what it would answer; a paragraph led `**AI support.**` and a paragraph led `**AI divergence.**`, the AI's accumulated support for the option and its accumulated divergence from it, each kept whatever the fact recommends, so that the case for an option the AI declined is not written only by the act of declining it; and, on the answer fact, its content in one of the two forms above. Every option has a subsection, the one the author last confirmed included, since its content is an option's content like any other and no section stands outside the facts to hold it. What the traditions say of an option is not written there: it is the derived inverse of what the readings bear on, as the readings node has it, and the projections show it beside the other two accumulations, headed support or divergence like them. So an option carries three accumulations and no more, and each is stored once in the place that owns it: the AI's on the option, the traditions' on the reading's `bears` entries and projected from them, and the author's own in the ledger and projected through the option's `supports` and `diverges`. An option of the two facts whose options are the record's own vocabulary, `authority` and `topology`, has no subsection at all: its name is a term, and its sentence is the gloss on the node that defines the term. A gloss is the sentence a `defines` entry carries beside its term, written as the term and the gloss together, saying what the term means and so what confirming that choice would mean; it is written once, on the defining node, and read from there, ratified, delegated and deferred on the authority node and keep and prune here. No projection carries a sentence of its own for an option: a sentence that lives only in a projection is a rule no node projects, and the same sentence written again on every node that carries the fact would drift.
 
 `## Facts` holds one `###` subsection per fact, in the facts' order, opening with the reason the fact recommends what it does and the boldness of that recommendation, and the `####` subsections of that fact's options beneath it, in the options' order. A recommendation may be recorded at any stage of the dialogue, as the author ruled on 2026-09-04, and is required from the review stage on, since a node cannot be reviewed without one; a recommendation withheld until a stage boundary is a recommendation held in a session, which the first requirement above forbids. The AI may add an option or move a recommendation in alignment, in reconciliation, and in the loop on itself, within the scope its class allows, as the authority, evaluation and work-loop nodes say.
 
@@ -3007,12 +3007,12 @@ defines:
   - ruling
   - term: answer
     gloss: "Answer is the fact whose options are the candidate answers to the node's own question, and whose confirmed option carries, as its content, the answer the node stands on."
-  - term: existence
+  - term: topology
     gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
   - term: keep
-    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+    gloss: "Keep is the choice on the topology fact that the node stays in the record with its question and its answer."
   - term: prune
-    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+    gloss: "Prune is the choice on the topology fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
   - term: persistence
     gloss: "Persistence is the fact whose options are the shapes the node would keep, present only where the recommendation would change its shape, declaring or liquidating a shim or adding or dropping evidence, and otherwise derived from the shape and asking nothing."
   - term: confirmed
@@ -3180,3 +3180,14 @@ dialogue's standing answer: 'The author\'s words are not a section of the node. 
 Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/transience.
 
 Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.
+### The vocabulary term renamed with its fact, 2026-09-08
+
+This node names the terms an unanswered node carries, and its third term is now
+`topology` rather than `existence`, following the fact whose glosses it holds.
+`keep` and `prune` are unchanged and remain the reserved vocabulary of that
+fact. What widened is what a name outside those two means: it is a placement
+option, owning a subsection of its own as an answer option does, because a
+reparent and a fold each name a destination that only the node can state.
+`commons.systems/disposition-graph/graph-topology`'s recommended answer is where
+that widening is decided and argued; this entry records that the term here
+followed it, under the author's grant of 2026-09-08.

@@ -38,10 +38,10 @@ facts:
         reason: "whether the reserved names are four or five is the dialogue node's question, where the author's same words are already the option instrumentation-is-a-fact"
         supports:
           - words/2026-09-04/28
-      - name: existence-asked-persistence-derived
+      - name: topology-asked-persistence-derived
         source: review
         ref: "2026-09-07"
-      - name: existence-radio-waits-on-the-delegations-ruling
+      - name: topology-radio-waits-on-the-delegations-ruling
         source: commons.systems/disposition-graph/graph-topology
         ref: "2026-09-07"
     recommends: all-four-listed-two-derived
@@ -65,11 +65,11 @@ review:
   verdict: forward
   strength: none
   date: 2026-09-07
-  of: 41cc92e64095758e404742003a756af6e270b156
+  of: 128aad9b132a46a1b691b8bc3659e1374509daa1
   commit: f146f8f44b295c64e47a13bff338748035183d87
   survey:
     date: 2026-09-07
-    of: 41cc92e64095758e404742003a756af6e270b156
+    of: 128aad9b132a46a1b691b8bc3659e1374509daa1
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -88,7 +88,7 @@ What rests on the AI is two things and they are named as the AI's. The choice of
 the page over the encoding, which the author's "Either way" left open and which
 this answer takes on the ground that a derived fact has no second home. And the
 form of the two rows: that the persistence row states what the record derives,
-that the existence row states that no prune is proposed and where one would be
+that the topology row states that no prune is proposed and where one would be
 raised, that both say where a proposal would be made, and that neither takes a
 ruling. Boldness moderate, and the second is why: a
 row that lists a decision and refuses to take it is a shape the record has not
@@ -150,7 +150,7 @@ under:
 
 Every fact the record reserves, on every node that carries facts at all, in the
 reserved order, and none folded. Four names are reserved today, `answer`,
-`authority`, `existence` and `persistence`, which is `FACT_NAMES` in
+`authority`, `topology` and `persistence`, which is `FACT_NAMES` in
 `packages/disposition/read.mjs`, and the page lists whichever names the
 record reserves, so a fifth added by a ruling elsewhere appears here without a
 ruling here.
@@ -169,8 +169,8 @@ What the two rows say is not the same, because the record holds the two absences
 differently, and only one of them is a derivation. The persistence row states what
 the record derives: `dialogue` enumerates what is derived and names "the
 persistence where no fact carries it", so where no persistence fact stands the
-shape is derived from the node and the row prints it. The existence row derives
-nothing and does not say the node is kept. What the absence of an existence fact
+shape is derived from the node and the row prints it. The topology row derives
+nothing and does not say the node is kept. What the absence of a topology fact
 holds is that no prune has been proposed, which is `dialogue`'s own reason for
 making the pair conditional, "a choice nobody has raised is not a candidate the
 record lists"; so the row says that no prune is proposed on this node and where
@@ -195,8 +195,8 @@ One text reads the other way and is quoted rather than passed over. `unanswered`
 says: "A response is given on a node, or on one of the decisions that node's
 ruling asks, which are its facts: the answer, the authority class a ruling would
 confer, the node's existence, and its persistence where the recommendation would
-change its shape." It conditions persistence in terms and leaves existence
-unconditioned, so on that text the existence decision is one a ruling asks
+change its shape." It conditions persistence in terms and leaves topology
+unconditioned, so on that text the topology decision is one a ruling asks
 wherever a ruling can be given, and a row that takes no ruling declines to ask it.
 The page still reports rather than asks, on the author's own rule of 2026-09-06:
 "The scope of alignment artifact is limited to final confirmation and
@@ -208,10 +208,10 @@ and the author's standing disposition of the same day gives the prune of an
 unratified node to the AI under the general delegation of graph topology, with
 two bounds, so on 123 nodes the page would be asking the author to confirm a
 decision they have said they do not want to be asked about. Where a prune is
-proposed the node carries an existence fact, and then the row is the live one the
+proposed the node carries a topology fact, and then the row is the live one the
 parent's answer describes. The asymmetry between the two texts is real and is not
 resolved here: `unanswered`'s sentence conditions one of the pair and not the
-other, and an option conditioning existence as persistence is conditioned belongs
+other, and an option conditioning topology as persistence is conditioned belongs
 on that node, where its answer is.
 
 Where the proposal would be made is said on the row, because a row that reports a
@@ -244,7 +244,7 @@ leaves reserved.
 
 The size of what the author saw is the size of it everywhere. Measured over the
 141 node files of both graphs at graph commit `5da05bc4`: 134 carry an `answer`
-fact and the same 134 carry an `authority` fact; 6 carry `existence`; 5 carry
+fact and the same 134 carry an `authority` fact; 6 carry `topology`; 5 carry
 `persistence`; and no node carries both of the conditional pair. So on 123 of the
 134 nodes that carry facts the page today shows two rows where the record
 reserves four decisions, which is what `commons.systems/public/agency` showed the
@@ -292,7 +292,7 @@ asked about.
 
 #### every-node-carries-four-facts
 
-The encoding end: `dialogue`'s sentence making `existence` and `persistence`
+The encoding end: `dialogue`'s sentence making `topology` and `persistence`
 conditional is amended, every node that carries facts carries four, and the page
 then lists what the node carries with no derivation at all.
 
@@ -321,7 +321,7 @@ under:
 
 ## Answer
 
-The encoding end: `dialogue`'s sentence making `existence` and `persistence`
+The encoding end: `dialogue`'s sentence making `topology` and `persistence`
 conditional is amended, every node that carries facts carries four, and the page
 then lists what the node carries with no derivation at all.
 ```
@@ -335,7 +335,7 @@ a change of shape from the page.
 **AI support.** For it: the author's directive says list all
 facts, and a listed fact the author cannot rule on is half a listing; the author
 is already reading the node, which is the moment a prune occurs to a reader; and
-`existence` exists precisely so a prune is recorded as a fact and not as an option
+`topology` exists precisely so a prune is recorded as a fact and not as an option
 of a special shape. Viable and not adopted: the page's scope under the author's
 rule of 2026-09-06 is the final confirmation of what is recommended, and a prune
 nobody has proposed is not a recommendation to confirm, so the radio would collect
@@ -467,11 +467,11 @@ ruling there reaches this page with no ruling here, and listing a fifth name the
 record does not reserve would be the page deciding the encoding.
 ```
 
-#### existence-asked-persistence-derived
+#### topology-asked-persistence-derived
 
 Everything the recommended option says, with the two conditional facts split
 rather than treated as a pair: the persistence row reports what the record
-actually derives from the node's shape, and the existence row carries `keep` and
+actually derives from the node's shape, and the topology row carries `keep` and
 `prune` as a live decision on every node that carries facts.
 
 **AI support.** For it: it takes the
@@ -479,9 +479,9 @@ author's directive whole where the record backs it, since `unanswered` names the
 node's existence among the decisions a ruling asks with no condition on it and
 `dialogue`'s derived enumeration names persistence alone; a prune is the one
 decision a reader of a node is best placed to raise at the moment they read it;
-`existence` exists precisely so that a prune is recorded as a fact; and it costs
+`topology` exists precisely so that a prune is recorded as a fact; and it costs
 one live radio on 123 nodes rather than 246. Viable and not adopted: a live
-existence radio on 123 nodes asks a decision no one has recommended, and the
+topology radio on 123 nodes asks a decision no one has recommended, and the
 author's rule of 2026-09-06 keeps that off the page, the page's scope being the
 final confirmation of what is recommended and every other movement's preview.
 The same day's standing disposition gives the prune of an unratified node to the
@@ -505,14 +505,14 @@ under:
 
 Everything the recommended option says, with the two conditional facts split
 rather than treated as a pair: the persistence row reports what the record
-actually derives from the node's shape, and the existence row carries `keep` and
+actually derives from the node's shape, and the topology row carries `keep` and
 `prune` as a live decision on every node that carries facts.
 ```
 
-#### existence-radio-waits-on-the-delegations-ruling
+#### topology-radio-waits-on-the-delegations-ruling
 
 Everything the recommended option says, with one of its grounds dated: the page's
-reason for deriving the existence row rather than asking it holds only from the
+reason for deriving the topology row rather than asking it holds only from the
 ruling of `delegated` on `commons.systems/disposition-graph/graph-topology`'s
 authority fact; until then the author has not been asked to delegate the prune,
 and the row is what asks it. Raised on `graph-topology`, whose recommended answer
@@ -540,7 +540,7 @@ under:
 ## Answer
 
 Everything the recommended option says, with one of its grounds dated: the page's
-reason for deriving the existence row rather than asking it holds only from the
+reason for deriving the topology row rather than asking it holds only from the
 ruling of `delegated` on `commons.systems/disposition-graph/graph-topology`'s
 authority fact; until then the author has not been asked to delegate the prune,
 and the row is what asks it. Raised on `graph-topology`, whose recommended answer
@@ -605,9 +605,9 @@ Recommended at this reading: `all-four-listed-two-derived`.
 Findings:
 
 
-On the facts and what they recommend: The diff adds one new viable option to the answer fact, `existence-asked-persistence-derived` (source review, ref 2026-09-07), without changing `recommends` (still `all-four-listed-two-derived`), boldness (still moderate), or `stands`. The authority fact is unchanged (`recommends: ratified`, boldness low); a `review` block is newly recorded in frontmatter carrying the previous reading's verdict, strength, pin and `against`.
+On the facts and what they recommend: The diff adds one new viable option to the answer fact, `topology-asked-persistence-derived` (source review, ref 2026-09-07), without changing `recommends` (still `all-four-listed-two-derived`), boldness (still moderate), or `stands`. The authority fact is unchanged (`recommends: ratified`, boldness low); a `review` block is newly recorded in frontmatter carrying the previous reading's verdict, strength, pin and `against`.
 
-On the viability of the options: Every option remains viable. The new option `existence-asked-persistence-derived` is recorded viable-and-not-adopted with the reasoning the previous reading itself supplied (a live existence radio on 123 nodes would ask a decision no one has recommended, which the author's 2026-09-06 scope rule keeps off the page), which I hold sound; I verified the quoted rule against `disposition/disposition-graph/alignment-page.md:315` and it is exact.
+On the viability of the options: Every option remains viable. The new option `topology-asked-persistence-derived` is recorded viable-and-not-adopted with the reasoning the previous reading itself supplied (a live existence radio on 123 nodes would ask a decision no one has recommended, which the author's 2026-09-06 scope rule keeps off the page), which I hold sound; I verified the quoted rule against `disposition/disposition-graph/alignment-page.md:315` and it is exact.
 
 The review found no strong counter-argument.
 
@@ -632,8 +632,16 @@ Also named: commons.systems/disposition-graph/unanswered.
 
 Proposed: unanswered is the survivor and the home: the option conditioning `existence` as `persistence` is conditioned is recorded on its answer fact, sourced to which-facts-are-listed, so the author rules the asymmetry once at the node whose sentence carries it. which-facts-are-listed's answer stands as written, since it declines the question deliberately and says so.
 
-Recorded as an option on commons.systems/disposition-graph/unanswered's answer fact: `existence-conditioned-as-persistence-is` (source review, 2026-09-07).
+Recorded as an option on commons.systems/disposition-graph/unanswered's answer fact: `topology-conditioned-as-persistence-is` (source review, 2026-09-07).
 
 ### Migrated to the content encoding, 2026-09-07
 
-Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/which-facts-are-listed stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `all-four-listed-two-derived`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/28, referenced by 2 options the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `facts-the-node-carries`, `every-node-carries-four-facts`, `derived-rows-ask-and-take-a-ruling`, `derived-rows-on-every-node`, `a-line-naming-the-facts-not-asked`, `instrumentation-listed-as-a-fifth`, `existence-asked-persistence-derived`, `existence-radio-waits-on-the-delegations-ruling`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `49cbcabd7a9eed31b29063d6b2c11d46a17fda10` is re-computed for the encoding as `a1dee4d80854ece8402ff2b1ee82740a88ecd574`; nothing it read changed. The survey's pin `49cbcabd7a9eed31b29063d6b2c11d46a17fda10` is re-computed for the encoding as `a1dee4d80854ece8402ff2b1ee82740a88ecd574`; nothing it read changed.
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/which-facts-are-listed stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `all-four-listed-two-derived`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/28, referenced by 2 options the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `facts-the-node-carries`, `every-node-carries-four-facts`, `derived-rows-ask-and-take-a-ruling`, `derived-rows-on-every-node`, `a-line-naming-the-facts-not-asked`, `instrumentation-listed-as-a-fifth`, `topology-asked-persistence-derived`, `topology-radio-waits-on-the-delegations-ruling`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `49cbcabd7a9eed31b29063d6b2c11d46a17fda10` is re-computed for the encoding as `a1dee4d80854ece8402ff2b1ee82740a88ecd574`; nothing it read changed. The survey's pin `49cbcabd7a9eed31b29063d6b2c11d46a17fda10` is re-computed for the encoding as `a1dee4d80854ece8402ff2b1ee82740a88ecd574`; nothing it read changed.
+### The reserved names sentence follows the rename, 2026-09-08
+
+The answer names the four reserved fact names and points at the reader as the
+one place the list lives. The third of them is now `topology`, renamed with the
+fact under `commons.systems/disposition-graph/graph-topology`'s recommended
+answer and the author's grant of 2026-09-08. Nothing else in the sentence moves:
+the count is still four, and the reader is still the single home of the list, so
+this node still says where to look rather than keeping a second copy.

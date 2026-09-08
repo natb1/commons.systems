@@ -60,12 +60,12 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-07
-  of: e5b946b42379a6f58d527750f47d1edb37f779da
+  of: 156b5aa31530095e69f7d25e2127f79c62f5557b
   commit: f146f8f44b295c64e47a13bff338748035183d87
   against: "All five findings of the previous reading are answered, each verified at its locus: the false 'nothing in the record defines the term answer' claim is replaced with an accurate account of the bare entry at node.md:65; the passed-over reason and the fact's `against` on `heading-is-the-name-and-a-link` are corrected to the same effect; the fallback-to-dialogue clause is removed entirely rather than patched, since the new recommendation needs no fallback; every stale project.mjs/derive.mjs line citation is now given by function name; and the Account no longer calls the periagogic question a probe, instead correctly routing it through the fact's own options under `probe-or-node`. Question two also turns up nothing false: the new design (glossing `answer` and `persistence` on `dialogue` and releasing the bare entries on `node` and `transience`) is a genuinely new decision beyond what the previous reading's own suggested missing option sketched (which touched only two nodes, `node` and `transience`, by glossing them directly rather than writing to `dialogue`), but it is drawn from cited evidence (`glossary`/`definerIndex` both take the first definer and ignore later ones) and its cost is stated plainly in the fact's own `against`, so it reads as a defensible design choice made in the open rather than an unexamined addition."
   survey:
     date: 2026-09-07
-    of: e5b946b42379a6f58d527750f47d1edb37f779da
+    of: 156b5aa31530095e69f7d25e2127f79c62f5557b
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -156,7 +156,7 @@ is a `defines` entry carrying the term and its gloss, and a bare term claimed by
 another question is not one.
 
 The other two resolve. `authority` is defined with its gloss on
-`commons.systems/disposition-graph/authority`, and `existence` on `dialogue`, and
+`commons.systems/disposition-graph/authority`, and `topology` on `dialogue`, and
 both of those nodes carry an answer the browser renders, so the two headings the
 author named are links exactly as they asked.
 
@@ -379,7 +379,7 @@ two entries that would resolve wrongly are fixed rather than routed around, so
 that no heading falls back and the author gets on all four facts what they asked
 for on two. What is written with the ruling: a gloss for `answer` and one for
 `persistence` on `commons.systems/disposition-graph/dialogue`, the node that
-reserves the four names and already glosses `existence` there, and the release of
+reserves the four names and already glosses `topology` there, and the release of
 the bare entries at `disposition/disposition-graph/node.md:65` and
 `disposition/disposition-graph/transience.md:76`, which is what stops two
 definers standing for one term. `authority` is not touched: it is already glossed
@@ -455,7 +455,7 @@ the parent's answer already names for a metric. There is no fallback, because
 this ruling leaves no name without such an entry: it writes the two the record
 lacks. A gloss for `answer` and a gloss for `persistence` are written on
 `commons.systems/disposition-graph/dialogue`, the node that reserves the four
-names and already glosses `existence`, and the bare entries at
+names and already glosses `topology`, and the bare entries at
 `disposition/disposition-graph/node.md:65` and
 `disposition/disposition-graph/transience.md:76` are released to it, so that one
 entry stands for each name. The release is part of the rule and not tidying:
@@ -478,7 +478,7 @@ that carry facts, measured at graph commit `5da05bc4`.
 
 The other two already resolve. `authority` is defined with its gloss on
 `commons.systems/disposition-graph/authority`, which is the node the author's own
-bullet names as the target, and `existence` on `dialogue`; both of those nodes
+bullet names as the target, and `topology` on `dialogue`; both of those nodes
 carry an answer the browser renders. With the two glosses this ruling writes,
 all four headings are links, and the author gets on every fact what they asked
 for on two.

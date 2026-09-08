@@ -1,6 +1,35 @@
 ---
 question: What may the recorder do to the graph's topology without asking?
 stage: maieutic
+probes:
+  - id: does-the-delegation-reach-the-whole-fact
+    asks: >-
+      Does the delegation of 2026-09-06 reach every question the topology fact
+      now carries, or only the prune its sentence names?
+    fact: authority
+    why: >-
+      The conferring words are `words/2026-09-06/6`: "Otherwise, pruning
+      authority is granted to AI under general delegation of graph topology."
+      The grant they name is the prune; the generality is named of the topic,
+      and in a dependent clause, so the sentence can be read either as granting
+      the prune because topology is already generally delegated, or as granting
+      the prune alone and describing where it sits. On the first reading a
+      general delegation exists; the record holds no other place where it was
+      given, so it exists only in that clause. The words of 2026-09-08 name
+      minting, merging, pruning and re-parenting as the fact's business, and
+      this sitting widened the fact from whether a node exists to where it sits,
+      adding the reparent and the fold.
+      `commons.systems/disposition-graph/authority` holds that authority only
+      narrows on the way down, so a delegation cannot widen with the fact it was
+      given on, and which reading is right is the author's to say rather than
+      the AI's to take from a clause.
+    discharges: >-
+      The class this fact carries. On the general reading `delegated` stands as
+      recommended and covers the reparent and the fold. On the narrow reading
+      the widened fact is not covered, the honest recommendation is `deferred`,
+      and the delegation is recorded on the prune where the record can hold one.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:
@@ -66,7 +95,7 @@ review:
       rivals: "443196964ab56f6176d1d29e6159b5a45f3fd92dccd9f0040d5d81186fcad18d"
       words: "5f5f0f6a043a3815faca5fa6163922b2b36d3b73ae1967c16cd34478aa79dad6"
     findings:
-      - finding: "Independence, the sixteenth validation. `hexis` asks \"In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?\" — a question whose only possible answer is a reading of `purpose`'s answer, whose facts repeat `purpose`'s, and which would be pruned the moment `purpose`'s recommendation moved; `purpose` already carries the answer as the option `knowledge-store-first` sourced from `commons.systems/disposition-graph/hexis`, and `hexis` itself carries the review option `sub-ruling-of-purpose`. The record has also recommended it away: `graph-topology`'s option `a-third-bound-for-open-business` \"cites `hexis`, whose existence fact has recommended `prune` since 2026-09-04\". The brief carries no `under` field for neighbourhood nodes, so the parent relation is read from the question's own wording and from the cross-sourced option rather than from a field."
+      - finding: "Independence, the sixteenth validation. `hexis` asks \"In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?\" — a question whose only possible answer is a reading of `purpose`'s answer, whose facts repeat `purpose`'s, and which would be pruned the moment `purpose`'s recommendation moved; `purpose` already carries the answer as the option `knowledge-store-first` sourced from `commons.systems/disposition-graph/hexis`, and `hexis` itself carries the review option `sub-ruling-of-purpose`. The record has also recommended it away: `graph-topology`'s option `a-third-bound-for-open-business` \"cites `hexis`, whose topology fact has recommended `prune` since 2026-09-04\". The brief carries no `under` field for neighbourhood nodes, so the parent relation is read from the question's own wording and from the cross-sourced option rather than from a field."
         kind: "decomposition"
         status: "new"
         since: "2026-09-07"
@@ -128,7 +157,7 @@ review:
           - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
           - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
           - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:existence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:topology (defines: commons.systems/disposition-graph/dialogue)"
           - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
           - "term:prune (defines: commons.systems/disposition-graph/dialogue)"
           - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
@@ -274,7 +303,7 @@ the facts is not stored beside them;
 two places as the anomaly, and here the two copies would be written by different
 acts, so they drift the moment a move is taken without the fact being touched; and
 `commons.systems/disposition-graph/which-facts-are-listed`, which declined a live
-existence radio on every row on the ground that a row asking nothing still costs
+topology radio on every row on the ground that a row asking nothing still costs
 the author a reading. The author's own model stands on the fact as
 `topology-as-a-fact-of-the-node`, because the judgment that those three outweigh
 the uniformity of a fact the schema mints rather than the mover is the author's to
@@ -340,7 +369,7 @@ Why the scope is drawn at shape and stops there. The delegation the author names
 
 Why the whole of that scope and not the prune alone, which is the narrower answer on the fact as `pruning-and-what-a-prune-needs`. The author's words name a general delegation of graph topology as a thing they hold and grant the prune under it, so the phrase is theirs and its reach is what this node exists to state; a scope drawn narrower than their words reach would be the AI narrowing a grant it was given, which is a different act from reading one and is not the delegate's to take. The paragraph above argues where the outer edge falls, at the line between shape and substance, and this one says why the inner scope is not cut back further: because cutting it back is a decision about the author's grant, and the place for that decision is the author's ruling on the option, not the drafting of the answer.
 
-The first prune this delegation reaches is the one the independence test proposed on `commons.systems/disposition-graph/hexis`, whose existence fact has recommended `prune` since 2026-09-04 and which waits at its row. That is why the third option on this node's answer fact exists and why the author is shown it: the two bounds look at a node's history and neither reaches a node whose question is currently in front of the author.
+The first prune this delegation reaches is the one the independence test proposed on `commons.systems/disposition-graph/hexis`, whose topology fact has recommended `prune` since 2026-09-04 and which waits at its row. That is why the third option on this node's answer fact exists and why the author is shown it: the two bounds look at a node's history and neither reaches a node whose question is currently in front of the author.
 
 Why deletion and not deprecation, which is on the fact as `deprecation-rather-than-deletion` and is the answer that would dissolve the case against this one. A prune is a deletion, and the class-recommendation node names a deletion irreversible; this answer does not recast it as anything else, and the authority fact below concedes the limb. What it sets against that is what a deprecation costs and what the record keeps without it: the file stays in the ref's history, and before it goes the surviving node carries the question, the account folded into it, and the reason the question was closed, which the paragraph on the bounds requires of every prune, so what a reader loses is a path and not the content, though the path is lost. A deprecated node left in the tree is a third state, neither a node nor gone, and the parser, the browser, the alignment page, the frontier and the validator must each learn to skip it, so every rule the record states about nodes acquires an exception and every instrument acquires a branch. That is a standing cost paid on every node forever, to make reversible an act the author's own word, "prune", does not ask to be reversible. The option stays on the fact because the judgment that the history and the survivor are enough is the author's to disagree with.
 
@@ -363,7 +392,7 @@ The recorder shapes the graph and never decides its questions. The graph's topol
 
 Two bounds hold, and they are the author's own. A node the author has ratified, one whose answer fact carries a ruling, is not the recorder's to prune: its answer is a thing the author committed to, and withdrawing a commitment is theirs. And anything the record holds as the author's on the node, their words above all, is transferred to another node before the file goes, so that a deletion never destroys something only the author could have given. To those this answer adds the reason the question was closed, which `commons.systems/disposition-graph/recording` requires of any prune, and, where the prune follows the independence test, the survivor recorded on the node that keeps the question and the account folded into it, which `commons.systems/disposition-graph/probe-or-node`'s remedy requires; this answer requires all three of every prune taken under the delegation, so that a deletion is never the only record of itself.
 
-The delegation acts from the ruling on this node's authority fact and not before, and that is not a formality. A class is read off a ruling recorded on a fact; a delegation written into the prose of an answer is a class the AI wrote for itself, which the `authority` node says is not a grant. So until this fact is ruled `delegated`, a prune is asked where the record asks it today, and taken where the author has already directed it: a prune of a node no ruling reaches that the author has directed in their own words is taken on that word, wherever it was given, as a standing direction of the author's about a class of act; the grant the what-acts-during-bootstrap node defines reaches one named reconciliation and no class, so a direction about a class acts by right only if that node's option `a-standing-direction-acts-by-right` is ruled, on which this interim rests and until which it is applied as the author's words of 2026-09-05 directed, which is the interim `commons.systems/disposition-graph/probe-or-node` now recommends; and where no such word has been given the node's existence fact moves to `prune` with the reason it was found, and the author rules it at that node's own row, which is what the alignment skill's independence clause and `packages/clean-context-review/brief-survey.md` instruct today, and what the sixteenth validation `commons.systems/disposition-graph/frontier-consistency` now recommends would instruct; those instructions stand unchanged until the ruling. What the ruling changes is one clause in each of them, and in the independence test's remedy on `commons.systems/disposition-graph/probe-or-node`, which cites this node rather than carrying the rule. It changes two other places that already read the delegation as conferred: `commons.systems/disposition-graph/which-facts-are-listed`, whose answer keeps a live existence radio off the alignment page on the ground that the author's disposition gives the prune of an unratified node to the AI, a ground that holds only from this ruling and is recorded there as the option `existence-radio-waits-on-the-delegations-ruling`; and `commons.systems/disposition-graph/dialogue`, whose account of 2026-09-06 names `probe-or-node` as the delegation's home, which this node now is.
+The delegation acts from the ruling on this node's authority fact and not before, and that is not a formality. A class is read off a ruling recorded on a fact; a delegation written into the prose of an answer is a class the AI wrote for itself, which the `authority` node says is not a grant. So until this fact is ruled `delegated`, a prune is asked where the record asks it today, and taken where the author has already directed it: a prune of a node no ruling reaches that the author has directed in their own words is taken on that word, wherever it was given, as a standing direction of the author's about a class of act; the grant the what-acts-during-bootstrap node defines reaches one named reconciliation and no class, so a direction about a class acts by right only if that node's option `a-standing-direction-acts-by-right` is ruled, on which this interim rests and until which it is applied as the author's words of 2026-09-05 directed, which is the interim `commons.systems/disposition-graph/probe-or-node` now recommends; and where no such word has been given the node's topology fact moves to `prune` with the reason it was found, and the author rules it at that node's own row, which is what the alignment skill's independence clause and `packages/clean-context-review/brief-survey.md` instruct today, and what the sixteenth validation `commons.systems/disposition-graph/frontier-consistency` now recommends would instruct; those instructions stand unchanged until the ruling. What the ruling changes is one clause in each of them, and in the independence test's remedy on `commons.systems/disposition-graph/probe-or-node`, which cites this node rather than carrying the rule. It changes two other places that already read the delegation as conferred: `commons.systems/disposition-graph/which-facts-are-listed`, whose answer keeps a live topology radio off the alignment page on the ground that the author's disposition gives the prune of an unratified node to the AI, a ground that holds only from this ruling and is recorded there as the option `topology-radio-waits-on-the-delegations-ruling`; and `commons.systems/disposition-graph/dialogue`, whose account of 2026-09-06 names `probe-or-node` as the delegation's home, which this node now is.
 
 Where a prune is taken under this delegation no ruling precedes the deletion, and that departs from `commons.systems/disposition-graph/recording`, whose answer requires that a ruling the node not exist be recorded before the node is deleted. The departure is recorded as an option on that node and is not adopted here in silence. What survives it is the reason that rule was given: the record keeps the reason a question was closed instead of losing it with the file, which the paragraph above requires whether a ruling was given or not.
 ```
@@ -371,7 +400,7 @@ Where a prune is taken under this delegation no ruling precedes the deletion, an
 #### every-prune-asked-at-the-row
 
 The delegation covers minting a node and drawing its `under` edges, and stops
-short of the prune: every deletion is asked at the node's own existence-fact row
+short of the prune: every deletion is asked at the node's own topology-fact row
 and the author rules it, which is what
 `commons.systems/disposition-graph/recording` requires today, what
 `commons.systems/disposition-graph/frontier-consistency`'s sixteenth validation
@@ -400,7 +429,7 @@ under:
 ## Answer
 
 The delegation covers minting a node and drawing its `under` edges, and stops
-short of the prune: every deletion is asked at the node's own existence-fact row
+short of the prune: every deletion is asked at the node's own topology-fact row
 and the author rules it, which is what
 `commons.systems/disposition-graph/recording` requires today, what
 `commons.systems/disposition-graph/frontier-consistency`'s sixteenth validation
@@ -419,13 +448,13 @@ paragraph stands with its last two clauses struck.
 The author's two bounds and a third the AI adds: a node with business open with
 the author is not pruned under the delegation but waits for them. Open business
 means an undischarged probe on the node, a pending ruling on any of its facts, or
-an existence fact already showing `prune` at a row the author has not yet reached.
+a topology fact already showing `prune` at a row the author has not yet reached.
 The author's two bounds both look at a node's history — whether they ruled it,
 whether their words are on it — and neither reaches a node whose question is
 currently in front of them, which is where a delegated deletion does the most
 damage: the author loses a decision they were about to make and never learns which
 one. The case for it is the record's only instance, `commons.systems/disposition-graph/hexis`,
-whose existence fact has recommended `prune` since 2026-09-04 and which waits at
+whose topology fact has recommended `prune` since 2026-09-04 and which waits at
 its row; under the two bounds alone it is deleted the day this fact is ruled. The
 case against is that it hands back by a side door what the author gave — a
 recorder who wants a prune can leave a row standing and then read the row as the
@@ -449,13 +478,13 @@ under:
 The author's two bounds and a third the AI adds: a node with business open with
 the author is not pruned under the delegation but waits for them. Open business
 means an undischarged probe on the node, a pending ruling on any of its facts, or
-an existence fact already showing `prune` at a row the author has not yet reached.
+a topology fact already showing `prune` at a row the author has not yet reached.
 The author's two bounds both look at a node's history — whether they ruled it,
 whether their words are on it — and neither reaches a node whose question is
 currently in front of them, which is where a delegated deletion does the most
 damage: the author loses a decision they were about to make and never learns which
 one. The case for it is the record's only instance, `commons.systems/disposition-graph/hexis`,
-whose existence fact has recommended `prune` since 2026-09-04 and which waits at
+whose topology fact has recommended `prune` since 2026-09-04 and which waits at
 its row; under the two bounds alone it is deleted the day this fact is ruled. The
 case against is that it hands back by a side door what the author gave — a
 recorder who wants a prune can leave a row standing and then read the row as the
@@ -660,9 +689,10 @@ scope, the timing rule, the re-confirmation of a ratified node and the transfer
 bound as the author gave them, and topology recorded as a field until a second
 placement is viable, at which point the fact is minted on the node whose
 placement is in question and carries the placements as options in the ordinary
-way. It is the record's existence fact widened from whether the node exists to
-where it sits, so nothing the record carries today is lost and no node acquires a
-row for a question it does not raise. Recommended, because it gives the author
+way. It is the fact the record carried under the name `existence` until this
+answer, widened from whether the node exists to where it sits and renamed for the
+wider question, so nothing the record carries today is lost and no node acquires
+a row for a question it does not raise. Recommended, because it gives the author
 every effect they asked for and takes the encoding from the record's own rule
 that what can be derived is not stored.
 
@@ -670,9 +700,9 @@ that what can be derived is not stored.
 
 Why a field and not a fact. `commons.systems/disposition-graph/model` holds that rank, the context a session loads, the work queue and the author's review queue are computed from the facts and never stored, and a node's placement is of that kind: the `under` field is the placement, the file's existence is the existence, the validator checks both and the projector reads both. A fact recommending what the field already states is one fact in two places, which `commons.systems/disposition-graph/codd-update-anomaly` names as the update anomaly, and here the two copies are written by different acts, so they drift the moment a move is taken without the fact being touched.
 
-Why the fact is minted when a second placement becomes viable and not before. `commons.systems/disposition-graph/viable-options` and `commons.systems/disposition-graph/pareto-frontier` already say what belongs on a fact: the options that remain viable. A fact with one viable option asks the author nothing, and 154 of them ask nothing 154 times. This is the argument `commons.systems/disposition-graph/which-facts-are-listed` accepted when it kept a live existence radio off every row, and the argument does not change when the fact is widened from existence to placement; what changes is that the fact, where it is minted, now carries the reparent and the fold as well as the prune, which the existence fact never could.
+Why the fact is minted when a second placement becomes viable and not before. `commons.systems/disposition-graph/viable-options` and `commons.systems/disposition-graph/pareto-frontier` already say what belongs on a fact: the options that remain viable. A fact with one viable option asks the author nothing, and 154 of them ask nothing 154 times. This is the argument `commons.systems/disposition-graph/which-facts-are-listed` accepted when it kept a live topology radio off every row, and the argument does not change when the fact is widened from existence to placement; what changes is that the fact, where it is minted, now carries the reparent and the fold as well as the prune, which it never could while it asked only whether the node exists.
 
-Why the fact is the existence fact widened rather than a new kind beside it. The record already mints an existence fact on a node whose existence is in question, and the questions it cannot ask there are the two the author's model needs: whether the node belongs under a different question, and whether it should be folded into another. Widening the fact answers those without adding a second row to a node that would otherwise carry both, and every existence fact the record holds today becomes a topology fact with its options unchanged.
+Why the fact is the record's own `existence` fact widened and renamed rather than a new kind beside it. The record already mints that fact on a node whose existence is in question, and the questions it cannot ask there are the two the author's model needs: whether the node belongs under a different question, and whether it should be folded into another. Widening the fact answers those without adding a second row to a node that would otherwise carry both, and every fact of that kind the record holds today becomes a topology fact with its options unchanged, the name following the question.
 
 Why the two-sided acts are recorded on both nodes. A fold changes the survivor's question and the folded node's existence; a reparent changes the child's field and every sibling's share of the parent's rank, since `commons.systems/disposition-graph/under` says the edge carries attention and context as well as authority. A fact records one node's placement and cannot record what the act did to the other, so the account entry goes on both and neither side of a two-sided act is silent.
 
@@ -697,13 +727,13 @@ The recorder shapes the graph and never decides its questions. The graph's topol
 
 The recorder acts when its own recommendation moves, and the move and the record of it are one act. A topology recommendation that has changed is reconciled in the sitting that changed it, on any node the author has not confirmed ratified, and the account carries what moved and why; there is no interval in which a topology decision is taken but unrecorded, and no queue of topology moves waiting for a ruling nobody asked for. On a node whose answer the author has ratified the move waits, because the placement is part of what they committed to, and the author re-confirms before it changes. This is the author's rule of 2026-09-08, and its second half replaces the flat bar this answer carried before: a ratified node was not the recorder's to prune at all, where now it is re-confirmed before any topology act, which forbids less and reaches further.
 
-Topology is a field before it is a fact. A node's placement is its `under` field and its existence is the file, both of them data the validator checks and the projector reads, and `commons.systems/disposition-graph/model` holds that what can be computed from the record is not stored beside it. A topology fact is minted on the node when a second placement becomes viable, and it carries them as options in the ordinary way: keep, prune, `under` these questions rather than those, fold into that node. It is the record's existence fact widened from whether the node exists to where it sits, so every existence fact the record holds today is a topology fact under this answer with its options unchanged, and the two questions the existence fact could never ask, the reparent and the fold, are asked on the same row. Where one placement is viable there is no fact, because a fact with one option asks the author nothing.
+Topology is a field before it is a fact. A node's placement is its `under` field and its existence is the file, both of them data the validator checks and the projector reads, and `commons.systems/disposition-graph/model` holds that what can be computed from the record is not stored beside it. A topology fact is minted on the node when a second placement becomes viable, and it carries them as options in the ordinary way: keep, prune, `under` these questions rather than those, fold into that node. It is the fact the record carried under the name `existence` until this answer, widened from whether the node exists to where it sits and renamed for the wider question, so every fact of that kind the record holds today is a topology fact with its options unchanged, and the two questions it could never ask, the reparent and the fold, are asked on the same row. Where one placement is viable there is no fact, because a fact with one option asks the author nothing.
 
 A move that touches two nodes is recorded on both. A fold changes the survivor's question and the folded node's existence; a reparent changes the child's field and every sibling's share of the parent's rank, which is what `commons.systems/disposition-graph/under` says the edge means. The fact goes on the node whose placement is in question, and the account entry goes on both.
 
 Two bounds hold, and they are the author's own. Anything the record holds as the author's on the node, their words above all, is transferred to another node before the file goes, so that a deletion never destroys something only the author could have given. And a node whose answer the author has ratified is re-confirmed before its topology moves. To those this answer adds the reason the question was closed, which `commons.systems/disposition-graph/recording` requires of any prune, and, where the prune follows the independence test, the survivor recorded on the node that keeps the question and the account folded into it, which `commons.systems/disposition-graph/probe-or-node`'s remedy requires; this answer requires all three of every prune taken under the delegation, so that a deletion is never the only record of itself.
 
-The delegation acts from the ruling on this node's authority fact and not before, and that is not a formality. A class is read off a ruling recorded on a fact; a delegation written into the prose of an answer is a class the AI wrote for itself, which the `authority` node says is not a grant. The author's words of 2026-09-08 state the same grant a second time and more exactly, and stating it twice is not conferring it. So until this fact is ruled `delegated`, a prune is asked where the record asks it today, and taken where the author has already directed it: a prune of a node no ruling reaches that the author has directed in their own words is taken on that word, wherever it was given, as a standing direction of the author's about a class of act; the grant the `commons.systems/disposition-graph/what-acts-during-bootstrap` node defines reaches one named reconciliation and no class, so a direction about a class acts by right only if that node's option `a-standing-direction-acts-by-right` is ruled, on which this interim rests and until which it is applied as the author's words of 2026-09-05 directed, which is the interim `commons.systems/disposition-graph/probe-or-node` now recommends; and where no such word has been given the node's topology fact moves to `prune` with the reason it was found, and the author rules it at that node's own row. What the ruling changes is one clause in the alignment skill's independence test, in `packages/clean-context-review/brief-survey.md`, and in the remedy on `commons.systems/disposition-graph/probe-or-node`, which cites this node rather than carrying the rule. It changes two other places that already read the delegation as conferred: `commons.systems/disposition-graph/which-facts-are-listed`, whose answer keeps a live existence radio off the alignment page on the ground that the author's disposition gives the prune of an unratified node to the AI, a ground that holds only from this ruling and is recorded there as the option `existence-radio-waits-on-the-delegations-ruling`; and `commons.systems/disposition-graph/dialogue`, whose account of 2026-09-06 names `probe-or-node` as the delegation's home, which this node now is.
+The delegation acts from the ruling on this node's authority fact and not before, and that is not a formality. A class is read off a ruling recorded on a fact; a delegation written into the prose of an answer is a class the AI wrote for itself, which the `authority` node says is not a grant. The author's words of 2026-09-08 state the same grant a second time and more exactly, and stating it twice is not conferring it. So until this fact is ruled `delegated`, a prune is asked where the record asks it today, and taken where the author has already directed it: a prune of a node no ruling reaches that the author has directed in their own words is taken on that word, wherever it was given, as a standing direction of the author's about a class of act; the grant the `commons.systems/disposition-graph/what-acts-during-bootstrap` node defines reaches one named reconciliation and no class, so a direction about a class acts by right only if that node's option `a-standing-direction-acts-by-right` is ruled, on which this interim rests and until which it is applied as the author's words of 2026-09-05 directed, which is the interim `commons.systems/disposition-graph/probe-or-node` now recommends; and where no such word has been given the node's topology fact moves to `prune` with the reason it was found, and the author rules it at that node's own row. What the ruling changes is one clause in the alignment skill's independence test, in `packages/clean-context-review/brief-survey.md`, and in the remedy on `commons.systems/disposition-graph/probe-or-node`, which cites this node rather than carrying the rule. It changes two other places that already read the delegation as conferred: `commons.systems/disposition-graph/which-facts-are-listed`, whose answer keeps a live topology radio off the alignment page on the ground that the author's disposition gives the prune of an unratified node to the AI, a ground that holds only from this ruling and is recorded there as the option `topology-radio-waits-on-the-delegations-ruling`; and `commons.systems/disposition-graph/dialogue`, whose account of 2026-09-06 names `probe-or-node` as the delegation's home, which this node now is.
 
 Where a prune is taken under this delegation no ruling precedes the deletion, and that departs from `commons.systems/disposition-graph/recording`, whose answer requires that a ruling the node not exist be recorded before the node is deleted. The departure is recorded as an option on that node and is not adopted here in silence. What survives it is the reason that rule was given: the record keeps the reason a question was closed instead of losing it with the file, which the paragraph above requires whether a ruling was given or not.
 ```
@@ -723,6 +753,22 @@ the moment the recommendation changes, on any node not confirmed ratified. Sayin
 it twice is not conferring it, and this fact is still where the conferral would be
 recorded; what the second saying settles is the reading, since a delegation that
 names its moment is not a direction to draft.
+
+The author's words of 2026-09-08 carry a second clause, and the first reading of
+them did not turn to it. They grant the recommendation outright, topology being
+"a fact that AI can make recommendations on", and then bound the reconciling:
+"Generally, AI can only reconcile disposition fact which is confirmed, or within
+the scope of confirmed delegated/deferred authority, or for which bootstrap
+authority" applies. Recommending and reconciling are separated there, and a
+delegation is on the second side of the line. So the grant of 2026-09-06 does
+not act because it was given; it acts once it is confirmed, and this fact is
+where the confirming happens. Nothing in the reconciliation of 2026-09-08 stood
+on it. The topology work of that sitting stood on the third limb the author's
+own sentence names, the bootstrap grant, which is why it could proceed with this
+fact unanswered and why proceeding was not the delegation acting early. Read
+that way the two sayings do not repeat each other: the first confers a class and
+the second says what a conferred class needs before it acts, and the fact that
+carries the first is unanswered while the second is already in force.
 
 `commons.systems/disposition-graph/class-recommendation`'s test, run honestly,
 argues the other way on two limbs, and the fact's `against` states it: a prune is
@@ -840,3 +886,89 @@ Also named: commons.systems/disposition-graph/frontier-consistency, commons.syst
 Proposed: The survivor is the recommended answer's list of sixteen validations in the record's current vocabulary. The four live option fences are re-derived from it, each carrying only its own named change, so that the difference between an option and the answer is the change the option's name states and nothing else. `probe-or-node` is named because it owns the sixteenth validation the fences drop, and `graph-topology` because `sixteenth-validation-reads-the-delegation` makes that validation read the delegation off it.
 
 Recorded as an option on commons.systems/disposition-graph/frontier-consistency's answer fact: `the-live-options-carry-the-sixteenth-validation` (source review, 2026-09-07).
+### The fact renamed to follow its question, 2026-09-08
+
+This node's recommended answer widens the record's `existence` fact from whether
+a node exists to where it sits, and adds the two questions that fact could never
+ask, the reparent and the fold. A fact whose name asks something narrower than
+the fact asks misdirects every reader of it, so the name follows the question:
+the fact is `topology` from this reconciliation, made under the author's grant
+of 2026-09-08 and at implementation commit `f31943ca`.
+
+What moved. The reserved name in the reader, the projector and the review's
+briefs; the vocabulary term this record defines on
+`commons.systems/disposition-graph/dialogue`; the sentence naming the reserved
+facts on `commons.systems/disposition-graph/which-facts-are-listed`; four option
+slugs built on the old name; and the live text of twenty node files. A node's
+`## Account` keeps the word it was written with, because what the record said in
+September is not amended by what the fact is called afterwards. Names are the
+exception and change everywhere, history included, or the references to them
+dangle.
+
+What the rename cost the reviews, and what it did not. Eleven nodes carry review
+or survey pins that the rename moved, seventeen pins in all, every one of them
+on the node's own recommendation hash rather than on a single fact's. The pins
+were re-computed from the renamed text and carried across, so no reading is owed
+a second time for a change of name; a pin already stale before the rename was
+left stale, since carrying it would forgive a move the rename did not make.
+Measured over the whole landing: 159 pins, 53 stale before it and 55 after, the
+two added being the surveys of
+`commons.systems/disposition-graph/alignment-target` and
+`commons.systems/disposition-graph/quotes`, whose recommendations the sitting
+moved. The rename added none. Nothing else in the record's rulings moved,
+because the record holds none.
+
+The vocabulary widened with the name. `keep` and `prune` stay reserved and own
+no subsection, taking their text from the glossary as an authority option does;
+any other option on the fact is a placement option owning a `#### <option>`
+subsection as an answer option does, which is what makes a reparent or a fold
+recordable at all, since each names a destination that only the node can state.
+
+None of this is a ruling. The answer above is recommended and unanswered, and
+the rename is reversible by the mechanism that made it: the reader, the term,
+the slugs and the live text are one substitution each, and the pins carry back
+the way they carried across.
+### The grounding the sitting owed on its own authority, 2026-09-08
+
+The author observed at the close of the sitting of 2026-09-08 that the recording
+of the topology authority "did not progress through periagogic grounding in the
+way I might have expected based on the alignment input for alignment dialogue",
+and asked that the record return to this fact once the alignment dialogue itself
+was reconciled. It was reconciled in the same landing:
+`commons.systems/disposition-graph/movements` now states the three movements and
+the diagnosis that selects among them, and
+`commons.systems/disposition-graph/plato-elenchus` grounds the third.
+
+The turn, made under those movements. The first reading of this fact argued from
+two places: the author's conferring words of 2026-09-06 and
+`commons.systems/disposition-graph/class-recommendation`'s test, which returns
+ratified on two limbs and which the reading conceded and departed from. Both are
+arguments about whether the class is the right one. Neither turns to what the
+author had said in the same input about when a class acts at all, and that is
+where the periagogic move goes: not to a new argument but to a commitment
+already in the author's words, put against the position they were about to
+underwrite. The second clause of `words/2026-09-08/11` separates recommending on
+topology, which it grants without condition, from reconciling it, which it
+allows only where the authority is confirmed or where bootstrap authority
+carries the work. On that clause the delegation of 2026-09-06 is a class
+conferred and not yet in force, and the sitting's own topology reconciliation
+stood on the bootstrap grant throughout, which is what made it lawful with this
+fact unanswered.
+
+What the turn changed and what it did not. The recommendation does not move: the
+author's words confer `delegated` and this fact is the only instrument for
+recording that, which was true before the turn and is true after it. What moves
+is what the reading claims. It no longer reads the two sayings as the same
+thing said twice, and it no longer leaves a reader to infer that the sitting
+acted on a delegation; it says which authority the work stood on. And it exposes
+a question the previous reading buried, now carried as this node's first probe:
+the conferring sentence names the grant of the prune and names the generality of
+the topic, in a dependent clause, and the fact has since widened to carry the
+reparent and the fold. Whether the grant reaches them is the author's to say.
+
+What this entry does not claim. One paragraph and one probe are not the whole of
+a periagogic movement, and the movement's own test is whether the grounding
+could have defeated the position it was brought against. Here it did not: it
+qualified the position and left the recommendation standing. That is a weaker
+result than the movement is for, and it is recorded as the result rather than
+dressed as a stronger one.

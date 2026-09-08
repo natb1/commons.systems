@@ -9,7 +9,7 @@ review:
   against: "Standing unguarded is the right answer and the record has already conceded it, so the residual risk is the opposite of the one the reviews chased: purpose is ratified, unguarded, and the two criteria return only 'when the reconciliation harness exists' — a condition nothing on the frontier derives and no shim carries. The record's own rule is that a shim with no liquidation condition is an undeclared permanent; an unguarded root with an unwatched promise to guard it later is the same shape without the vocabulary."
   survey:
     date: 2026-09-05
-    of: faee0e7d274f0758c907d6447bab7e02dd2e463a
+    of: 94403180983eec0d60ebd631bb0e9aa75c7b9c51
 facts:
   - name: answer
     options:
@@ -28,7 +28,7 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: low
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune
@@ -86,7 +86,7 @@ under:
 Purpose carries the two criteria as drafted: a check that every unit of work the harness dispatches cites the node it serves, and an assessment that work done in the author's name since the last sitting traces to a recorded disposition. The session withdrew it after the review, on the ground that the check names a harness that does not exist and the assessment has no failure condition, so it cannot fail and cannot guard; the Options block nevertheless still lists it. It remains on the table as the option the author may take.
 ```
 
-### existence
+### topology
 
 Prune: The redundancy finding holds that this node decides a clause purpose's own recommended text contains, so confirming purpose as shown would decide it by that act. Its second branch folds the option into purpose's account as an explicit alternative and prunes this node, which is what the new encoding makes structural; its first branch keeps the node with one line saying it is a sub-ruling of purpose that must be ruled first.
 

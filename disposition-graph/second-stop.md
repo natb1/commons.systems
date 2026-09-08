@@ -45,7 +45,7 @@ review:
   against: "The node's whole content is a decision about another node's prose, and the record now has three nodes deciding one page: second-stop on whether model is rewritten, model on the rewrite itself, and rejected on what a rationale carries of its alternatives. Keeping the option as a node buys the author a separate ruling; it costs a screen, an ordering the page does not show, and a text that must be reopened if the two rulings disagree. The redundancy finding's own second branch — fold each option into its parent's alternatives, which the new encoding makes structural — is the cheaper answer and is pending as `fold-into-model`."
   survey:
     date: 2026-09-07
-    of: 1fcd58bc24b5f148acd7f5b0de62d07388047b9f
+    of: c3f506c46b4732f0409630cffab542de46a3d200
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "12f2ea10e619192823d3e2ff6cb4e79ffeb23d7d0bfece82313f5397e5fca1d0"
@@ -76,7 +76,7 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: moderate
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune
@@ -162,7 +162,7 @@ because the author's own recorded order puts the browser before alignment, and
 two other nodes' rationales rest on that order.
 ```
 
-### existence
+### topology
 
 Prune: This node is pruned and its two options are carried on model as alternatives in model's own dialogue state, so the author rules once rather than on two screens with no ordering shown. The redundancy finding of 2026-09-03 offers this against keeping the option-node as the survivor of its question, and observes that confirming model's draft as shown decides this question by that act.
 

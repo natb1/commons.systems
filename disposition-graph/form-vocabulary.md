@@ -12,7 +12,7 @@ facts:
       - name: ratified
       - name: delegated
       - name: deferred
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune
@@ -34,7 +34,7 @@ The sitting's proposed answer, never stamped and still open for the ruling: no n
 
 **AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-### existence
+### topology
 
 Prune: The redundancy finding holds that this node restates two other nodes' answers, projection's on linking every defined term and readings' on reaching a tradition through the name it defines, and adds one decision that is a rejected alternative rather than a question. It proposes folding the node into node's rationale as a rejected alternative, one node per form rejected because each would restate the definition its owning node already carries, and pruning this node, which is what its own facts already say with persistence not recorded. The author's quotation it carries is already carried verbatim on node. Also raised on commons.systems/disposition-graph/readings.
 

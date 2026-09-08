@@ -101,6 +101,11 @@ facts:
       - name: browser-renders-the-authors-words
         source: commons.systems/disposition-graph/authors-words-on-the-page
         ref: "2026-09-07"
+      - name: a-doctrine-digest-read-whole
+        source: ai
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/13
     recommends: draft
     boldness: moderate
   - name: authority
@@ -671,6 +676,75 @@ Everything the recommended option says, with the browser rendering each node's
 section keeps them.
 ```
 
+#### a-doctrine-digest-read-whole
+
+Everything the recommended option says, and a fourth projection beside the
+browser, the rules and the worktree page: a doctrine digest, written by the run
+that writes the rules and held current by the same check, carrying every node's
+id, question, stage and defined terms together with its recommended answer, at
+two levels, the answer entire and its first paragraph alone. A session that
+needs to know what the record already holds on a question reads the digest
+whole, and the comparator is the reader rather than an index.
+
+**AI support.** Measured at graph commit `5cacddde`: the record is 155 nodes
+and 5.6 MB, of which the recommended answer fences are 583,966 bytes, 10.4 per
+cent of it, near 146,000 tokens, which one reader holds whole; the
+lead-paragraph level is 151,401 bytes. Reading every node from disk costs 365
+milliseconds and the survey's brief 2.1 seconds, so the linear scan the author
+names is not what a sitting pays. What it pays is bytes carried into context,
+and a digest at the answer level carries a tenth of the graph to answer what is
+today answered by grep, which the author calls ad-hoc, `words/2026-09-08/13`.
+An index over the same corpus would return a ranked guess where the digest
+returns the whole, and below roughly ten thousand vectors an approximate index
+buys nothing an exact scan does not already give.
+
+**AI divergence.** Against it, and the case is the record's own: this is an
+instrument whose brief is the size of the record, which
+`commons.systems/disposition-graph/review-cost`'s recommended answer names, in
+the author's words of 2026-09-07, as a defect of the instrument repaired before
+it runs again, allowing a brief of the record's size only as a backfill run
+once on the author's word. The digest is not run once. It is read on every
+question, and it grows with the record: between 2026-09-05 and 2026-09-08 the
+graph gained 10.1 per cent in nodes and 21.7 per cent in bytes, so the level
+that fits one context today does not stay fitting, and the answer level reaches
+a 200,000-token context at about 212 nodes. It is also a copy, with the drift
+surface the readings `dry-single-source-of-truth` and
+`hand-written-projection-drift` describe, held off only by the `--check` guard
+the rules already use. And the largest cost the day measured is not retrieval
+at all: the per-draft briefs of `commons.systems/disposition-graph/decomposition`
+carried 7,926,691 bytes where its batch carried 838,923, a ninefold multiplier
+that no retrieval instrument touches.
+
+**Content.**
+
+```markdown
+---
+question: How is the record read?
+form: rule
+boost: 5
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - projection
+  - graph browser
+shims:
+  - artifact: the graph browser published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round
+    for: the human projection this node names
+    liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
+    declared: 2026-09-02
+---
+
+## Answer
+
+Everything the recommended option says, and a fourth projection beside the
+browser, the rules and the worktree page: a doctrine digest, written by the run
+that writes the rules and held current by the same check, carrying every node's
+id, question, stage and defined terms together with its recommended answer, at
+two levels, the answer entire and its first paragraph alone. A session that
+needs to know what the record already holds on a question reads the digest
+whole, and the comparator is the reader rather than an index.
+```
+
 ## Account
 
 ### Manifest
@@ -766,3 +840,36 @@ The record's term is option, and growth carries '`rejected-alternative-is-an-opt
 Also named: commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/node, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/growth.
 
 Proposed: viable-options survives; the four nodes are amended to say option, and node and prose-and-structure to name the sections dialogue keeps (`## Facts`, `## Account`) rather than rationale and disposition.
+### The record's own answer to searching itself, 2026-09-08
+
+The author asked whether a fuzzy or vector search should replace grep, saying
+that grepping is too ad-hoc and that a linear scan violates the disposition that
+alignment complexity scale sub-linearly with the size of the graph,
+`words/2026-09-08/13`. Two findings turn the question, and neither is the one
+the question expects.
+
+The first is that the disposition the author cites is already in the record. It
+is on `commons.systems/disposition-graph/review-cost`, in the author's own words
+of 2026-09-07: no brief grows with the record, what a reading is given is
+bounded by its object and that object's partners, and an instrument whose brief
+is found growing with the record is a defect of the instrument. It is not
+written as a complexity class, so a search of the record for the word finds
+nothing, which is why this entry says where it lives.
+
+The second is that the bound, as written, binds readings and instruments, and
+the alignment session's own search of the graph is neither. This node's
+recommended answer is what exempts it: the record is read through projections
+and never by opening node files, *except in alignment sessions*. That exception
+is what makes the session's search ad-hoc, and being ad-hoc is what leaves it
+outside the only bound the record has. So the difficulty is sharper than the
+question assumes. Bringing the search inside the bound means making it an
+instrument, and the instrument that would replace grep, a digest read whole, is
+the one shape the bound forbids.
+
+The option `a-doctrine-digest-read-whole` records the digest with that case
+against it, and the probe on `review-cost` asks whether the bound reaches the
+session's own reading. Nothing is recommended here and the recommendation stays
+with `draft`, because what would satisfy both the author's constraint and the
+record's own is neither of the two: an instrument whose brief is bounded by its
+object, which is the nomination the survey's brief already runs and could weight
+better, rather than a projection of everything.

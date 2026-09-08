@@ -101,12 +101,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: bffcc16fe330b0580935e936be7c2a660b74a879
+  of: 9a3698fa12d32547a11bf9152f06f839156d136a
   commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
   against: "The measured byte totals for the eight design units (16,432 to 44,306 bytes, 281,879 total) recompute today to 282,151 bytes across the same files, roughly 0.1% over the stated figure, which is within noise (the files may have been touched fractionally after the cited commit) and not a material misstatement. No other gap found."
   survey:
     date: 2026-09-07
-    of: bffcc16fe330b0580935e936be7c2a660b74a879
+    of: 9a3698fa12d32547a11bf9152f06f839156d136a
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "b7be0c0bccbe17b9e3ae32c87cf3c070e291493bb1277d94af19536c80084481"
@@ -336,7 +336,7 @@ be siblings and need not share a parent.
 
 The record minted such a carrier on 2026-09-05,
 `commons.systems/disposition-graph/alignment-page-observations`, which is the
-evidence that the rule is not in the answer today; its existence fact already
+evidence that the rule is not in the answer today; its topology fact already
 recommended `prune` before these words, on the independence test, and the
 author's words are what the rule would be, not what that prune rests on.
 
@@ -371,7 +371,7 @@ be siblings and need not share a parent.
 
 The record minted such a carrier on 2026-09-05,
 `commons.systems/disposition-graph/alignment-page-observations`, which is the
-evidence that the rule is not in the answer today; its existence fact already
+evidence that the rule is not in the answer today; its topology fact already
 recommended `prune` before these words, on the independence test, and the
 author's words are what the rule would be, not what that prune rests on.
 ```
@@ -500,13 +500,13 @@ defines:
 
 Along five seams. A seam is a boundary along which a sitting's work divides into units whose conclusions the main thread integrates without reading their context, so that the main thread holds only the author's words, the node in hand, and what the units concluded.
 
-The question. A disposition that asks or answers more than one question is several nodes, as the node node says, and decomposing it is the first unit of the sitting: a survey that reads the disposition against the record and proposes the questions it asks, where each sits under the record, whether the record already asks it, which of the author's words bear on each, and which questions rest on which. The main thread validates the proposal, records each question as a queued node carrying its words, and puts the decomposition to the author at the periagogic stage as a reading of their own words, refusable like any probe. A refusal at that stage confers no ruling, as the recording node holds: it is recorded as the author's words on each queued node the refusal names, the sitting moves each of those nodes' existence fact to recommend `prune` with those words as the reason, and the ruling is taken at each node's own ruling stage. The questions refused fold back into the parent's `## Disposition`, where their words already are. Whether one response may rule on the existence facts of a whole decomposition at once is the recording node's question, recorded there as an option and not answered here. The decomposition is judgment and runs on the larger model.
+The question. A disposition that asks or answers more than one question is several nodes, as the node node says, and decomposing it is the first unit of the sitting: a survey that reads the disposition against the record and proposes the questions it asks, where each sits under the record, whether the record already asks it, which of the author's words bear on each, and which questions rest on which. The main thread validates the proposal, records each question as a queued node carrying its words, and puts the decomposition to the author at the periagogic stage as a reading of their own words, refusable like any probe. A refusal at that stage confers no ruling, as the recording node holds: it is recorded as the author's words on each queued node the refusal names, the sitting moves each of those nodes' topology fact to recommend `prune` with those words as the reason, and the ruling is taken at each node's own ruling stage. The questions refused fold back into the parent's `## Disposition`, where their words already are. Whether one response may rule on the topology facts of a whole decomposition at once is the recording node's question, recorded there as an option and not answered here. The decomposition is judgment and runs on the larger model.
 
 The movement. Within each node's sitting the periagogic object, the nodes the disposition would amend and the implementation their criteria point to, is read by a survey unit and never by the main thread; the maieutic stage divides into the units below; the review is the clean-context unit, the reading of the one draft; the survey of the frontier, where settling and untangling are judged, the frontier-consistency node's validations seven to sixteen, is kept as one batch over the whole graph before the author rules, as the clean-context-review node says; the ruling is the author's; the recording is the main thread's, which alone writes a node.
 
 The kind of analysis. The maieutic stage divides into units by what each analyses, each with its own contract and on the model that follows its kind of work, as the delegation node says: the record survey, what the graph says on the question, the chain of nodes above it, the rules that bind everywhere, the nodes that define or use its terms, and the contradictions and redundant seams among them, on the larger model; the tradition survey, the second evaluation, returning readings with source, locus, and what each bears on, traditions shelved by pre-agent constraints among them, on the larger model; the implementation survey, what exists and what a named artifact or command does, on the smaller model; the design, the options on each fact, the recommendation with its boldness, and the draft text, on the larger model, or on the most capable one where the draft amends an ancestor's recommended text or a node whose answer binds every session, which nodes those are being the tier node's question, and until that node is ruled the design unit escalates on the first limb alone; and the review of the draft in clean context, as the clean-context-review node describes, on the model the review-model node decides. The surveys run together; the design waits on them; the review waits on the design; the main thread's own adversarial reading of the integrated draft, which the evaluation node requires, comes between the two.
 
-The fact. The answer fact is the design's to decide; the authority fact follows the rule the class-recommendation node states; the existence and persistence facts appear as the dialogue node says. A design unit's contract names which facts are its.
+The fact. The answer fact is the design's to decide; the authority fact follows the rule the class-recommendation node states; the topology and persistence facts appear as the dialogue node says. A design unit's contract names which facts are its.
 
 The dependency. The questions a decomposition yields carry depends among themselves. Their surveys run in parallel regardless; a design waits on the recommendation, not the ruling, of the question it depends on; the main thread integrates the questions in their ruling order; and the review of each draft runs the moment its recommendation is recorded, while the others are still in hand, so that the counter-argument reaches the main thread with the node it concerns and never as a batch of findings on nodes it has stopped seeing.
 

@@ -1,6 +1,32 @@
 ---
 question: What does a clean-context review cost, and how is that cost bounded?
 stage: maieutic
+probes:
+  - id: does-the-bound-reach-the-sessions-own-search
+    asks: >-
+      Does "no brief grows with the record" reach the alignment session's own
+      search of the graph, or only the brief an instrument writes for a
+      reading?
+    fact: answer
+    why: >-
+      The recommended answer binds every reading and every instrument of this
+      record. The alignment session's main thread searches the graph directly,
+      by grep and by opening the nodes it names, and that search is neither: it
+      writes no brief and belongs to no instrument, and
+      commons.systems/disposition-graph/projection's recommended answer is what
+      exempts it, since the record is read through projections except in
+      alignment sessions. The author applied this node's bound to that case on
+      2026-09-08, saying that grepping is ad-hoc and that a linear scan
+      violates the disposition that alignment scale sub-linearly with the size
+      of the graph, words/2026-09-08/13.
+    discharges: >-
+      Whether the bound is amended to name the session's own reading, or the
+      session's search is brought inside it by being made an instrument, which
+      is what commons.systems/disposition-graph/projection's option
+      `a-doctrine-digest-read-whole` would do and what that option's divergence
+      says this node's answer forbids. The recommendation stands either way.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:
@@ -97,6 +123,7 @@ facts:
           - words/2026-09-07/22
           - words/2026-09-07/23
           - words/2026-09-08/1
+          - words/2026-09-08/9
       - name: reader-is-the-parser-and-reviewer-is-the-reading
         source: review
         ref: "2026-09-07"
@@ -1215,3 +1242,50 @@ Recorded as an option on this node's answer fact: `reader-is-the-parser-and-revi
 ### Reconciled under the grant of 2026-09-08, at implementation commit f7a80fcd
 
 What this node's recommendation says a brief must not do is now what the instrument does, at implementation commit f7a80fcd, measured with `brief.mjs --survey disposition` and no `--force-tier`. The tier no longer refuses on what only a sitting can clear, so the launch stops bypassing it; the brief carries the record's own findings on itself as one line each instead of charging them against the launch. The brief is compacted: the node under review rendered once, each option by its case, a neighbour by the answer its recommended option resolves to, the round's probes in one block. A kicked-back node is read fresh and whole, since a kickback is a new answer. The pin that decides whether a node is re-read is narrowed to what binds it, so an edit to a rival option's body, to the case against, to the boldness, or to the account no longer sends a node back for a reading it does not owe; the rule and its migration are the survey-selection node's account of the same date. The first delta at this instrument, written dry at graph commit 981f5367, is 343,298 bytes over 1,827 lines, 3 nodes judged, 6 carried by what they answer, 52 on one line and 73 frozen on their pins, against the backfill's 680,585 bytes, and the brief tells its reader to open nothing, so the brief is the whole of what the reader holds. The measurement to record when the delta runs for the author is the same one, taken on the run.
+### The cost criterion restated, and where its three levers live, 2026-09-08
+
+The author restated the criterion and named the levers it must be met with:
+"Alignment review and survey are massive token sinks today. How can improved
+orchestration of the alignment dialogue, combined with better tooling (below),
+combined with context management, mitigate cost without compromising quality of
+alignment", `words/2026-09-08/9`. The entry reaches the recommended option,
+which is the bound the criterion produced on 2026-09-07, and no new option is
+recorded on this fact, because the question does not move this answer. Two of
+the three levers are already this node's and are already answered: tooling and
+context management are what the four clauses of 2026-09-07 are, drawn on the
+measurement of 2,585,266 bytes over seven briefs, and what the author is paying
+today is those clauses unmaterialized rather than a bound the record lacks. The
+gap between a recorded clause and a running instrument is not read on this node
+and is not repaired here; it is the second direction of reconciliation, which
+the work-loop node's shim holds back.
+
+The third lever is not this node's. Orchestration is how many readings a sitting
+buys and when it buys them, and this node owns what one reading is given, not
+how many are given. That question is `commons.systems/disposition-graph/movements`,
+minted this day from the author's words of the same sitting, whose answer selects
+a movement by diagnosis of the node's state rather than running a fixed sequence;
+a reading bought only where the diagnosis calls for one is the orchestration
+lever the author's question names, and the entry reaches that node's answer too.
+One quotation reaching two options on two nodes is what the quotes node's
+`the-ledger-admits-what-bears-on-a-fact` describes and is not a defect to
+normalise away.
+### What the sitting measured about the cost of reading, 2026-09-08
+
+Measured at graph commit `5cacddde`, against the author's question of the same
+day about grep and the size of the graph. The record is 155 nodes and 5.6 MB.
+Reading every node from disk costs 365 milliseconds and the survey's whole brief
+2.1 seconds, so the scan is not the cost. The recommended answer fences are
+583,966 bytes, 10.4 per cent of the corpus; their lead paragraphs are 151,401.
+Between 2026-09-05 and 2026-09-08 the graph gained 10.1 per cent in nodes and
+21.7 per cent in bytes, so bytes per node rose 10.5 per cent and half the growth
+is inside nodes rather than in their number. That is the growth this node's
+bound is the only one that reaches, since a bound stated per node would not see
+it.
+
+Two things the measurement leaves open, one recorded as the probe above and one
+here. The bound binds the size of a brief and not the number of briefs: the
+per-draft readings of `commons.systems/disposition-graph/decomposition` carried
+7,926,691 bytes where the same sitting's batch carried 838,923, and every one of
+those briefs was within this answer as written. A ninefold multiplier that no
+clause forbids is the largest cost the day measured, and it is a multiplier of
+readings rather than a size of one.

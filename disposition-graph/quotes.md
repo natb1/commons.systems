@@ -204,6 +204,52 @@ review:
       - with: "commons.systems/disposition-graph/work-loop"
         keys:
           - "cites"
+probes:
+  - id: does-the-ledger-admit-a-grant
+    asks: >-
+      Does the ledger admit the author's grant of bootstrap authority, which
+      confers a power for a sitting rather than articulating a disposition?
+    fact: answer
+    why: >-
+      The recommended option admits a quotation where it bears on a
+      disposition fact and not otherwise, and holds words that direct a
+      sitting in the session's staging store instead. A grant is neither. It
+      articulates no disposition, and it is not spent when the sitting ends,
+      because the authority node requires a grant to be given in the author's
+      own words and the record has to be able to cite the words a
+      reconciliation ran under. This sitting's own grant,
+      words/2026-09-08/2, is in the ledger and reaches no option, so the rule
+      as recommended would exclude the words the sitting is acting on.
+    discharges: >-
+      Whether the admission clause names a second ground beside bearing on a
+      fact, or whether a grant is read as bearing on the answer fact of
+      commons.systems/disposition-graph/what-acts-during-bootstrap, which is
+      the node that says what a grant is. The recommendation stands either
+      way.
+    source: ai
+    raised: 2026-09-08
+  - id: which-side-carries-the-reference
+    asks: >-
+      Does the reference from a quotation to the fact options it bears on live
+      on the quotation or on the option?
+    fact: answer
+    why: >-
+      The author's refinement of 2026-09-08 says a quotation may reference many
+      options across many facts across many dispositions, on the model of a
+      tradition, and that the reference evolves through the dialogue rather
+      than belonging to the quotation's identity. Both are true of the record
+      as it stands, where the edge is written on the option as `supports` and
+      `diverges`. But a reading writes the same edge from the other side, as
+      `bears`, so the record now has two conventions for one shape, and the
+      analogy the author drew is exact in everything but direction.
+    discharges: >-
+      Which side the record standardizes on, or the reason the two artifacts
+      differ: a quotation is immutable and its edges are not, while a reading
+      is a node that is edited anyway. The recommended answer does not turn on
+      it, and `commons.systems/disposition-graph/readings` carries the other
+      half of the question.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:
@@ -235,6 +281,18 @@ facts:
         ref: "2026-09-03"
         status: passed
         reason: "there is no stamp to rule for: the class is read off the rulings, and a ruling whose words are not in the record is invalid, so an unquoted ruling is not a class of ruling the record has"
+      - name: the-ledger-admits-what-bears-on-a-fact
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/15
+          - words/2026-09-08/19
+          - words/2026-09-08/20
+      - name: quotes-as-nodes-like-traditions
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/15
       - name: words-in-a-ledger-on-the-ref
         source: author
         ref: "2026-09-07"
@@ -257,7 +315,12 @@ facts:
       - name: the-option-row-is-derived-from-its-content
         source: review
         ref: "2026-09-07"
-    recommends: words-in-a-ledger-on-the-ref
+      - name: an-instrument-proposes-the-references
+        source: ai
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/12
+    recommends: the-ledger-admits-what-bears-on-a-fact
     boldness: moderate
   - name: authority
     options:
@@ -277,7 +340,7 @@ defines:
 
 ### answer
 
-`words-in-a-ledger-on-the-ref` is recommended, on the author's question of 2026-09-07 quoted under `## Disposition` and their words of the same day that the choice is for confirmation: the words are stored once, on the ref, and every option that rests on them or departs from them references them, which is the only arrangement of the three under which the retention rule loses nothing and coverage stays a query. Moderate boldness: the measurement is the AI's, the three options are drawn where the author's question drew them, and the author's phrase "concatenated quotation" reads as naturally on the copy as on the projection.
+`the-ledger-admits-what-bears-on-a-fact` is recommended since 2026-09-08: it is `words-in-a-ledger-on-the-ref` with two clauses amended on the author's words of that day, that the ledger admits a quotation only where it bears on a disposition fact and that an entry names its date and not a node it belongs to, and the case for the ledger itself is unchanged, resting on the author's question of 2026-09-07 quoted under `## Disposition` and their words of the same day that the choice is for confirmation: the words are stored once, on the ref, and every option that rests on them or departs from them references them, which is the only arrangement of the three under which the retention rule loses nothing and coverage stays a query. Moderate boldness: the two amended clauses are the author's words and nothing else moved, the measurement is the AI's, the three options are drawn where the author's question drew them, and the author's phrase "concatenated quotation" reads as naturally on the copy as on the projection.
 
 #### ruling-stays-in-node
 
@@ -433,6 +496,38 @@ under:
 Quotes' answer says what becomes of a node recommending ratification with no ruling quoted in it, and that ruling governs every such node rather than each carrying its own alternative. Verified that the same question is pending under three different names on six nodes — `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, `deferred-not-ratified` on review and persistence — and that twenty-three of sixty-eight nodes carry no '## Disposition' section, so the population is larger than the six that happen to carry an entry. On this alternative quotes' answer states the consequence once, that such a node either gains the ruling it rests on or its recommendation drops to deferred, and the six entries become consequences of it; it is on the table because one question is currently on the author's queue six times under three names, and inconsistently, since seventeen nodes in the same position carry no entry at all.
 ```
 
+#### the-ledger-admits-what-bears-on-a-fact
+
+`words-in-a-ledger-on-the-ref` with two clauses amended on the author's words of 2026-09-08. The ledger admits a quotation where the quotation bears on a disposition fact and not otherwise, the ambiguity whether the author is articulating a disposition or directing the sitting in front of them being resolved before the entry is written; words that direct a sitting are held in the session's own staging store, which survives compaction, is not on this ref, and graduates an entry when a fact reference is recorded for it. And an entry names its date and says nothing about a node it belongs to, because one quotation bears on many options across many facts and many nodes, and that reach changes as the dialogue goes on. Everything else, the single storage, the ordinal address, the reference from the option, the sha, is unchanged.
+
+**AI support.** The second clause is close to what the record already holds and the first is not. The recommended answer already puts the reference on the option and already says that the node a word was said on is a fact about the sitting and not about the word, so the only thing that asserted an owning node was the entry's own context line, which the reader does not parse and which no instrument consumes; striking it costs nothing and removes the one place the file contradicted the model. The first clause reverses a clause of that answer, which retained an unreferenced entry against a later sitting attaching it, and the reversal is the author's: a quotation that articulates no disposition is not waiting to be attached, it is in the wrong store. The record already computes the signal this needs, since an unreferenced entry is a validator finding today; what changes is what the finding means, from a citation someone owes to a quotation that may not belong, and it is discharged either way.
+
+The withdrawal is recorded in place rather than by deletion. An entry keeps its ordinal and its text and carries the reason it was withdrawn, so no address shifts under a reference written before it, and a reader can see what the record once held and why it does not hold it now. That preserves what append-only was for, stable addresses and nothing rewritten, while allowing what the author asks for, which is that the store not fill with words that articulate nothing.
+
+**AI divergence.** It puts a gate in front of the ledger, and the gate is operated by the AI. Whether an author is articulating a disposition or directing a sitting is exactly the kind of judgment the record everywhere else refuses to let the AI make alone, and the failure is silent: an entry never written leaves no trace in the ledger to be found later, where an unreferenced entry at least sat there being counted. The answer's own remedy, that the staging store is kept and that the classification is put to the author, is a practice and not a mechanism, and nothing in the record checks it. The first entry the rule was applied to is the record's own worked example and it went the way the divergence predicts: the AI wrote `words/2026-09-08/17` into the ledger without asking, and it was the author who classified it out.
+
+**Content.**
+
+```markdown
+---
+question: How are the author's words retained when a ruling is recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/authority
+---
+## Answer
+
+The verbatim ruling stays in the record, once. When a sitting records a ruling, the author's words are written as an entry of the ledger, `disposition/words/<date>.md` on the disposition ref beside the graphs, verbatim and dated, addressed `words/<date>/<n>` by its date and its ordinal within the date, the entries of a date appended in order and never inserted, reordered or renumbered, and the option the author ruled on carries the reference to it; nothing else carries the words, and a commit message is not a copy of them. An entry names its date and says nothing of a node it belongs to, because one quotation bears on many options across many facts and many nodes and that reach changes as the dialogue goes on, so the reach is the options' and not the entry's. The ledger holds no node — no question, no facts, no options and no class — so it is outside the graph and inside the record, the record being the ref and the graph being the nodes on it. The rationale restates the ruling in the record's own register; the quotation is what the restatement is of, and is never replaced by it. The ledger admits a quotation where the quotation bears on a disposition fact and not otherwise: whether the author is articulating a disposition or directing the sitting in front of them is an ambiguity resolved before the entry is written, and words that direct a sitting are held in the session's own staging store, which survives compaction, is not on this ref, and graduates an entry when a fact reference is recorded for it. The ledger accumulates, and its entries are never inserted, reordered, renumbered or rewritten; what a node carries of it is the references its options hold, and an entry no option anywhere references is a finding, discharged by a reference or by a withdrawal recorded in place, the entry keeping its ordinal and its text and carrying the reason it was withdrawn, so that no address shifts and a reader can see what the record once held. An entry reaches a node only through the references its options carry: an option references an entry where the entry supports it or the option diverges from it, and an entry no option of a node references is not on that node, which is the roll-up rule this answer once owed and could not state, given by the author's words of 2026-09-07 and stated once, here, for the dialogue node to cite. A reference is written by the AI and is a claim about the author's words, so the validator resolves every reference against the ledger, and an entry's sha is recorded so that a reference to text since corrected is reportable. A ruling whose words are not in the record is invalid, and the words a ruling requires are the ones the author gives at that sitting, entered in the ledger then and referenced by the option ruled on; words the author said earlier are the ground a draft rests on and confer no ruling.
+```
+
+#### quotes-as-nodes-like-traditions
+
+Each quotation is a node of the graph, as a tradition's reading is, carrying its own facts and its own edges, and the ledger file goes. Raised from the author's question of 2026-09-08, which asks it in one line at the end of the question the recommended option answers.
+
+**AI support.** The analogy is exact where it counts. A reading node cites a source outside the record, says what the record takes from it, and reaches options across many nodes through `bears`; a quotation cites the author, and reaches options across many nodes through the references the option side carries. Both are evidence brought into the dialogue from outside the graph's own reasoning, and the record has already decided once that evidence of that shape is a node. As nodes, quotations would get what the ledger otherwise has to invent for itself: somewhere to record what the record takes from the words as distinct from the words, a stage, an account of how the reading of them changed as the dialogue went on, and the projector, the validator, the frontier and the browser for nothing. The edge would run from the quotation to the options it bears on, which is the direction `bears` already runs and the direction this node's amendment does not adopt.
+
+**AI divergence.** Three differences break the analogy where it would have to hold. A reading is an interpretation and its text is the AI's, so its facts have something to carry; a quotation is the author's words verbatim with no interpretation in it, and a node's apparatus of facts, options, recommendations and stages would sit empty on every one. The ledger is append-only and its entries are addressed by ordinal, which is what makes a reference to one checkable and a withdrawal visible; a node is a file that gets edited, which is what the record wants everywhere else and is the one thing it must not have here. And the count is wrong by an order of magnitude: readings are dozens, quotations are already past a hundred after nine days and grow with every sitting, so the graph would be mostly quotations and every instrument that walks nodes would walk them, which is the cost the retrieval question of the same day is about. The one benefit the analogy really names, a reference that is many-to-many and evolves through the dialogue, the record already has on the option side and keeps without the move.
+
 #### words-in-a-ledger-on-the-ref
 
 One ledger of the author's words on the `disposition` ref beside the node files, `disposition/words/<date>.md`, each entry stored once, addressed by its date and its ordinal within the date, and referenced from any option on any node; the per-option quotation is a projection.
@@ -530,6 +625,56 @@ Every live option on this fact states its validity rule in the record's current 
 #### the-option-row-is-derived-from-its-content
 
 The one-line summary of an option on this fact is derived from that option's content rather than written beside it, so the line the author rules from and the text the record applies cannot diverge. It is on the table because `the-quotation-is-copied-onto-every-option` is summarized as carrying the quotation "with no ledger and no reference" while its content writes the words into the ledger at `disposition/words/<date>.md` and has the ruled option carry the reference to it, which is the opposite design under one name.
+
+#### an-instrument-proposes-the-references
+
+Everything the recommended option says, and the references an entry bears are
+proposed by an instrument rather than found by hand: the instrument is given the
+ledger and the record's facts, returns for each entry the options it bears on
+with the span of the entry each rests on, and writes nothing. The reference is
+written on the option by the session that records it and never in the entry, so
+the author's words are not rewritten whenever a later reading of them moves.
+
+**AI support.** Measured at graph commit `5cacddde`: 205 of the ledger's 231
+entries are already reached by 340 references, so the shape the instrument
+proposes is the shape the record keeps. The author's refinement of the same day
+says a quotation is owned by no one disposition and may reference many options
+across many facts, as a tradition does, and that the reference evolves through
+the dialogue rather than belonging to the quotation's identity; both are true of
+the encoding as it stands, and this option keeps them. The fan-out is real and
+sparse, a mean of 1.7 references per entry, a maximum of 9, and only 44 entries
+reaching more than one node. The corpus is small enough to give whole, near
+183,000 tokens, so the instrument needs no index of its own to run.
+
+**AI divergence.** It is close to a null instrument. The hand-written line
+naming what an entry was said on already agrees with the recorded reference in
+201 of 205 cases, so what the instrument would automate is what is already
+right, and the four it might correct are worth less than building it and running
+it. The case for it is the entries not yet referenced and the sittings to come,
+which is a case about future cost and not about the backlog. It is also given
+the ledger whole, which
+`commons.systems/disposition-graph/review-cost`'s recommended answer allows only
+as a backfill run once on the author's word: run over the history it is within
+that bound, and run on every sitting it leaves it, and nothing here says which.
+And the author's second question of the same day, whether quotations are better
+represented as nodes as traditions are, is not answered by this option, which
+keeps the ledger; a quotation held as a node would put the reference on the
+quotation's own side, which the probe `which-side-carries-the-reference`
+records.
+
+**Content.**
+
+```markdown
+---
+question: How are the author's words retained when a ruling is recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/authority
+---
+## Answer
+
+Everything the recommended option says, and the references an entry bears are proposed by an instrument rather than found by hand: the instrument is given the ledger and the record's facts, returns for each entry the options it bears on with the span of the entry each rests on, and writes nothing. The reference is written on the option by the session that records it and never in the entry.
+```
 
 ## Account
 
@@ -671,3 +816,111 @@ Also named: commons.systems/disposition-graph/authority, commons.systems/disposi
 Proposed: authority's vocabulary survives: class, ruling, fact, option. node, growth, projection and traditions-home are amended to define a node by the rulings on its facts, and the record's use of stamp is confined to authority's historical sentence about the stamps the bootstrap wrote.
 
 Recorded as an option on commons.systems/disposition-graph/node's answer fact: `a-node-is-classed-by-the-rulings-on-its-facts` (source review, 2026-09-07).
+
+### What the ledger admits, 2026-09-08
+
+The author refined two things about the quotation store on 2026-09-08. The first
+is that a quotation belongs in it only where the quotation bears on a
+disposition fact: words that direct the sitting in front of the author are
+needed for other purposes, surviving compaction among them, and belong in some
+other store, and where it is ambiguous which kind a quotation is, the ambiguity
+is resolved before anything is written. The second is that a quotation's
+reference to disposition is many and evolving and is no part of the quotation's
+identity, as a tradition's reference is.
+
+On the second, most of what the author asks for is what the record already
+holds. `words-in-a-ledger-on-the-ref` stores each entry once and has every
+option that rests on a quotation or departs from it carry the reference, which
+is many-to-many already, and `words-under-the-node-they-were-said-on` was
+declined on the ground that the node a word was said on is a fact about the
+sitting and not about the word. The one place the ref still asserted an owning
+node was the entry's context line, which every entry to 2026-09-08 wrote as
+"said on <node id>". The reader does not parse it and no instrument consumes it,
+so it was prose asserting a relation the data model does not have. Entries 18
+through 20 are the first written without it.
+
+The author's analogy to a tradition points the other way, and the divergence is
+recorded rather than smoothed over. A reading carries `bears`, so a tradition's
+reach is stored on the tradition; a quotation's reach is stored on the options.
+The record has evidence about which side survives: the frontier survey of
+2026-09-07 found two readings bearing on options their targets had left, so the
+record projected the opposite of what the readings said, and `readings` states
+the duty that would prevent it and declares it unmet across 109 `bears` entries.
+The edge decays on the source side because the edit that invalidates it happens
+at the option, and is repaired on the option side because it happens where the
+edit is. So the unification the author asks for is right and the direction is
+the other one, and that is beyond this node's question: it is recorded as an
+option on `readings`, which owns it.
+
+The first clause is a reversal, not a refinement. `words-in-a-ledger-on-the-ref`
+says an entry no option references stays in the ledger, addressable by a later
+sitting; this says such an entry may not belong there at all. The record already
+computes the signal, an unreferenced entry being a validator finding today, and
+what changes is what the finding means and how it is discharged. The ledger stays
+append-only in the sense that matters, since a withdrawal keeps the ordinal and
+the text and adds the reason.
+
+The example is the record's own. `words/2026-09-08/17`, the author's direction
+that every subagent be given a model chosen for its work, was written into the
+ledger earlier in this sitting and referenced by a new option on `delegation`,
+and the author named it the same day as a directive for this sitting and not a
+general disposition. That option's provenance is corrected to the AI and its
+reference to the entry is struck; the clause it proposes is a recommendation the
+AI is making, which is a different thing from the author's word, and it stands
+or falls on its own. The withdrawal of the entry is not made here, because
+whether the ledger admits a withdrawal at all is what this option asks, and the
+entry stays unreferenced and reported until it is ruled.
+### Quotes as nodes, and the reach of entry 15, 2026-09-08
+
+The author's question of 2026-09-08 asks for the ideal data model for the
+quotation store, naming both halves the amendment of this day answers, the
+reference to disposition fact that evolves through the dialogue and the pruning
+of quotations that articulate no disposition, and ends with a rival: "Are quotes
+better represented as nodes in the graph similar to traditions?"
+`words/2026-09-08/15` now reaches the recommended option, which is where its
+first two halves are answered, and the rival is recorded beside it as
+`quotes-as-nodes-like-traditions` so the author can rule on it rather than find
+it answered in prose. The rival carries no `**Content.**` fence: it is not
+recommended, and the node it would produce is a different record rather than a
+different sentence of this one, so writing the fence would be writing that
+record to argue against it.
+### What the admission rule does with a grant, 2026-09-08
+
+Applying the day's amendment to the ledger it governs turns up one entry it has
+no room for. `words/2026-09-08/2` is the grant this sitting runs under. It
+articulates no disposition, so the first clause excludes it; it is not a
+directive spent when the sitting ends either, because the authority node
+requires a grant to be given in the author's own words and a reconciliation done
+under one has to be able to cite them. The gap is recorded as the probe
+`does-the-ledger-admit-a-grant` rather than closed by the AI, since closing it
+means adding a second ground of admission to an answer the author has just
+given, and the entry is left in the ledger unreferenced, where the validator
+reports it. The finding is the rule meeting its first hard case, not a defect of
+the entry.
+
+The second refinement of the same day, that a quotation is not owned by one
+disposition and references many options as a tradition does, is already true of
+the encoding: the edge is written on the option, one entry may be cited by any
+number of them, and nothing about the entry says which. What the comparison
+turns up is that a reading writes the same relation from the other side, in its
+`bears` list, so the record keeps two directions for one shape. The probe
+`which-side-carries-the-reference` records it. It is not closed here because the
+answer is a change to either the ledger's encoding or `readings`, and neither is
+this node's to make.
+### An instrument for the references, and what it would not settle, 2026-09-08
+
+The author asked for an instrument that extracts the facts a quotation bears on,
+`words/2026-09-08/12`. The option `an-instrument-proposes-the-references`
+records it, and the measurement that qualifies it: 205 of 231 entries are
+already referenced, by 340 references, and the hand-written line naming what an
+entry was said on agrees with the recorded reference in 201 of the 205, so the
+instrument would be built to confirm what is already there. What it is worth is
+the sittings to come and the entries not yet reached, and the option says so
+rather than resting on the backlog.
+
+One thing the measurement settles for the encoding: the reference belongs on the
+option and never in the ledger entry. An entry that carried its own references
+would be rewritten every time a reading of it moved, and the entry is the
+author's verbatim word, which nothing later may edit. That is the quotation's
+half of `which-side-carries-the-reference`; the reading's half, where the same
+edge is written from the other side as `bears`, stays open.

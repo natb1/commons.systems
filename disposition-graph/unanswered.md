@@ -87,7 +87,7 @@ facts:
       - name: two-responses-where-the-page-offers-them
         source: commons.systems/disposition-graph/where-a-change-request-goes
         ref: "2026-09-06"
-      - name: existence-conditioned-as-persistence-is
+      - name: topology-conditioned-as-persistence-is
         source: review
         ref: "2026-09-07"
     recommends: unanswered-is-no-ruling
@@ -551,7 +551,7 @@ A confirmation with edits is recorded as a ruling on the edited option when it i
 
 #### stage-keeps-a-node-on-the-frontier
 
-A node carrying a stage is on the alignment frontier whatever class the rulings on its other facts confer, until the recording removes the stage. The frontier as this node, dialogue, and viable-options define it is every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling; a node whose answer fact the author confirmed and whose persistence or existence fact they kicked back stands at the maieutic stage in none of those three sets, and the frontier and the alignment page would drop it while a movement is owed on it. Recorded on 2026-09-04 with the recording node as its source.
+A node carrying a stage is on the alignment frontier whatever class the rulings on its other facts confer, until the recording removes the stage. The frontier as this node, dialogue, and viable-options define it is every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling; a node whose answer fact the author confirmed and whose persistence or topology fact they kicked back stands at the maieutic stage in none of those three sets, and the frontier and the alignment page would drop it while a movement is owed on it. Recorded on 2026-09-04 with the recording node as its source.
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
@@ -574,7 +574,7 @@ defines:
 
 ## Answer
 
-A node carrying a stage is on the alignment frontier whatever class the rulings on its other facts confer, until the recording removes the stage. The frontier as this node, dialogue, and viable-options define it is every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling; a node whose answer fact the author confirmed and whose persistence or existence fact they kicked back stands at the maieutic stage in none of those three sets, and the frontier and the alignment page would drop it while a movement is owed on it. Recorded on 2026-09-04 with the recording node as its source.
+A node carrying a stage is on the alignment frontier whatever class the rulings on its other facts confer, until the recording removes the stage. The frontier as this node, dialogue, and viable-options define it is every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling; a node whose answer fact the author confirmed and whose persistence or topology fact they kicked back stands at the maieutic stage in none of those three sets, and the frontier and the alignment page would drop it while a movement is owed on it. Recorded on 2026-09-04 with the recording node as its source.
 ```
 
 #### two-responses-where-the-page-offers-them
@@ -639,9 +639,9 @@ surface does not offer is a response most authors will never use, and calling it
 open is then a fiction the record maintains about itself.
 ```
 
-#### existence-conditioned-as-persistence-is
+#### topology-conditioned-as-persistence-is
 
-Everything the recommendation says, with the sentence naming the decisions a ruling asks conditioning `existence` as it already conditions `persistence`: the node's existence is among them where a prune is proposed, and not otherwise. It is on the table because which-facts-are-listed reads this node's unconditioned sentence as making the existence decision one a ruling asks wherever a ruling can be given, while `dialogue` makes the pair conditional together and gives the reason that "a choice nobody has raised is not a candidate the record lists", and that node says in terms that the option conditioning existence "belongs on that node, where its answer is".
+Everything the recommendation says, with the sentence naming the decisions a ruling asks conditioning `topology` as it already conditions `persistence`: the node's existence is among them where a prune is proposed, and not otherwise. It is on the table because which-facts-are-listed reads this node's unconditioned sentence as making the topology decision one a ruling asks wherever a ruling can be given, while `dialogue` makes the pair conditional together and gives the reason that "a choice nobody has raised is not a candidate the record lists", and that node says in terms that the option conditioning topology "belongs on that node, where its answer is".
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
@@ -664,7 +664,7 @@ defines:
 
 ## Answer
 
-Everything the recommendation says, with the sentence naming the decisions a ruling asks conditioning `existence` as it already conditions `persistence`: the node's existence is among them where a prune is proposed, and not otherwise. It is on the table because which-facts-are-listed reads this node's unconditioned sentence as making the existence decision one a ruling asks wherever a ruling can be given, while `dialogue` makes the pair conditional together and gives the reason that "a choice nobody has raised is not a candidate the record lists", and that node says in terms that the option conditioning existence "belongs on that node, where its answer is".
+Everything the recommendation says, with the sentence naming the decisions a ruling asks conditioning `topology` as it already conditions `persistence`: the node's existence is among them where a prune is proposed, and not otherwise. It is on the table because which-facts-are-listed reads this node's unconditioned sentence as making the topology decision one a ruling asks wherever a ruling can be given, while `dialogue` makes the pair conditional together and gives the reason that "a choice nobody has raised is not a candidate the record lists", and that node says in terms that the option conditioning topology "belongs on that node, where its answer is".
 ```
 
 ## Account
@@ -833,8 +833,8 @@ Also named: commons.systems/disposition-graph/which-facts-are-listed.
 
 Proposed: unanswered is the survivor and the home: the option conditioning `existence` as `persistence` is conditioned is recorded on its answer fact, sourced to which-facts-are-listed, so the author rules the asymmetry once at the node whose sentence carries it. which-facts-are-listed's answer stands as written, since it declines the question deliberately and says so.
 
-Recorded as an option on this node's answer fact: `existence-conditioned-as-persistence-is` (source review, 2026-09-07).
+Recorded as an option on this node's answer fact: `topology-conditioned-as-persistence-is` (source review, 2026-09-07).
 
 ### Migrated to the content encoding, 2026-09-07
 
-Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/unanswered stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `unanswered-is-no-ruling`; the `## Rationale` its `**AI support.**`; 7 `## Disposition` entries became the ledger entries words/2026-09-03/80, words/2026-09-03/81, words/2026-09-03/82, words/2026-09-03/42, words/2026-09-03/83, words/2026-09-03/29, words/2026-09-03/84, referenced by 7 options the entry's own date names; and `stands` left the answer fact. The content of `responses-on-decisions-and-children (at db23d5b1)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `answered-by-stamp`, `page-in-ruling-order`, `child-ruling-held-until-the-parent`, `confirmation-before-the-ruling-stage-is-invalid`, `browser-hides-every-unanswered-node`, `fourth-class-or-field-for-unanswered`, `mark-answered-node-unanswered`, `deferred-answers-without-a-stage`, `review-item-nodes`, `a-curriculum`, `response-on-a-fact`, `edit-ruled-then-reviewed`, `stage-keeps-a-node-on-the-frontier`, `two-responses-where-the-page-offers-them`, `existence-conditioned-as-persistence-is`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `b5717e656b723368acf1ad6f3609c7ab85c6a1a3` was already past the recommendation and is left as it stood.
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/unanswered stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `unanswered-is-no-ruling`; the `## Rationale` its `**AI support.**`; 7 `## Disposition` entries became the ledger entries words/2026-09-03/80, words/2026-09-03/81, words/2026-09-03/82, words/2026-09-03/42, words/2026-09-03/83, words/2026-09-03/29, words/2026-09-03/84, referenced by 7 options the entry's own date names; and `stands` left the answer fact. The content of `responses-on-decisions-and-children (at db23d5b1)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `answered-by-stamp`, `page-in-ruling-order`, `child-ruling-held-until-the-parent`, `confirmation-before-the-ruling-stage-is-invalid`, `browser-hides-every-unanswered-node`, `fourth-class-or-field-for-unanswered`, `mark-answered-node-unanswered`, `deferred-answers-without-a-stage`, `review-item-nodes`, `a-curriculum`, `response-on-a-fact`, `edit-ruled-then-reviewed`, `stage-keeps-a-node-on-the-frontier`, `two-responses-where-the-page-offers-them`, `topology-conditioned-as-persistence-is`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `b5717e656b723368acf1ad6f3609c7ab85c6a1a3` was already past the recommendation and is left as it stood.

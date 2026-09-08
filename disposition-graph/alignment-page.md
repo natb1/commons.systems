@@ -332,7 +332,7 @@ review:
           - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
           - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
           - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:existence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:topology (defines: commons.systems/disposition-graph/dialogue)"
           - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
           - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
           - "term:persistence (defines: commons.systems/disposition-graph/dialogue)"
@@ -1421,7 +1421,7 @@ The standard the five metrics meet is the one the author set for the browser's g
 
 Amended 2026-09-04 on the author's refinement of the layout of the questions, quoted above, which struck the fold rule, liquidated the ruling on the whole and the eyebrow's graph, and asked for the review to be merged where it could be. What the answer adds on its own is the case against the recommended option on its row, the kick-back's marking, the readiness on the stage chip, and the eyebrow's contents, and the account says why each. The rationale no longer restates the options on the answer fact, since the page renders them from the fact. Amended again 2026-09-06 on the author's rule that the scope of the page is the final confirmation and, of every other movement, a preview and a read-only indicator, all other information from the author being given in the `/align` interview: the free-text control at the periagogic and the maieutic stages goes, with the caption written for a node carrying no words and the playback that opened beside it, and what an earlier stage offers is the chip's two controls and the preview.
 
-Measured at graph commit 4102fd4b, before the reconciliation of 2026-09-04, so that the answer carries the rule and this carries the numbers: twelve of seventy-five nodes showed the author no decision at all, nine because every fact on them folded, two of those global-tier rules, and three because they carried no facts and printed the same sentence where it was false; 168 of 407 options carried no sentence, 114 on the authority fact, 38 the option that stands, 12 on existence and 4 on persistence; and the tradition indicator was blank on 393 of 407.
+Measured at graph commit 4102fd4b, before the reconciliation of 2026-09-04, so that the answer carries the rule and this carries the numbers: twelve of seventy-five nodes showed the author no decision at all, nine because every fact on them folded, two of those global-tier rules, and three because they carried no facts and printed the same sentence where it was false; 168 of 407 options carried no sentence, 114 on the authority fact, 38 the option that stands, 12 on topology and 4 on persistence; and the tradition indicator was blank on 393 of 407.
 
 **AI divergence.** A pane that re-renders on every selection shows the author a node that changes under their reading, and where two facts' selections would each move the answer the pane can show only one composition, which this answer leaves to the answer fact; and the empty state, which is every node in the record today, is a column that mostly says nothing is confirmed.
 

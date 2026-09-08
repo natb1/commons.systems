@@ -18,7 +18,7 @@ probes:
     discharges: >-
       Whether an exact equality is owed, which decides whether this node is a
       section of its own with a boost equal to scope's or the mapping to
-      `projection` stands; it moves the existence fact's recommendation off
+      `projection` stands; it moves the topology fact's recommendation off
       `keep` and the answer fact's off `section-of-its-own`.
     source: ai
     raised: 2026-09-03
@@ -38,7 +38,7 @@ facts:
       - name: ratified
       - name: delegated
       - name: deferred
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune
@@ -75,7 +75,7 @@ question, and a reading may not settle it in passing.
 
 **AI divergence.** The record wrote no case against this option; its divergence is owed.
 
-### existence
+### topology
 
 Prune: The session's mapping of the author's self-documentation section to the projection node stands, on the ground that projection's answer already makes the browser the human projection of the record, and this node is pruned. The cost is that the equality the author stated cannot be exact, since projection's rank is a share of model's and scope's a share of purpose's, and is realized only as each being outranked by nothing but its own ancestors. Scope's order field already encodes this mapping.
 

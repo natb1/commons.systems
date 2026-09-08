@@ -173,7 +173,7 @@ review:
           - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
           - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
           - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:existence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:topology (defines: commons.systems/disposition-graph/dialogue)"
           - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
           - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
           - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
@@ -849,7 +849,7 @@ is stored and the sentence is the decision, and the author's words of 2026-09-04
 strike the id-shaped string from the row"; and it holds that where the record
 holds no sentence "the row falls back to the bare name ... so a bare name on the
 page is a record not yet written and a defect to be found". On the two facts
-whose options are the record's own vocabulary, `authority` and `existence`,
+whose options are the record's own vocabulary, `authority` and `topology`,
 neither reaches. The option's name there is not an id-shaped slug but a term the
 record defines, so the sentence the record holds for it and its name are the same
 string: leading with the term is leading with what the record holds. And it is
@@ -885,7 +885,7 @@ is stored and the sentence is the decision, and the author's words of 2026-09-04
 strike the id-shaped string from the row"; and it holds that where the record
 holds no sentence "the row falls back to the bare name ... so a bare name on the
 page is a record not yet written and a defect to be found". On the two facts
-whose options are the record's own vocabulary, `authority` and `existence`,
+whose options are the record's own vocabulary, `authority` and `topology`,
 neither reaches. The option's name there is not an id-shaped slug but a term the
 record defines, so the sentence the record holds for it and its name are the same
 string: leading with the term is leading with what the record holds. And it is

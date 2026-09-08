@@ -5,11 +5,11 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: e666864cb9bb53bfe89acec22f745c3eadbe078e
+  of: 9f422969a07a56c6c326ba76687e43cda4157c87
   against: "Pruning removes the only node whose question is who the repository is for, and purpose answers it in one subordinate clause that purpose-criteria now recommends leaving permanently unguarded. The requirements tradition the record adopts does state the intended audience inside the purpose section, so the prune is well grounded; the residue is that the audience question was where coverage's survey found the most divergence, and after the prune it can be re-asked only at a periagogic sitting the record has not scheduled."
   survey:
     date: 2026-09-07
-    of: e666864cb9bb53bfe89acec22f745c3eadbe078e
+    of: 9f422969a07a56c6c326ba76687e43cda4157c87
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "136d28621cb313f0bc01f8b440ff150fb0b13039e9bdbe4a33ad70e0c4e4fb7a"
@@ -34,7 +34,7 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: low
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune
@@ -72,7 +72,7 @@ under:
 Humans who want to manage the alignment of long-horizon AI agent workflows, or software factories, by something like spec-driven development, and who may arrive here by way of an AI tasked with that goal. Everything onboarding-facing is written for them: the README, the graph browser's opening pages, the repository's description and discovery tags.
 ```
 
-### existence
+### topology
 
 Prune: in the author's own words, the question is handled by the purpose node already and can be pruned. Purpose states its readers, as the requirements tradition states them inside its purpose section; the five-audience finding moves to coverage, which carries the author's words on the audience verbatim; and projection no longer names audience as a source of the description and tags. The coverage finding of 2026-09-03 verified that those words are carried verbatim on both audience and coverage, so one disposition is answered twice while audience still stands at the review stage recommending a ratified answer of its own, and proposes the double answer be resolved in coverage's favour. Its persistence is 'not recorded', naming purpose and coverage as the destinations. Raised on commons.systems/disposition-graph/scope.
 

@@ -23,6 +23,12 @@ facts:
       - name: standing
         source: ai
         ref: "2026-09-03"
+      - name: mid-sitting-input-is-sequenced-not-substituted
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/3
+          - words/2026-09-08/18
       - name: ruling-order-not-rank
         source: author
         ref: "2026-09-03"
@@ -48,7 +54,7 @@ facts:
         ref: "32600efe"
         status: passed
         reason: "the author's answer would be a boost, which they can set without being asked"
-    recommends: standing
+    recommends: mid-sitting-input-is-sequenced-not-substituted
     boldness: moderate
   - name: authority
     options:
@@ -65,6 +71,8 @@ under:
 ## Facts
 
 ### answer
+
+`mid-sitting-input-is-sequenced-not-substituted` is recommended since 2026-09-08: it is `standing`, whose text has held since the bootstrap, with the boost clause refined so that an alignment input the author gives while a sitting is running is sequenced into that sitting by dependency rather than substituted for the node in hand. The author's words of 2026-09-08 moved it, and the recommendation moved on their words rather than on the AI's judgment of them; what remains the AI's is the reading that puts the clause on this node instead of on a node of its own. Boldness moderate. The case against is that this node's question asks what the session takes up when given nothing, so the clause answers a case the question excludes, and that a dependency between dispositions not yet drafted is a judgment nothing in the record checks, which leaves a session free to abandon its node and call the new input a prerequisite.
 
 #### standing
 
@@ -87,6 +95,59 @@ under:
 ## Answer
 
 The highest-ranked unanswered disposition, and it progresses that one node through the movements still owed on it, from the stage it carries, up to the author's confirmation. Given no disposition and no node id, the session reads the frontier and takes the first unanswered node in rank order, this project's graph, read from the frontier by its id prefix, before the public graph, and so the purpose node first while it is unanswered, and runs the sitting from that node's stage: the periagogic stage when the author's account is not yet in the record, the maieutic stage when the answer is not yet drafted, the clean-context review when the draft has not had it, and then the ruling, put to the author in the interview by the question mechanics of the growth node and on the alignment page. A confirmation is recorded as the recording node describes, and a denial resumes the dialogue at the movement it calls for. A movement already behind the node is not repeated: the stage is the record of what the dialogue has done, and the session trusts it; the bootstrap's drafts stand at the review stage by the author's ruling of 2026-09-03 on the unanswered node, which set their stage. The author's choice of a different node is a boost, and the session takes the node the author names instead. One node at a time: when the node is recorded, or the author leaves it, the next highest unanswered node is the next sitting.
+```
+
+#### mid-sitting-input-is-sequenced-not-substituted
+
+`standing` with the boost clause refined: an alignment input given while a
+sitting is running does not necessarily displace the node in hand, and the
+session sequences the two by the dependencies between the dispositions they
+imply, running both in the one sitting. Raised from the author's words of
+2026-09-08, given mid-sitting beside two refinements to the quotes node.
+
+**AI support.** The standing answer's only rule for an input arriving
+mid-sitting is the boost, and the boost substitutes: the session takes the node
+the author names instead. Substitution is wrong twice. It abandons the node in
+hand at whatever movement it had reached, and the reason the record stores a
+stage at all, as the transience node says, is that what the dialogue has done
+should survive; a sitting that drops its node mid-movement makes the stage lie
+about where the dialogue is. And it treats the new input as independent of the
+running work, when the ordinary reason an input arrives mid-dialogue is that
+the dialogue provoked it: the author's words of 2026-09-08 came out of a sitting
+that had just admitted an entry to the ledger the author did not think belonged
+there. The refinement puts the dependency where the substitution was. A session
+reads what dispositions the input implies, asks which way each depends on the
+node in hand, and runs them in that order, so the sitting's sequence is derived
+from the record rather than from the order the author happened to speak in. The
+sitting is the unit that holds them, which is what makes this a refinement of
+this node and not of the frontier's rank: rank orders sittings, and this orders
+the nodes inside one.
+
+**AI divergence.** The clause asks a session to compute a dependency between
+dispositions not yet drafted, which is a judgment nothing in the record checks,
+and a session that wants to abandon its node can call the new input a
+prerequisite and be within the rule. The frontier's rank is mechanical and this
+is not, so the record gains an ordering it cannot audit. "Not necessarily" is
+the softest form the rule could take and says when substitution is wrong without
+saying when it is right. And the node's question is what the session takes up
+when given nothing, so the clause answers a case the question excludes; the
+alternative the author may prefer is a node of its own beneath this one, asking
+what a running sitting does with what it is given, which would carry the clause
+with its own facts and its own authority rather than as a rider on this answer.
+
+**Content.**
+
+```markdown
+---
+question: What does the alignment session take up when given nothing?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+---
+
+## Answer
+
+The highest-ranked unanswered disposition, and it progresses that one node through the movements still owed on it, from the stage it carries, up to the author's confirmation. Given no disposition and no node id, the session reads the frontier and takes the first unanswered node in rank order, this project's graph, read from the frontier by its id prefix, before the public graph, and so the purpose node first while it is unanswered, and runs the sitting from that node's stage: the periagogic stage when the author's account is not yet in the record, the maieutic stage when the answer is not yet drafted, the clean-context review when the draft has not had it, and then the ruling, put to the author in the interview by the question mechanics of the growth node and on the alignment page. A confirmation is recorded as the recording node describes, and a denial resumes the dialogue at the movement it calls for. A movement already behind the node is not repeated: the stage is the record of what the dialogue has done, and the session trusts it; the bootstrap's drafts stand at the review stage by the author's ruling of 2026-09-03 on the unanswered node, which set their stage. The author's choice of a different node is a boost, and a boost given before the sitting starts is the node the session takes. An alignment input given while a sitting is running does not necessarily displace the node in hand: the session reads which dispositions the input implies, evaluates their dependencies against the node it is on, and sequences them within the same sitting, so that a disposition the running work depends on is taken before it and one that depends on the running work after it. What the session never does is hold the input over for a later sitting; it belongs to this one. One node at a time still holds, and the sequence is the order the sitting runs them in: when the last of them is recorded, or the author leaves them, the next highest unanswered node is the next sitting.
 ```
 
 #### ruling-order-not-rank
@@ -288,3 +349,31 @@ alignment-target's standing answer: 'Given no disposition and no node id, the se
 Also named: commons.systems/disposition-graph/alignment-order.
 
 Proposed: alignment-order survives; alignment-target's recommendation moves to its existing author-sourced option `ruling-order-not-rank`, and the sentence naming the purpose node first is re-derived from the ruling order or struck.
+### An input given mid-sitting, 2026-09-08
+
+The author gave two refinements to `commons.systems/disposition-graph/quotes`
+in the middle of a sitting running on this graph's own topology and dialogue,
+and said with them how a sitting is to take such an input: not necessarily
+superseding the dialogue in hand, but sequenced into it by the dependencies
+between the dispositions implied, `words/2026-09-08/18`. The standing answer's
+only rule for that case was the boost, which substitutes. Recorded as
+`mid-sitting-input-is-sequenced-not-substituted`, the standing answer with the
+boost clause refined, and the recommendation moved to it on the author's words.
+The node's question asks what the session takes up when given nothing, and this
+clause governs the case where it is given something, so whether the clause
+belongs here or on a node of its own is the placement question the option's
+divergence raises and the author's to settle. The review block of 2026-09-03 and
+the survey pin of 2026-09-07 are stale against this move, and the frontier is
+where that is read.
+### The serialization question reaches its option, 2026-09-08
+
+The author opened the sitting by asking whether its concerns are resolved
+simultaneously or in some order, naming the circularity that makes the question
+hard: good alignment dialogue is needed to describe the authority and the
+tooling, and the authority and the tooling are what the dialogue runs on,
+`words/2026-09-08/3`. The sitting recommended a serialization and the author
+accepted it. The entry now reaches the option that carries the rule the two
+exchanges produced, which is not the acceptance of one order but the standing
+one: what a sitting does with an input it is given while running. One quotation
+reaching an option it was not filed against is what
+`commons.systems/disposition-graph/quotes` now describes.

@@ -9,7 +9,7 @@ review:
   against: "Purpose is the onboarding entry point and the README's source, and leading with a Greek term the browser cannot link spends a newcomer's attention on vocabulary rather than on the claim. The apposition the recommendation keeps does teach the word where it stands, which mitigates it; the deeper cost is that the precision bought is the AI's reading of a text the author has not read, on a node whose own reading has a strong pending alternative saying the mapping fails. The order the page had — 'a knowledge store, a projection of its author's hexis' — asserts less and loses nothing the record can currently support."
   survey:
     date: 2026-09-05
-    of: 75dff67ca145d9f5e67e8eba6cf1c6337a9a1314
+    of: 5a78987ee9b7650d7186110f49a85a9811320233
 facts:
   - name: answer
     options:
@@ -31,7 +31,7 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: moderate
-  - name: existence
+  - name: topology
     options:
       - name: keep
       - name: prune
@@ -111,7 +111,7 @@ under:
 Hexis decides a clause purpose's recommended text already contains, that the record is a projection of its author's hexis, which is what a knowledge store would hold. The finding proposes hexis carry one line saying it is a sub-ruling of purpose's text and must be ruled first, or be folded into purpose's account as an alternative, since confirming purpose as shown would decide hexis by that act. (Raised on commons.systems/disposition-graph/purpose.)
 ```
 
-### existence
+### topology
 
 Prune: The redundancy finding notes that this node decides a clause purpose's draft already contains, so a confirmation of purpose as shown decides it by that act and a contrary ruling here would reopen purpose's draft. Its alternative to keeping the option-node is to fold the option into purpose's Proposal as an explicit alternative, which is what the first option on rejected would make structural, that decision being itself unruled.
 

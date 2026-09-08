@@ -886,7 +886,7 @@ the author's words moved, and the prune of the standing child taken by whoever
 `commons.systems/disposition-graph/graph-topology`'s authority fact says may take
 it — the author at the child's own row until that fact is ruled `delegated`, and
 the recorder under the delegation once it is. The clause it replaces reads "the
-child being a node already standing, that its existence fact moves to `prune` with
+child being a node already standing, that its topology fact moves to `prune` with
 the test as its reason and the author rules the prune at the child's own row",
 which this node took from `commons.systems/disposition-graph/probe-or-node` on
 2026-09-04 as that node's own remedy.
@@ -929,7 +929,7 @@ the author's words moved, and the prune of the standing child taken by whoever
 `commons.systems/disposition-graph/graph-topology`'s authority fact says may take
 it — the author at the child's own row until that fact is ruled `delegated`, and
 the recorder under the delegation once it is. The clause it replaces reads "the
-child being a node already standing, that its existence fact moves to `prune` with
+child being a node already standing, that its topology fact moves to `prune` with
 the test as its reason and the author rules the prune at the child's own row",
 which this node took from `commons.systems/disposition-graph/probe-or-node` on
 2026-09-04 as that node's own remedy.

@@ -34,10 +34,8 @@ facts:
           - words/2026-09-04/25
           - words/2026-09-04/26
       - name: the-model-is-named-in-every-brief
-        source: author
+        source: ai
         ref: "2026-09-08"
-        supports:
-          - words/2026-09-08/17
       - name: fixed-model-for-every-task
         source: ai
         ref: "6e9efb8c"
@@ -85,7 +83,7 @@ depends:
 
 ### answer
 
-`the-model-is-named-in-every-brief` is recommended since 2026-09-08: it is `reconciliation-session-writes-options`, whose amendment of 2026-09-04 the author granted and which held the recommendation until now, with one clause added, that the brief names the model as it names the effort and no subagent runs on the harness's default. The author's direction of 2026-09-08, quoted above, moved it, and the recommendation moved on their words rather than on the AI's judgment of them; what remains the AI's is the form the direction takes in the answer, a clause about what a brief contains rather than a clause about which model goes where. Boldness moderate: the verbose-investigation clause, the amendment of 2026-09-04 and the direction of 2026-09-08 are the author's, while the unit contract, the model by kind of work, the main thread's model per session, and the subagent's four bounds are the AI's. The case against the answer as a whole stands unchanged, that it generalises past the author's words, the contract, the report and the main thread's read of the conclusion being a fixed cost per unit, the lookup exemption the only floor, and anything larger is a unit still catching every three-line investigation; against the new clause alone, that it converts a sizing rule into a paperwork rule and calls a correctly sized brief defective for saying so nowhere.
+`the-model-is-named-in-every-brief` is recommended since 2026-09-08: it is `reconciliation-session-writes-options`, whose amendment of 2026-09-04 the author granted and which held the recommendation until now, with one clause added, that the brief names the model as it names the effort and no subagent runs on the harness's default. The author's direction of 2026-09-08 raised it and the clause is the AI's: the author classified that direction later the same day as a directive for the sitting and not an articulation of disposition, so no entry of the ledger supports the option and the recommendation moved on the AI's judgment of what the direction showed, which is that the sizing rule the answer already carried was unenforceable as written. Boldness moderate: the verbose-investigation clause and the amendment of 2026-09-04 are the author's, while the unit contract, the model by kind of work, the main thread's model per session, the subagent's four bounds and the clause naming the model in the brief are the AI's. The case against the answer as a whole stands unchanged, that it generalises past the author's words, the contract, the report and the main thread's read of the conclusion being a fixed cost per unit, the lookup exemption the only floor, and anything larger is a unit still catching every three-line investigation; against the new clause alone, that it converts a sizing rule into a paperwork rule and calls a correctly sized brief defective for saying so nowhere.
 
 #### never-writes-the-graph
 
@@ -153,9 +151,9 @@ Every session has a main thread, the thread that holds the session's work, launc
 
 #### the-model-is-named-in-every-brief
 
-`reconciliation-session-writes-options` with one clause added to the sizing: the brief names the model as it names the effort, and no subagent runs on whatever model the harness would pick. Raised from the author's direction of 2026-09-08, given mid-sitting when three subagents this session had launched had taken the default.
+`reconciliation-session-writes-options` with one clause added to the sizing: the brief names the model as it names the effort, and no subagent runs on whatever model the harness would pick. Raised from the author's direction of 2026-09-08, given mid-sitting when three subagents this session had launched had taken the default. That direction was for the sitting and not disposition, as the author said later the same day, so the option is the AI's and cites no entry of the ledger.
 
-**AI support.** The author's words of 2026-09-08, quoted above, are a direction and not a ruling, and what they direct is not a new rule but the enforcement of one the answer already states: the model follows the kind of work. The clause the answer lacked was the one that makes that rule checkable at the moment it is applied. "The model follows the kind of work" is satisfied by a brief that says nothing, because the harness picks a model whether or not the brief does, and the pick is invisible in the brief and in the report; the author read the gap off three briefs of this sitting that named no model and got the default. Naming the model in the brief costs a clause and makes the sizing rule readable in the same artifact that carries the contract, the inputs, the outputs, the files the subagent may write and the effort, so that a brief either sizes its work or shows that it did not. The clause is the twin of "The effort is stated in the brief" and belongs where that clause belongs: with the sizing, on `commons.systems/disposition-graph/delegation-bounds-and-sizing`'s reading, and therefore into `unit-sizing` if that node's ruling makes the move. That node's residual rule places a clause neither list reaches with the bounds and asks the question rather than letting it join the sizing by silence, so the question is asked here and an option is recorded there.
+**AI support.** The author's words of 2026-09-08 are a direction for the sitting and not a ruling, and what they direct is not a new rule but the enforcement of one the answer already states: the model follows the kind of work. The clause the answer lacked was the one that makes that rule checkable at the moment it is applied. "The model follows the kind of work" is satisfied by a brief that says nothing, because the harness picks a model whether or not the brief does, and the pick is invisible in the brief and in the report; the author read the gap off three briefs of this sitting that named no model and got the default. Naming the model in the brief costs a clause and makes the sizing rule readable in the same artifact that carries the contract, the inputs, the outputs, the files the subagent may write and the effort, so that a brief either sizes its work or shows that it did not. The clause is the twin of "The effort is stated in the brief" and belongs where that clause belongs: with the sizing, on `commons.systems/disposition-graph/delegation-bounds-and-sizing`'s reading, and therefore into `unit-sizing` if that node's ruling makes the move. That node's residual rule places a clause neither list reaches with the bounds and asks the question rather than letting it join the sizing by silence, so the question is asked here and an option is recorded there.
 
 **AI divergence.** Nothing in the author's words says the model is named in the brief; they say the models are right-sized. A session could size every model correctly and write it nowhere, and the rule this option adds would still call that a defect. What the clause really buys is auditability, which is the main thread's interest and not the author's stated one, and the cost of a wrong naming is a brief that lies about what ran.
 
@@ -462,3 +460,20 @@ Proposed: The survivor is `frontier-consistency`'s sense: survey is the reading 
 ### The model named in the brief, 2026-09-08
 
 The author directed mid-sitting that every subagent be given a right-sized model rather than the harness default, `words/2026-09-08/17`, after three of this sitting's briefs had named none. Recorded as `the-model-is-named-in-every-brief`, which is the standing answer with one clause added beside the effort clause, and the recommendation moved to it. The clause is sizing on `commons.systems/disposition-graph/delegation-bounds-and-sizing`'s reading, so an option is recorded there adding it to the enumeration the sizing list quotes; that node's residual rule places a clause neither list reaches with the bounds, and this entry is the asking of the question it requires rather than a silent joining. The review block of 2026-09-05 and the survey pin of 2026-09-07 are stale against this move, and the frontier is where that is read.
+### The direction was for the sitting, 2026-09-08
+
+The author said later the same day that a quotation belongs in the ledger only
+where it bears on a fact of a disposition, and named this sitting's direction on
+subagent models as the case that does not: it was a directive for the work in
+hand, not an articulation of disposition. The option was recorded as the
+author's and sourced to `words/2026-09-08/17`; the source is corrected to the
+AI, the reference is struck, and the answer's prose no longer says the
+recommendation moved on the author's words. What the direction did is what a
+direction does, which is show the AI a gap in a rule the answer already carried,
+and the clause that closes the gap is the AI's recommendation, which is where
+the entry above should have left it. The ledger entry is not deleted here.
+Withdrawing an admitted entry is the act `commons.systems/disposition-graph/quotes`
+now records as an option for the author to rule on, made in place and keeping
+the ordinal, the text and the reason; until that ruling the entry stands with
+nothing referencing it, and the validator's finding is the record saying so out
+loud rather than a defect to repair.

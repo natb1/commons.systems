@@ -24,6 +24,29 @@ probes:
       `answer-and-rationale-only`.
     source: ai
     raised: 2026-09-04
+  - id: does-the-rule-reach-the-content-fence
+    asks: >-
+      Does the rule against re-encoding structured data as prose reach the
+      frontmatter an option's content fence repeats?
+    fact: answer
+    why: >-
+      The rule is written of a node's prose, and the record's largest
+      duplication is not in prose. An option's `**Content.**` fence carries the
+      whole projected node, frontmatter included, so options that differ only in
+      their answer carry byte-identical copies of it. Measured on the graph at
+      this sitting's landing: 750 fences, 100,760 bytes of distinct frontmatter
+      and 335,630 bytes of exact copies, across 85 of the 138 nodes that carry a
+      fence; `dialogue` holds 38 fences over two distinct blocks. The record
+      already has a form that copies nothing, the `From:` base and diff hunk,
+      and it is used 26 times against those 750. Read on this node's `## Answer`
+      and its `### What the fences repeat, 2026-09-08`.
+    discharges: >-
+      Whether the fence is within this rule's scope or belongs to a node of its
+      own. Within it, the recommended answer already forbids the copies and what
+      is owed is the instrument that elides them; outside it, the encoding
+      question is minted beneath and this node's answer is unmoved either way.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:
@@ -632,3 +655,34 @@ already existed and was not owed.
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/prose-and-structure stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `prose-argues-structure-records`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/32, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none. The record wrote no text of its own for `duplicates-only`, `version-control-holds-the-rest`, `answer-and-rationale-only`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `ee669918bcfe861c5b70d3497774f08f207554ea` was already past the recommendation and is left as it stood.
+### What the fences repeat, 2026-09-08
+
+Measured while landing the reconciliation of 2026-09-08, on the graph as it
+stands after that landing. The record holds 750 option content fences in the
+whole-node form. They carry 100,760 bytes of distinct frontmatter and 335,630
+bytes that are byte-identical copies of frontmatter already on the same node. 85
+of the 138 nodes that carry a fence carry at least one such copy. `dialogue` is
+the extreme: 38 fences over two distinct frontmatter blocks, 58,320 bytes
+copied, about a fifth of the file. The whole-node form is not the only one the
+record has. An option may instead name a base and carry a diff hunk, which
+copies nothing, and that form is used 26 times against the 750.
+
+The copies are not sloppiness. An option's fence is what the node becomes if the
+author rules for it, so it carries the whole projected node; an option that
+moves only the answer carries the frontmatter unchanged, and that is what the
+form asks for. What the record buys is a fence that can be read without
+assembling it. What it pays is that a change to a node's `question`, `under`,
+`defines` or `shims` must be made once in the frontmatter and once in every
+fence beneath it, with nothing in the reader or the validator checking that it
+was. This sitting paid it twice: the rename of the `existence` fact and the
+restoration of a question inside one option's fence were both single facts of a
+node that had to be written in as many places as the node has options.
+
+It is recorded here as a probe and not as an option because the rule this node
+states is written of a node's prose, and a fence is not prose: whether the rule
+reaches it is the author's to say, and if it does not, the question is a node
+beneath rather than a fourth option here. The sitting did not change the
+encoding. That restraint is not the migration cost, which `evaluation` strikes
+from the choosing along with the fact that the incumbent already does it the
+other way; it is that the AI does not know which node owns the question, and
+minting the wrong one is the cost the record actually pays.

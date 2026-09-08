@@ -19,6 +19,11 @@ review:
 facts:
   - name: answer
     options:
+      - name: no-reversal-without-new-evidence
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/7
       - name: overrule-to-deferred
         source: ai
         ref: "2026-09-02"
@@ -39,7 +44,7 @@ facts:
         ref: "2026-09-04"
         supports:
           - words/2026-09-03/51
-    recommends: overrule-by-class
+    recommends: no-reversal-without-new-evidence
     boldness: moderate
   - name: authority
     options:
@@ -62,6 +67,35 @@ depends:
 ## Facts
 
 ### answer
+
+`no-reversal-without-new-evidence` is recommended since 2026-09-08: it is `overrule-by-class`, which is kept whole, with two clauses added after the cost sentence, that a design is not overturned before what it bought is named, and that a return to a position the record has already left names what entered the record since. Raised from the author's question of 2026-09-08, which asks how the dialogue stays unbound by the incumbent where a better paradigm exists while still building on the disposition that supports it, and names regression and thrashing as the failures to avoid. Moderate boldness: the requirement is the author's, in their words, and both clauses are the AI's, as is the reading that the record already stores what they need, the reason a passed option carries, and only lacks the rule that makes a later recommendation read it. The case against is that both clauses are satisfiable in words by the party they constrain, and that the second gives the record's own history a purchase on its future that the lens denies to the incumbent implementation.
+
+#### no-reversal-without-new-evidence
+
+`overrule-by-class` kept whole, with two clauses added after the cost sentence: what the incumbent design bought is named before it is overturned, and a return to a position the record has already left names what entered the record since. Raised from the author's words of 2026-09-08.
+
+**AI support.** The answer strikes five classes of conservative argument from the choosing and puts nothing in their place, so it says how to be unbound and nothing about how to be right. The author names the two ways being unbound goes wrong, and they are different failures needing different guards. Regression loses a property the incumbent had that nobody wrote down as a requirement; the guard is to make the proposer say what the incumbent bought, which is the endoxa move, Aristotle at Topics 100b18-23 and Nicomachean Ethics 1145b2-7, where the inquiry begins from the reputable opinions and resolves the difficulty so that most of them survive, the better account being the one that saves more appearances. The incumbent's appearances are what it bought, and a replacement that saves none of them is not better, it is newer. Thrashing is the loop returning to a position it already left with nothing new having entered the record, and the guard is a ratchet on what lifts a passed status. The record already holds the material for both: an option passed over carries the reason it was passed over, written at the moment of the overruling by the party doing it. Nothing today requires a later recommendation to engage that reason, so the record keeps the evidence and does not read it, and the two clauses are what make it read. Neither is a cost argument, which is what keeps them inside the lens rather than an exception carved out of it, and this matters because the lens is what the author asked to keep: the clauses ask what the incumbent knew and what has changed, both questions about evidence, and neither says a change is expensive.
+
+**AI divergence.** Both clauses are satisfiable in words by the party they constrain. "What the replaced design solved" is written by whoever proposes the replacement, and a session that wants to move writes a thin sentence and passes; the clause then buys a paragraph rather than a check. The ratchet is stronger and worse. It gives the record's own history a purchase on its future, which is the authority the greenfield lens denies to the incumbent implementation, admitted here through the back door of the passed reasons; a record that was wrong to pass an option over now needs new evidence to say so, and "the earlier reasoning was bad" is not new evidence under the clause as written, so the clause protects the record's mistakes in proportion to how confidently they were written. There is a cheaper alternative that costs the answer nothing: leave both to the clean-context review, which is handed the node's account, can see a reversal in it, and is the movement whose whole function is to catch a recommendation that has not been made. The tradition surfaced here, Aristotle's endoxa, is owed as a reading and is not minted, which this node's own answer requires and which fourteen of the record's rationales are equally in arrears on, deferred to the `readings` ruling.
+
+**Content.**
+
+```markdown
+---
+question: How is a design or a proposal evaluated?
+form: rule
+under:
+  - commons.systems/disposition-graph/growth
+tier: global
+defines:
+  - greenfield
+  - adversarial review
+---
+
+## Answer
+
+Against the full solution frontier. Nothing is sacred: no doctrine is implied by what exists, least of all by the incumbent implementation, which is evidence of past decisions and never authority over future ones; that is what greenfield means here. Greenfield is the lens every recommendation is made through, not an occasional one, and it is operational rather than a sentiment. A class of argument is struck from the choosing: what a change would cost to migrate, how many files or nodes it touches, what reviews or assessments it would spend, what tooling it would rework, and that the incumbent already does it the other way. None of those bear on whether a design is right, and a recommendation resting on one of them has not been made. The positive test replaces them: judge the design as if the record were being written from scratch, with nothing in it to preserve. The error to hunt is an incumbent fact doing the work of a design constraint, which is the failure this lens exists to catch; a recommendation found resting on one is named as such and redrawn. Cost is not thereby unsayable, and a recommendation still states what its design will cost: it is a consequence of a design chosen on its merits and never a reason for choosing it. Greenfield's two failure modes are named and guarded. A design is not overturned before what it bought is named: the incumbent is evidence that someone had a problem, so a recommendation that replaces it says what the replaced design solved and how the replacement solves it, and one that cannot say has not been made. That is the whole of what this record keeps from Chesterton's fence, whose burden it otherwise reverses, since here a fence with no recorded reason is a prune-by-default proposal rather than a thing to leave standing. And a recommendation that returns the record to a position it has already left is thrashing unless it names what entered the record since it was left: a passed option carries the reason it was passed over, and re-raising it means striking that reason and saying what makes the strike, a measurement, a tradition, an instrument's finding, or the author's word. The AI may lift a status it wrote and may not lift one silently. Neither clause is a cost argument and neither returns the incumbent any authority: the first asks what the incumbent knew, the second asks what has changed, and both are questions about evidence. A ratified answer is not unchangeable; changing it takes an interview with the author, and the alignment skill is that interview. Delegated and deferred answers need no interview: the AI may move their recommendation on its best judgment, and what a move does is read from the node's class. On a ratified node the confirmed choice keeps its full authority and the node returns to the author for re-confirmation, at the review stage where only the recommendation moved. On a deferred node the recommendation acts, the reconciliation frontier changes with it, and the node is on the alignment frontier already. On a delegated node the recommendation moves freely within the delegation's scope and the node stays off the alignment frontier, since the author asked not to be asked again; a move that would leave the scope is not the AI's to recommend, is recorded as an option, and returns the node to the author with its class intact. On an unanswered node nothing acts and the move is dialogue. A recommendation moved at the ruling stage sends the node back to the review stage, and the frontier and the alignment page show it as changed since its review. Every evaluation runs twice, once as fresh best judgment and once with reference to tradition, including traditions shelved by pre-agent constraints, and every tradition surfaced is recorded as a reading with the resolution it informed. Work under an answer that cites a tradition is grounded in the tradition itself within its recorded support scope; a recorded divergence is the author's decision, which the tradition cannot overrule, and an unrecorded conflict is a frontier item deferred to neither side. Adversarial review of one's own recorded output is part of producing it, and a disposition recommended to the author is reviewed once more, in clean context, before the author rules on it, as the recording node describes. A shim declared on the record is applied by default; a prompt is required only to bypass it.
+```
 
 #### overrule-to-deferred
 
@@ -382,3 +416,23 @@ Its proposal: Settle which of the two sentences governs an unanswered node whose
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/evaluation stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `overrule-by-class`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-03/51, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `overrule-to-deferred`, `deferred-until-ruling-quoted`, `two-kinds-of-shim`, `traditions-to-readings`, `bounded-overrule`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `6d87ee51ffab4195c5465354a36d4a2bc1f4fa1e` was already past the recommendation and is left as it stood.
+### Greenfield's two failure modes, 2026-09-08
+
+The author asked how the dialogue stays unbound by the incumbent where a better
+paradigm exists while still building on the disposition that supports it, and
+named regression and thrashing as the failures to avoid, `words/2026-09-08/7`.
+The answer as it stood strikes five classes of conservative argument and puts
+nothing in their place. Recorded as `no-reversal-without-new-evidence`, the
+standing text with two clauses added, and the recommendation moved to it. The
+first clause is what this record keeps of Chesterton's fence, which the answer's
+support already says it diverges from in part; the divergence is unchanged, a
+fence with no recorded reason still being a prune-by-default proposal, and what
+is added is the naming, not the leaving standing. The second rests on a
+mechanism the record already has and does not use: the `reason` a passed option
+carries is the incumbent's reason, written at the moment of the overruling, and
+nothing required a later recommendation to read it. Aristotle's endoxa is
+surfaced here and owed as a reading, not minted; this node's own answer requires
+the minting and the node's account of 2026-09-03 records fourteen rationales in
+the same arrears, deferred to the `readings` ruling, so this entry joins that
+queue rather than jumping it. The review block and the survey pin are stale
+against this move, and the frontier is where that is read.

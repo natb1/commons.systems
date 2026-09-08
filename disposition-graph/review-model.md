@@ -125,7 +125,7 @@ review:
           - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
           - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
           - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:existence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:topology (defines: commons.systems/disposition-graph/dialogue)"
           - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
           - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
           - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"

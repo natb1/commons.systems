@@ -5,12 +5,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 3f5b72b2976269e4b31e83c0e6298c850e53e699
+  of: ab7802cb6bca0d8b101fd3ce8d79669dd9339286
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "All nine of the last reading's findings have textual fixes matching their suggested edits, but two spots stay short of a clean repair. First, the ledger disclosure added to 'The recording of a confirmation' states a process ('written by the migration under the author's grant of 2026-09-07') without naming it a shim or citing the record's own unmaterialized-instrument vocabulary the way the sibling `unconfirmed-accumulation` text the last reading quoted does, so a reader could still take it as a working mechanism rather than a disclosed gap. Second, in fixing the delta-option sentence the amendment also dropped the 'stands' mechanism from the surrounding text and replaced it with an unverified claim about how `dialogue` encodes an answer's resolution, which is new ground the last reading never reviewed and this delta reading cannot check against `dialogue`'s own text."
   survey:
     date: 2026-09-07
-    of: 3f5b72b2976269e4b31e83c0e6298c850e53e699
+    of: ab7802cb6bca0d8b101fd3ce8d79669dd9339286
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "4f247ec819cb4467053ecb74976ac9328384ecd0b5272c4841bf81cbc02bfca8"
@@ -116,7 +116,7 @@ review:
           - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
           - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
           - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:existence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:topology (defines: commons.systems/disposition-graph/dialogue)"
           - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
           - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
           - "term:kickback (defines: commons.systems/disposition-graph/recording)"
@@ -524,7 +524,7 @@ facts:
         ref: "2026-09-04"
         status: passed
         reason: "the judgment whether a move is substance is the reviewed party's, and the pin decides; substance stays the test for the author's own edit"
-      - name: one-response-rules-a-decompositions-existence-facts
+      - name: one-response-rules-a-decompositions-topology-facts
         source: commons.systems/disposition-graph/decomposition
         ref: "2026-09-05"
       - name: earlier-stage-words-come-from-the-interview
@@ -1227,16 +1227,16 @@ defines:
 The review of a draft is re-run after a move of the recommendation only where the session judges the move substance, which was the recommended text's own rule until the readings of 2026-09-04 on this node and on the clean-context-review node. Passed because the judgment whether a move is substance is the reviewed party's, and the pin the readings leave already decides: a reading attests to the text it read, and a text that moved has not been read. Substance stays the test for the author's own edit, whose words are theirs.
 ```
 
-#### one-response-rules-a-decompositions-existence-facts
+#### one-response-rules-a-decompositions-topology-facts
 
 A refusal of a proposed decomposition is one response that records a ruling on
-the existence fact of each queued node the refusal names, so that the author
+the topology fact of each queued node the refusal names, so that the author
 rules once on a set of questions rather than once per node; the classification
 of the response is this node's as for any other. It is here because the
 `decomposition` node's recommended text reached for exactly this shortcut and
 the recommended answer above forbids it: a response given on a node below the
 ruling stage confers nothing, and a queued node is minted at the periagogic
-stage. That node now records the author's words and moves each existence fact's
+stage. That node now records the author's words and moves each topology fact's
 recommendation instead, and the shortcut is put on this fact, where the question
 of how far one response reaches is asked. Raised by the second clean-context
 reading of `decomposition` on 2026-09-05, which proposed it and did not make it.
@@ -1263,13 +1263,13 @@ defines:
 ## Answer
 
 A refusal of a proposed decomposition is one response that records a ruling on
-the existence fact of each queued node the refusal names, so that the author
+the topology fact of each queued node the refusal names, so that the author
 rules once on a set of questions rather than once per node; the classification
 of the response is this node's as for any other. It is here because the
 `decomposition` node's recommended text reached for exactly this shortcut and
 the recommended answer above forbids it: a response given on a node below the
 ruling stage confers nothing, and a queued node is minted at the periagogic
-stage. That node now records the author's words and moves each existence fact's
+stage. That node now records the author's words and moves each topology fact's
 recommendation instead, and the shortcut is put on this fact, where the question
 of how far one response reaches is asked. Raised by the second clean-context
 reading of `decomposition` on 2026-09-05, which proposed it and did not make it.
@@ -1507,7 +1507,7 @@ Per fact, after two readings, and never in the AI's own hand.
 
 **What the account carries.** What the account carries is the dialogue node's question and when it is written is the checkpoint node's; what this node adds is why it goes at the recording: re-running a reading reconstructs it while nothing reconstructs the facts, which is the test the dialogue node's minimal-state principle sets, applied here. What a resuming session needs of the sitting's minutes beyond the dialogue node's list, the conclusion of every unit the sitting delegated with the commands it ran and the author's response as it was given with the classification the session made of it, is recorded as an option on that node.
 
-**Three cases the recording keeps.** A ruling that the node not exist, given on its existence fact, is recorded before the node is deleted, on the node that proposed the prune where one did and otherwise on the parent, so the record keeps the reason a question was closed instead of losing it with the file. A ruling given on a node while its parent is still open is recorded like any other, and if a later ruling on the parent contradicts it, the contradiction is recorded as an option on the child's fact with the parent's ruling as its source and put to the author, never applied over their ruling. A recommendation moved on a node that already has a class, in alignment, in reconciliation, or in the loop on itself, re-opens the dialogue at the movement this classification calls for, the review where only the recommendation moved, since the author's account and the ground are in the record already, and the confirmed choice keeps its full authority until the author rules again.
+**Three cases the recording keeps.** A ruling that the node not exist, given on its topology fact, is recorded before the node is deleted, on the node that proposed the prune where one did and otherwise on the parent, so the record keeps the reason a question was closed instead of losing it with the file. A ruling given on a node while its parent is still open is recorded like any other, and if a later ruling on the parent contradicts it, the contradiction is recorded as an option on the child's fact with the parent's ruling as its source and put to the author, never applied over their ruling. A recommendation moved on a node that already has a class, in alignment, in reconciliation, or in the loop on itself, re-opens the dialogue at the movement this classification calls for, the review where only the recommendation moved, since the author's account and the ground are in the record already, and the confirmed choice keeps its full authority until the author rules again.
 
 A node left unruled stays unanswered at its stage, and the deferral the author confers is the deferred option on the authority fact, so no fourth response is needed. No recommendation of the AI's is confirmed while either reading is owed on it, save where the cap on the readings of one answer has been reached and readiness asks only that the two have run, the author's own edit being ruled on the text they wrote and read afterwards as the edit paragraph says, and no ruling is recorded that the author did not give in words the record holds.
 ```
@@ -1621,7 +1621,7 @@ The session's reply: Validated on the main thread against the dialogue node's te
 
 ### Migrated to the content encoding, 2026-09-07
 
-Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/recording stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `options-persist-at-the-recording`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `the-confirmation-folds-an-already-accumulated-node`; 7 `## Disposition` entries became the ledger entries words/2026-09-03/70, words/2026-09-03/71, words/2026-09-03/72, words/2026-09-04/34, words/2026-09-04/35, words/2026-09-04/23, words/2026-09-04/36, referenced by 8 options the entry's own date names and by the recommended option for 3 the date named none; and `stands` left the answer fact. The content of `responses-classified-per-decision (at db23d5b1)`, `per-fact-after-two-readings (at 6ecfb60b)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `stamp-written-at-the-recording`, `move-the-quotations-into-a-disposition-section`, `deferred-rather-than-ratified`, `mechanical-checks-instead-of-a-full-reading`, `cite-reviewers-world`, `cite-unanswered-responses`, `stage-per-decision`, `review-divided-by-object`, `denial-typed-to-maieutic`, `edit-pins-what-the-author-read`, `fixed-checklist-as-the-brief`, `steelman-on-every-item`, `the-incumbents-review-mechanics`, `edit-held-until-re-read`, `refinement-re-enters-at-review`, `edits-only-through-the-kick-back`, `re-read-on-substance-only`, `one-response-rules-a-decompositions-existence-facts`, `earlier-stage-words-come-from-the-interview`, `unopposed-sentence-versus-an-against-on-every-fact`, `prune-of-an-unruled-node-needs-no-ruling`, `readiness-when-the-cap-is-reached`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `47f8d7b9cbd414f7d84517d88575ae55d9e862f5` is re-computed for the encoding as `bfb4d8ef1077decaabcaa708bcc3b5bf9c7976bc`; nothing it read changed. The survey's pin `e9ed2d251c879c99252822c75f5d6933d03f2abc` was already past the recommendation and is left as it stood.
+Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/recording stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `options-persist-at-the-recording`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `the-confirmation-folds-an-already-accumulated-node`; 7 `## Disposition` entries became the ledger entries words/2026-09-03/70, words/2026-09-03/71, words/2026-09-03/72, words/2026-09-04/34, words/2026-09-04/35, words/2026-09-04/23, words/2026-09-04/36, referenced by 8 options the entry's own date names and by the recommended option for 3 the date named none; and `stands` left the answer fact. The content of `responses-classified-per-decision (at db23d5b1)`, `per-fact-after-two-readings (at 6ecfb60b)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `stamp-written-at-the-recording`, `move-the-quotations-into-a-disposition-section`, `deferred-rather-than-ratified`, `mechanical-checks-instead-of-a-full-reading`, `cite-reviewers-world`, `cite-unanswered-responses`, `stage-per-decision`, `review-divided-by-object`, `denial-typed-to-maieutic`, `edit-pins-what-the-author-read`, `fixed-checklist-as-the-brief`, `steelman-on-every-item`, `the-incumbents-review-mechanics`, `edit-held-until-re-read`, `refinement-re-enters-at-review`, `edits-only-through-the-kick-back`, `re-read-on-substance-only`, `one-response-rules-a-decompositions-topology-facts`, `earlier-stage-words-come-from-the-interview`, `unopposed-sentence-versus-an-against-on-every-fact`, `prune-of-an-unruled-node-needs-no-ruling`, `readiness-when-the-cap-is-reached`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `47f8d7b9cbd414f7d84517d88575ae55d9e862f5` is re-computed for the encoding as `bfb4d8ef1077decaabcaa708bcc3b5bf9c7976bc`; nothing it read changed. The survey's pin `e9ed2d251c879c99252822c75f5d6933d03f2abc` was already past the recommendation and is left as it stood.
 
 ### Frontier survey, 2026-09-07, of bfb4d8ef
 

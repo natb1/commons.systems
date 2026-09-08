@@ -50,11 +50,11 @@ review:
   verdict: forward
   strength: none
   date: 2026-09-07
-  of: ec174858546673d46fc2b2e011639cb608ef78ad
+  of: 7ac1298c20cf16687fa1f2be4a3109ed4116500d
   commit: f146f8f44b295c64e47a13bff338748035183d87
   survey:
     date: 2026-09-07
-    of: ec174858546673d46fc2b2e011639cb608ef78ad
+    of: 7ac1298c20cf16687fa1f2be4a3109ed4116500d
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
@@ -101,7 +101,7 @@ away, which is the reply to the record's own reason for the gloss.
 Two things in the answer are not in that sentence. The gloss going one step down
 rather than off the page, which the record's own rule requires, since a projection
 that drops what it stops showing is a fold and the author's words of 2026-09-04
-struck the fold. And the reach to `existence`, which the author did not name:
+struck the fold. And the reach to `topology`, which the author did not name:
 `dialogue` states one rule for the two facts in one sentence, and a page showing a
 term on one and a sentence on the other would make the reader learn which fact
 they are looking at before they could read a row, so the answer is about
@@ -130,25 +130,25 @@ The option's name, as the term it is, and the gloss one step down.
 
 On a fact whose options are the record's own vocabulary the row leads with the
 term and nothing else: `ratified`, `delegated`, `deferred` on the authority fact,
-`keep` and `prune` on existence. The gloss, the sentence the defining node carries
+`keep` and `prune` on topology. The gloss, the sentence the defining node carries
 beside the term and which says what confirming that choice would mean, is the
 first thing in the option's drill-down, under the label the drill-down already
 gives the rest of an option's text, credited to the node that holds it. Nothing
 is lost; one level is spent.
 
-The reach is two facts and no wider. `authority` and `existence` are the two
+The reach is two facts and no wider. `authority` and `topology` are the two
 whose options are terms; `persistence`'s options are shapes written per node and
 `answer`'s are candidate answers written per option, and both keep their sentence
 at the first level, where there is no name that says the decision and the sentence
 is the decision. That division is `dialogue`'s, in the sentence this answer reads
 and does not amend: "An option of the two facts whose options are the record's own
-vocabulary, `authority` and `existence`, has no subsection at all: its name is a
+vocabulary, `authority` and `topology`, has no subsection at all: its name is a
 term, and its sentence is the gloss on the node that defines the term." That text
 is `dialogue`'s recommended text, which no ruling has reached, and this answer
 reads it as direction and not as doctrine; the rule stated here holds whichever
 way that node rules, because a fact whose options are terms the record defines is
 what the rule is about, and `dialogue`'s standing answer already names `authority`
-and `existence` as the two facts whose options are the record's own vocabulary.
+and `topology` as the two facts whose options are the record's own vocabulary.
 Nothing is entered in `depends` for that reason. Where the gloss lives and who
 writes it are untouched: written once, on the defining node, read from there, and
 never carried by the page for itself. What changes is which level of the row it
@@ -246,10 +246,10 @@ prints today for all three authority options on every node.
 #### authority-alone
 
 Everything the recommended option says, for the authority fact alone, with
-`existence` keeping the gloss at the first level.
+`topology` keeping the gloss at the first level.
 
 **AI support.** For it: the author named
-authority, `existence` appears on 6 nodes against authority's 134, so the argument
+authority, `topology` appears on 6 nodes against authority's 134, so the argument
 from repetition is weak there, and `keep` and `prune` are terms whose glosses are
 short. Viable and not adopted: `dialogue` states one rule for the two facts in one
 sentence, and a row that leads with a term on one fact and with a sentence on
@@ -271,7 +271,7 @@ under:
 ## Answer
 
 Everything the recommended option says, for the authority fact alone, with
-`existence` keeping the gloss at the first level.
+`topology` keeping the gloss at the first level.
 ```
 
 #### term-linked-to-the-definer
