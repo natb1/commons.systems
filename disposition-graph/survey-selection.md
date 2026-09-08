@@ -788,94 +788,13 @@ A second `under` edge, to the node that owns the dialogue's movements, keeping t
 - Folded: Option recorded, 2026-09-07, at f0741490d538f17733f64bce56a14d8e122c8d34
 - Folded: Clean-context re-reading, 2026-09-07, of 5b7146fa (ii), at f0741490d538f17733f64bce56a14d8e122c8d34
 - Folded: Amended under the grant, 2026-09-07, at f0741490d538f17733f64bce56a14d8e122c8d34
-
-### Clean-context re-reading, 2026-09-07, of db8719da
-
-Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
-
-Recommended at this reading: `candidate-pairs-with-their-nominating-key`.
-
-Findings:
-
-
-On the facts and what they recommend: The diff adds one new passed-over answer-fact option, `a-defined-term-shared-by-any-two-nodes` (source ai, ref 2026-09-07, status passed, reason "measured at graph commit 3eb4942b it nominated every candidate pair the generator produced, 11,781 of them, so the key ordered nothing"), with its own facts subsection giving AI support and divergence, and narrows the 'The candidate pairs' paragraph's key definition from "a defined term shared" to "a defined term, the node that defines it paired with each node that uses it," recorded in a new '### Amended under the grant, 2026-09-07' account section. `recommends` (candidate-pairs-with-their-nominating-key), `stands` (the same option) and boldness (high) on the answer fact are unchanged, so the '## Recommendation' fence stays absent; the authority fact is untouched. The review block's restamped `commit` (to abb15a3e) and `against` text are the previous reading's own apply step, not part of this amendment, per the brief's own instruction.
-
-On the viability of the options: The diff only adds one new, already-passed-over answer-fact option drawn from the design's own first-cut measurement, and leaves every existing option's status, recommendation and ranking untouched; nothing on the authority fact changes.
-
-Strongest counter-argument (weak): The account's figures -- that the narrowed key nominates 2,793 of 4,698 pairs at commit 3eb4942b (versus 11,781 under the wide key), and that the mechanical tier at edbe507a found 3,819 findings across eight checks (3,532 of them term-without-a-path), forcing that survey's launch gate -- rest entirely on the AI's own reported measurements. A delta reading of this node's file alone has no independent access to the term concordance, the validator's actual run, or the pair generator's output at those commits, so a miscounted or overstated figure would not surface here; the internal arithmetic is self-consistent (3,532+183+87+17=3,819) but that only checks the addition, not the underlying counts. This is the same scope limit the previous reading already flagged about the four minted reading nodes, applied now to this amendment's own measurements, and it is carried forward rather than treated as a new defect since the amendment does not purport to close it.
-
-The session's reply: [object Object]
-
-### Migrated to the content encoding, 2026-09-07
-
-Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/survey-selection stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `candidate-pairs-with-their-nominating-key`; the `## Rationale` its `**AI support.**`; 5 `## Disposition` entries became the ledger entries words/2026-09-07/16, words/2026-09-07/9, words/2026-09-07/11, words/2026-09-07/12, words/2026-09-07/13, referenced by 0 options the entry's own date names and by the recommended option for 5 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `the-judged-node-is-carried-once`, `the-mechanical-tier-gates-the-launch`, `the-delta-survey-with-a-periodic-whole`, `several-readers-over-a-partition`, `the-judged-set-is-what-the-author-is-about-to-rule`, `a-whole-graph-reading-every-time`, `size-the-cadence-and-the-sample-on-inclusiveness-and-precision`, `a-defined-term-shared-by-any-two-nodes`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `db8719da83e5ac0f7d3a0f5487291829b220aca2` is re-computed for the encoding as `4902b4d4748696375d149520621c12ab98bb1252`; nothing it read changed.
-
-### Option recorded on the author's words, 2026-09-07, at 6611799a
-
-The author asked whether the 1.11 MB survey brief was measured after the accumulation strategy (words/2026-09-07/20); it was, at graph commit 6611799a, and the session answered with the brief's composition and recommended one more cut, the option list by sentence and status and the author's words by address. The author's words of the same day (words/2026-09-07/21) direct that the optimization be recorded and reconciled for future surveys, that the running survey not be interrupted, and that no survey be rerun for it. The option `options-by-sentence-and-status-and-words-by-address` is recorded as a named change against `candidate-pairs-with-their-nominating-key`, amending the paragraph on what a judged node is carried by, and the answer fact's recommendation moves to it, at moderate boldness, the measurement being the session's own. The recommendation having moved, the node returns to the review stage and owes a re-reading of the amendment; the survey pin of 6611799a names the recommendation before the move, and, on the author's words, no survey is rerun for that. The brief tool is reconciled to the option on the implementation ref under the author's grant of 2026-09-07 (words/2026-09-07/11, "begin applying the optimizations as you progress"), for the surveys that follow.
-
-### Reconciled for future surveys, 2026-09-07, at implementation commit c4cb63db
-
-Under the author's words of 2026-09-07 (words/2026-09-07/21), the brief
-generator's judged-node render was reconciled to
-`options-by-sentence-and-status-and-words-by-address` on `greenfield` at
-c4cb63db, and no survey was rerun for it. The option's AI support estimated
-the cut at about 250 KB from the two blocks' sizes at 6611799a; measured at
-graph commit f57877f9 with `brief.mjs --survey disposition --force-tier`, the
-brief went from 1,117,752 bytes over 9,298 lines to 1,032,848 bytes over
-9,177 lines, a cut of 84,904 bytes, because the sentences, which the option
-keeps, are most of the option list, and the quotations the carried options
-reference are most of the words block. The estimate stands in the support
-as written and the measure is here. `sectionHashes` was not changed, so
-every survey pin written before the change names the same recommendation
-after it.
-
-### Two survey findings the apply discarded, 2026-09-07
-
-This node moved after the survey read it: the survey of 2026-09-07 pinned it at
-graph commit 6611799a, and the option
-`options-by-sentence-and-status-and-words-by-address` was recorded as its
-recommendation at f57877f9 on the author's words of 2026-09-07
-(words/2026-09-07/20 and words/2026-09-07/21), so the apply wrote nothing here
-and discarded the two cross-node findings that name it, together with those
-findings' entries on the four other nodes they name, `review-skills`,
-`unconfirmed-accumulation`, `review-cost` and `clean-context-review`, and with
-this node's own reading, which was discarded whole and is not written by hand.
-Both findings were validated at their loci on the main thread against the text
-as it now stands: the sentence the first quotes is carried unchanged by the
-recommended option's content, since the move amended one paragraph, on what the
-judged node carries, and no other; and the brief the second measures is the
-brief this survey read. Neither is withdrawn. The option
-`the-materialization-sentence-is-dated-to-its-commit` the first proposes is
-added to the answer fact by hand, here and on `review-skills`, and the option
-`the-brief-is-bounded-by-what-one-call-holds` the second proposes is added on
-`review-cost`, which is an act the AI has on any fact and which settles nothing.
-The stage the findings named, maieutic, is set by hand here and on
-`review-skills` and `review-cost`, since the record requires every answer
-option of a node at the review or ruling stage to carry its content, and an
-option the reader proposed carries its sentence only, so the node cannot stand
-at either stage until the option is given content or passed over; the
-precedent of 2026-09-05 on `delegation-bounds-and-sizing`, which left the stage
-alone, predates that requirement. No stage is set on
-`unconfirmed-accumulation` or `clean-context-review`, on which the findings
-named none. No survey pin is written by hand: the next survey judges this node
-again, and its pin will name the recommendation as it now stands.
-
-The `contradiction` finding on the dated materialization sentences, as the survey wrote it: Three judged answers assert that nothing they name is materialized on 2026-09-07, and the brief generated on 2026-09-07 falsifies two of the assertions. `survey-selection` states "Nothing this answer names is materialized on 2026-09-07: the validator holds no tier, the projector emits no concordance, the brief generator selects on pins alone" and `review-skills` states "None of that selection is built: at implementation commit ca64407d `brief.mjs` holds no mechanical tier and no `--whole`", while the brief reports "The mechanical tier ran 8 checks (unresolved-reference, recommendation-past-its-pin, duplicate-option-name, option-content-unresolvable, term-without-a-path, unresolved-words-reference, duplicated-passage, unfolded-account-section) and reported 3351 finding(s)", "The keys nominated 4677 candidate pair(s)", and "This survey is whole." `unconfirmed-accumulation` carries the same form of sentence — "Nothing this answer names is materialized on 2026-09-07: no instrument folds, no manifest line exists, and the validator checks none" — which this survey did not test. A dated negative measurement written into an answer expires without notice and cannot be checked by any instrument the record has.
-
-Its proposal: The survivor is the practice, not one of the two sentences: a materialization claim in an answer names the implementation commit it was taken at and states what it measured, as `review-skills` half does with ca64407d, rather than dating itself to a calendar day the answer outlives. `survey-selection`'s and `review-skills`' sentences are amended to that form before either is ruled, and `unconfirmed-accumulation`'s is re-measured with them.
-
-The `contradiction` finding on the brief's size against `review-cost`'s bound, as the survey wrote it: The bound `review-cost` states on a brief is contradicted by the brief the same family of nodes produced. Its answer holds that "A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim" and that a brief that fits "is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it". The survey brief of 2026-09-07 is 9,277 lines and 1,111,970 bytes, roughly ten times a single call's cap, so the fewest pieces its reader's tool allows is nineteen, and the brief itself reports the selection that produced it as unnarrowed: "This survey is whole.", "4677 candidate pair(s), all live, 0 frozen". Either the bound is not a bound, or the object was not narrowed and the defect is the brief's.
-
-Its proposal: The survivor is the bound, made operative rather than aspirational: `review-cost` states the brief's size in what the reader's tool holds, and the generator refuses or splits a brief that exceeds it rather than emitting it, so that the clause about the fewest pieces describes an artifact that can satisfy it. `survey-selection` is where the narrowing happens and takes the number; `clean-context-review` and `review-skills` are named because the two readings and their generator are what the bound binds.
-
-### The author's question on what the brief grows with, 2026-09-07, at 31e257b9
-
-The author asked (words/2026-09-07/22) whether the survey brief grows with the graph or with the unconfirmed frontier, and set the bound that a megabyte is a backfill's size and not a recurring one. Measured on the main thread rather than estimated: the brief read at f57877f9 with neighbours rendered is 1,348,406 bytes, composed as the option `the-whole-reading-is-a-backfill-and-the-delta-is-the-norm` records; the live sidecar directory holds no survey history, so every survey so far ran whole by demand; the freeze reads the node's own survey pin, which 71 of 151 nodes carry, so a node never judged never freezes; and the pair keys pair the hub nodes with nearly every node. A delta simulated on a throwaway clone (one ruling node unpinned, the history registered) measured 575,111 bytes with seven nodes judged, six of them re-judged because the apply of 31e257b9 recorded options on them and moved their hashes. The option above was recorded with the author's words and is the one the AI would recommend; the fact's recommendation was not moved, because the option gives up the recurring whole reading, which the fact's own case against calls the reading that finds the pair the survey exists for, and that trade is the author's to take. Three instrument defects against the recommendation as it stands are listed for reconciliation: the history the delta needs is registered only from the first survey that runs after the history code landed, the freeze reads the wrong pin, and the keys do not order.
-
-### Recommendation moved on the author's words, 2026-09-07, at 11191654
-
-The author answered the account entry above (words/2026-09-07/23): the AI always makes its recommendation on its best judgment, and the author's choice is made at confirmation; bootstrap reconciliation authority is granted for this sitting pending that confirmation; no process may grow with the size of the graph without bound; and a one-time backfill that makes future processes bounded is done now, as part of bootstrap reconciliation. The recommendation is moved to `the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`, whose content is written above as a named change to `options-by-sentence-and-status-and-words-by-address`, and the stage stays maieutic, since the review's option `the-materialization-sentence-is-dated-to-its-commit` carries its sentence only and the record requires every answer option of a node past that stage to carry its content; the amendment owes a re-reading whose object is the amendment, and it is launched from this stage. Two probes the recommendation is contingent on are recorded under `probes`, as the author's words of the same day direct (words/2026-09-07/24), each with the side the recommendation takes. The reconciliation the grant covers is listed in the reconciliation list of this sitting: the survey's freeze read from a pin on every read node, the term key bounded, the whole reading withdrawn from any cadence, and the backfill run once at the reconciled instrument, every node it reads pinned; the implementation commit and the graph commit of that backfill are named in the next entry, not here.
+- Folded: Clean-context re-reading, 2026-09-07, of db8719da, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
+- Folded: Migrated to the content encoding, 2026-09-07, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
+- Folded: Option recorded on the author's words, 2026-09-07, at 6611799a, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
+- Folded: Reconciled for future surveys, 2026-09-07, at implementation commit c4cb63db, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
+- Folded: Two survey findings the apply discarded, 2026-09-07, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
+- Folded: The author's question on what the brief grows with, 2026-09-07, at 31e257b9, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
+- Folded: Recommendation moved on the author's words, 2026-09-07, at 11191654, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
 
 ### Clean-context re-reading, 2026-09-07, of aceee98d
 
@@ -931,6 +850,7 @@ The whole reading this node's recommendation calls a backfill ran once in this s
 The four options recorded on the answer fact at effda5f6 under the author's words of 2026-09-08 (words/2026-09-08/1) are materialized at implementation commit f7a80fcd, measured with `brief.mjs --survey disposition` and no `--force-tier`: the tier is divided by kind, four checks refusing the brief (an unresolved reference, two options of one name, unresolvable option content, a reference to no entry of the author's words) and four reported into the brief under the heading "What the record already knows about itself" and never gating (a recommendation past its pin, a term without a path, a duplicated passage, an unfolded account section), so the brief is written on the graph as it stands with no bypass, which at graph commit 981f5367 is 0 gating findings over the 4 gating checks and 179 findings reported over the 4 reporting checks; the hub bound holds for the citation key as for the term key, at the same tenth; the frozen set is unchanged in the instrument, since the third rung changes no mechanism; and the pin a reading or a survey writes is the hash of what binds the node, the fact's name, its recommendation, the recommended option's sentence, its resolved content, the words it supports or diverges from, and each option's name and status, with the question folded at the node, and nothing else. Beside them the brief was compacted, the node under review rendered once and each option by its case, a neighbour by the answer its recommended option resolves to, the open probes in a block of their own, and a kicked-back node given a fresh whole reading rather than a delta; and the apply divides a finding across nodes per node, holds a merge or a decomposition whole or not at all, discards per support, and writes its reply per node. The narrowed pin is also the option `a-pin-covers-what-binds-the-node` on the dialogue node, recorded and recommended there on the same words, since the pin's definition is that node's; the authority node defines no pin and needed nothing. The one-time migration `migrate-pins.mjs` ran on the graph and the sidecar at 981f5367: 236 pins rewritten to the new form, 56 left stale because they were stale in the old, 17 already in the new, 72 node files touched on their `of` lines alone, and the frontier reading as it did before the narrowing, 21 of 35 ready to rule and none awaiting the survey. The first delta at this instrument, written dry at 981f5367, judges 3 nodes, carries 6 by what they answer and 52 on one line, freezes 73 on their pins, and is 343,298 bytes over 1,827 lines, against the 680,585 bytes of the backfill; that is the bound the author's words of 2026-09-07 asked for, measured once and owed again at the first delta that runs. The three skills that operate the reviews were reconciled at b22cbe52. Every option this entry names is unanswered and the recommendation on this node stands at the top rung, `a-pin-moves-on-what-binds-the-node`, for the author's choice at confirmation.
 
 The entry above headed "The backfill ran, 2026-09-07, on graph commit edc5af91" overstates what the backfill carried. Counted from the graph at 981f5367: the survey pin at edc5af91 stands on 68 nodes, 8 judged whole and 60 carried by what each answers, and the other 86 of the 154 were carried on one line, not by what they answer. The sentence stands as written, since an account entry is not rewritten once committed, and this entry is its correction.
+
 ### Is the survey redundant with periagoge, 2026-09-08
 
 The author asked it in one line, `words/2026-09-08/6`, and the record answers it

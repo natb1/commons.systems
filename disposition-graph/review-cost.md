@@ -1122,6 +1122,7 @@ Ratified. What this decides is how much of the record the adversarial reader is 
 ## Account
 
 
+
 Queued as a node of its own on 2026-09-05, at the checkpoint, before anything was drafted from the author's words. The disposition is the author's and the grant is theirs; what the node answers is not yet drafted.
 
 What the sitting would amend: the clean-context-review node, whose answer says what a reading reads and when it runs and says nothing about what that costs or what bounds it; the review-model node, where the author's second sentence bears and where an option is recorded for it at this landing; the frontier-consistency node, which owns the survey's object; the decomposition node, whose cost paragraph states the per-draft brief's index as the cost driver and names the index as the lever against it; and the review-skills node, whose two skills and one package materialize whatever this answers.
@@ -1155,58 +1156,11 @@ The periagogic object: the briefs this sitting generated and their sizes, the re
 - Folded: Repaired after the re-reading, 2026-09-07, at f0741490d538f17733f64bce56a14d8e122c8d34
 - Folded: Clean-context re-reading, 2026-09-07, of 0afcc1f1 (ii), at f0741490d538f17733f64bce56a14d8e122c8d34
 - Folded: Option adopted, 2026-09-07, at f0741490d538f17733f64bce56a14d8e122c8d34
-
-### Clean-context re-reading, 2026-09-07, of f32d7226
-
-Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
-
-Recommended at this reading: `the-surveys-selection-moves-to-its-own-node`.
-
-Findings:
-
-
-On the facts and what they recommend: The diff moves the answer fact's `recommends` from `one-answer-a-node-and-one-read` to a newly added option, `the-surveys-selection-moves-to-its-own-node` (still moderate boldness), adding that option to the frontmatter list, adding a matching prose subsection ('AI support' / 'AI divergence'), and a lead paragraph in the fact prose explaining the move; it rewrites the answer fact's `against` clause and the parallel account sentence to cite `survey-selection` in place of the previously non-existent `survey-cost`, adds a `depends` entry on `survey-selection#candidate-pairs-with-their-nominating-key`, and updates the review block's `commit`/`against` to record the last reading's own kickback verdict. The authority fact, its recommendation, and boldness are untouched. The `## Recommendation` fence and rationale gain three citations to `survey-selection` (for object-selection/gating and for the mechanical-defect check) without otherwise changing text the last reading already read; the `## Rationale` prose about the pre-survey node count at graph commit 1cde11f6 is unchanged by this diff and was already corrected in an earlier round, before the pinned commit.
-
-On the viability of the options: Every option present at the last reading's pin remains on the answer and authority facts unchanged; the diff only adds one new viable option (`the-surveys-selection-moves-to-its-own-node`, sourced to the newly cited `survey-selection` node, recommended) and removes none, so no prior option's viability is disturbed.
-
-Strongest counter-argument (weak): The last reading's finding was that the node made a false present-tense claim citing a node, `survey-cost`, that did not exist. The amendment's fix is to rename the citation to `survey-selection` and assert in its own account that this is 'the child minted this sitting' -- but this delta reading is barred from checking the neighbourhood or the disk, so the only evidence that `survey-selection` actually exists, rather than being a second not-yet-minted placeholder under a new name, is the record's own narration by the party the finding was raised against. Against that: the citation is corroborated from three independent loci (the fact's `against` clause, the new option's `source` field, and a `depends` entry naming a specific option slug on it), which is stronger internal evidence than a bare rename would leave, and the scope of this reading explicitly defers cross-node verification to the survey rather than asking the delta reader to open other files.
-
-### Migrated to the content encoding, 2026-09-07
-
-Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/review-cost stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `the-surveys-selection-moves-to-its-own-node`; 14 `## Disposition` entries became the ledger entries words/2026-09-05/4, words/2026-09-07/5, words/2026-09-07/6, words/2026-09-07/7, words/2026-09-07/8, words/2026-09-07/16, words/2026-09-07/9, words/2026-09-07/11, words/2026-09-07/12, words/2026-09-07/13, words/2026-09-07/2, words/2026-09-07/3, words/2026-09-07/4, words/2026-09-07/15, referenced by 0 options the entry's own date names and by the recommended option for 14 the date named none. The content of `neighbourhood-questions-and-delta (at 6a84b48e)`, `one-answer-a-node-and-one-read (at c55c9ebb)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `one-reading-per-draft`, `neighbours-carried-whole`, `answers-only-index`, `full-index-per-draft`, `no-index-at-all`, `full-re-read-on-every-move`, `unbounded-rounds`, `budget-per-sitting`, `neighbourhood-cited-not-restated`, `pin-names-the-text-the-reader-read`, `brief-carries-the-recount-command`, `rules-of-the-reading-named-as-files`, `a-cap-on-redraws-per-node-per-sitting`, `a-waves-brief-is-one-brief`, `the-surveys-unreached-node-is-one-line`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `f32d722609f7815130f2b7de88fd0647d809edca` is re-computed for the encoding as `388a136d38ca73f6e73c1f4030df0be4de25665a`; nothing it read changed. The survey's pin `b9e1b4e5b54bd35bfd1a6bc94aeaab7bfc8b9c32` was already past the recommendation and is left as it stood.
-
-### Frontier survey, 2026-09-07, of 388a136d
-
-Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
-
-Findings:
-
-- Contradiction (7) between this answer and the brief generated under it. The answer holds that "A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim", and that a brief that fits "is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it". The survey brief of 2026-09-07 is 9,277 lines and 1,111,970 bytes, roughly ten times the reading tool's per-call cap, so the fewest pieces its reader's tool allows is nineteen. The clause is stated as satisfied by the design and is falsified by the first artifact the design produced.
-
-Strongest counter-argument (strong): Every clause of this answer narrows what the reviewer is shown, and it is the reviewed party that took the measurements the narrowing rests on; the node's own `against` says so. The narrowing is also being ruled before the thing it bounds is known: the recommendation moves the survey's selection to a node whose recommendation is high-boldness and unbuilt, so the author confirms a cost rule for an object still being drafted. The cost the author actually objected to on 2026-09-07 was the survey's, and moving the survey's sizing out of this node is what leaves that objection unanswered here.
-
-The session's reply: The bound was falsified by the first brief the design produced, and the reply is not to soften it. The brief of 2026-09-07 was 2.2 MB at the survey's launch commit's first render and 1.11 MB after two compactions the same day; the option recorded on survey-selection the same day cuts about 250 KB more, and the sizing is being taken in the terms the finding asks for, what one call of the reader's tool holds. The finding's option on this node, that the brief is bounded by what one call holds and the generator refuses or splits one that exceeds it, is recorded, and the measure it names goes on the record when the generator holds it.
-
-### A survey finding the apply discarded, 2026-09-07
-
-The survey of 2026-09-07 returned a cross-node finding that names this node
-and `survey-selection`, and `survey-selection` moved after the survey read it,
-its recommendation having been recorded anew at f57877f9 on the author's words
-of 2026-09-07, so the apply discarded the finding whole and wrote nothing on
-any node it names. It was validated at its loci on the main thread and is not
-withdrawn. The option `the-brief-is-bounded-by-what-one-call-holds` it proposes on this node is added to the answer fact by
-hand, which is an act the AI has on any fact and which settles nothing. The stage
-the finding named, maieutic, is set by hand, since the record requires every
-answer option of a node at the ruling stage to carry its content and the
-option carries its sentence only; no survey pin is written by hand.
-
-The `contradiction` finding on the brief's size against `review-cost`'s bound, as the survey wrote it: The bound `review-cost` states on a brief is contradicted by the brief the same family of nodes produced. Its answer holds that "A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim" and that a brief that fits "is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it". The survey brief of 2026-09-07 is 9,277 lines and 1,111,970 bytes, roughly ten times a single call's cap, so the fewest pieces its reader's tool allows is nineteen, and the brief itself reports the selection that produced it as unnarrowed: "This survey is whole.", "4677 candidate pair(s), all live, 0 frozen". Either the bound is not a bound, or the object was not narrowed and the defect is the brief's.
-
-Its proposal: The survivor is the bound, made operative rather than aspirational: `review-cost` states the brief's size in what the reader's tool holds, and the generator refuses or splits a brief that exceeds it rather than emitting it, so that the clause about the fewest pieces describes an artifact that can satisfy it. `survey-selection` is where the narrowing happens and takes the number; `clean-context-review` and `review-skills` are named because the two readings and their generator are what the bound binds.
-
-### The author's bound on what a brief grows with, 2026-09-07, at 11191654
-
-The author, asked on `survey-selection` whether the survey brief grows with the graph or with the unconfirmed frontier, bound the record (words/2026-09-07/22, words/2026-09-07/23): a megabyte is a backfill's size and not a recurring one, no process may grow with the graph's size unbounded, and a one-time backfill that makes future processes bounded is done now under the bootstrap reconciliation authority granted for this sitting. The option `no-brief-grows-with-the-record` is recorded on those words and recommended, as a named change to `the-surveys-selection-moves-to-its-own-node` adding the bound to "**What a brief must fit.**", and the stage stays maieutic, since the review's option `the-brief-is-bounded-by-what-one-call-holds` carries its sentence only and the record requires every answer option of a node past that stage to carry its content; the amendment owes a re-reading whose object is the amendment, and it is launched from this stage. The mechanics that make the survey bounded are recommended on `survey-selection` and not here.
+- Folded: Clean-context re-reading, 2026-09-07, of f32d7226, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
+- Folded: Migrated to the content encoding, 2026-09-07, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
+- Folded: Frontier survey, 2026-09-07, of 388a136d, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
+- Folded: A survey finding the apply discarded, 2026-09-07, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
+- Folded: The author's bound on what a brief grows with, 2026-09-07, at 11191654, at 6b326f022779161fab0cd72baf2d2f09133ad3fc
 
 ### Clean-context re-reading, 2026-09-07, of bb2eb39a
 
@@ -1266,6 +1220,7 @@ Recorded as an option on this node's answer fact: `reader-is-the-parser-and-revi
 ### Reconciled under the grant of 2026-09-08, at implementation commit f7a80fcd
 
 What this node's recommendation says a brief must not do is now what the instrument does, at implementation commit f7a80fcd, measured with `brief.mjs --survey disposition` and no `--force-tier`. The tier no longer refuses on what only a sitting can clear, so the launch stops bypassing it; the brief carries the record's own findings on itself as one line each instead of charging them against the launch. The brief is compacted: the node under review rendered once, each option by its case, a neighbour by the answer its recommended option resolves to, the round's probes in one block. A kicked-back node is read fresh and whole, since a kickback is a new answer. The pin that decides whether a node is re-read is narrowed to what binds it, so an edit to a rival option's body, to the case against, to the boldness, or to the account no longer sends a node back for a reading it does not owe; the rule and its migration are the survey-selection node's account of the same date. The first delta at this instrument, written dry at graph commit 981f5367, is 343,298 bytes over 1,827 lines, 3 nodes judged, 6 carried by what they answer, 52 on one line and 73 frozen on their pins, against the backfill's 680,585 bytes, and the brief tells its reader to open nothing, so the brief is the whole of what the reader holds. The measurement to record when the delta runs for the author is the same one, taken on the run.
+
 ### The cost criterion restated, and where its three levers live, 2026-09-08
 
 The author restated the criterion and named the levers it must be met with:
@@ -1293,6 +1248,7 @@ lever the author's question names, and the entry reaches that node's answer too.
 One quotation reaching two options on two nodes is what the quotes node's
 `the-ledger-admits-what-bears-on-a-fact` describes and is not a defect to
 normalise away.
+
 ### What the sitting measured about the cost of reading, 2026-09-08
 
 Measured at graph commit `5cacddde`, against the author's question of the same
