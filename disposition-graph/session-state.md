@@ -165,6 +165,8 @@ facts:
         supports:
           - words/2026-09-08/28
           - words/2026-09-08/21
+          - words/2026-09-08/24
+          - words/2026-09-08/25
       - name: a-file-a-global-rule-fixes
         source: ai
         ref: "2026-09-08"
@@ -686,3 +688,40 @@ This node is `tier: global`, so this amendment stales `.claude/rules/session-sta
 on the implementation ref. The two land on different refs and nothing about landing
 the amendment regenerates the projection; the regeneration is named in the sitting's
 report and lands in its own commit.
+
+### The words the answer already rested on, cited, 2026-09-08
+
+The validator reports a ledger entry that no option references, and on 2026-09-08 it
+reported twenty-three, nine of them from that day. Two of the nine were this node's.
+The answer's clause that the store holds "the sitting's own working state" was written
+from the author's words of that day putting the sitting's sequenced alignment in a
+session-scoped store, `words/2026-09-08/24`, and putting reconciliation residuals
+there beside it, `words/2026-09-08/25`; the node's probes cite both as the author's
+refinement, and no option carried either. The addresses were added to
+`a-compaction-store-the-ai-shapes`, whose content is what they back. Nothing moved:
+the recommendation, the boldness and the answer's text are unchanged, and what changed
+is that the words the answer was already written from are now reachable from the
+option that rests on them.
+
+One half of `words/2026-09-08/25` is not discharged by this. The entry carries a
+second disposition, that a sitting prints a standard report whenever it stops,
+carrying the sequencing summary where it is an alignment sitting and the residuals
+where it is a reconciliation sitting. No option on any node answers that, here or
+elsewhere; it is held on this node as the probe asking when the report is printed,
+which is a legitimate state and is not a citation. So the entry is now referenced, and
+the reference covers the store and not the report, which the record should not be read
+as having settled.
+
+The other seven of the day are left where they are, and the reason is worth stating
+because attaching them would have been the easier act. `words/2026-09-08/2` is the
+sitting's bootstrap grant, which is authority for a sitting and not a disposition on a
+fact, so it has no option to attach to by its nature and the validator's rule does not
+fit it. `words/2026-09-08/17` is the model-sizing direction whose withdrawal from the
+ledger the author proposed on `quotes`, so it is deliberately uncited. Entries `23`,
+`26`, `27` and `30` are the objects of alignments this sitting has sequenced and not
+finished, and `29` is answered on `movements` in a probe's discharge and not yet on an
+option; each will be cited by the option its alignment produces, and citing them now
+would claim the author's words back a recommendation the record has not yet made.
+Fourteen entries from the sittings of 2026-09-02 and 2026-09-03 stand unreferenced
+too, so the pattern is the record's and not this day's, and whether the validator's
+rule should except a grant is a question this node does not own.
