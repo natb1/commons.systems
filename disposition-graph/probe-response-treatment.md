@@ -127,3 +127,61 @@ The periagogic object, to be read before anything is proposed: `author-questions
 `movements`, `alignment-order`, `dialogue`, and `recording`, with `round-termination`
 as the worked instance of the failure and the ledger entries of 2026-09-08 as the
 evidence.
+
+### The sitting's own probe responses, sequenced, 2026-09-08
+
+The account above names "the ledger entries of 2026-09-08 as the evidence" and does
+not say which. That pointer is worth no more than the search it saves, and the
+sitting that could make it is ending, so the population is enumerated here. Seven
+entries of that day are alignment input in this node's sense: five are probe
+responses and two are dispositions the author stated while the sitting was in hand,
+which this node's rule treats alike. For each, where its own periagogic and maieutic
+sequencing stands is what the rule demands be visible, so it is given.
+
+`words/2026-09-08/28`, answering a probe on `quotes` about what the admission rule
+governs. It articulated a disposition on the sitting's own working store, which is
+recorded as `session-state`, at the maieutic stage. Sequenced.
+
+`words/2026-09-08/29`, answering `movements`' probe
+`does-expert-dialogue-carry-the-verdict`. It articulated a disposition on what ends
+a round, recorded as `round-termination`, now at the review stage. Sequenced, and
+this is the worked instance of the failure the section above describes: the words
+were first recorded only inside the discharge reason of the probe they answered,
+and the node was minted at `38dd0464` to correct that. The entry also carries the
+author's own question back, whether the disposition on termination is consistent
+with tradition, which is what convened the tradition survey.
+
+`words/2026-09-08/30`, answering a periagogic probe on what standardizing the
+expert's instructions is for. Recorded as `expert-instructions`, at the periagogic
+stage with no survey run. Sequencing owed.
+
+`words/2026-09-08/32`, stated in the sitting rather than answering a probe, striking
+three clauses of this node's parent. It is supported on `author-questions`,
+`dialogue` and `recording`, each carrying the amendment the strike forces, the first
+at the review stage and the other two at the maieutic. Sequenced.
+
+`words/2026-09-08/33`, stated in the sitting, which is this node's own source. It is
+recorded here, at the periagogic stage with no survey run. Sequencing owed, and the
+node that states the rule is one of the nodes that owes it.
+
+`words/2026-09-08/34`, answering `round-termination`'s probe
+`where-does-reframing-the-question-fall`. It articulated a disposition on
+termination that the node's recommendation moved to carry, and it is supported on
+`author-questions` and `recording` as well, both of which the same words reach.
+Sequenced.
+
+`words/2026-09-08/35`, stated in the sitting, naming the expert's exhausted budget.
+Recorded as `unreached-traditions`, at the periagogic stage; its first tracked set
+is enumerated in that node's account, and no survey has run on the node itself.
+Sequencing owed.
+
+So four of seven are sequenced and three are not, and the three are exactly the
+three nodes this sitting minted and left at the periagogic stage. That is the
+measurement this node's rule exists to make possible, and it says something the
+prose above does not: the treatment does not fail on the responses a sitting acts
+on, it fails on the ones it mints a node for and then runs out of sitting. The
+implicit practice the author observed catches the first kind and not the second.
+Whether the enumeration belongs here at all is open, since this node's account is
+folded at its own recording and a list of what is owed is not reconstructed by
+re-running a reading, which is the same placement question `unreached-traditions`
+records against its own tracked set.
