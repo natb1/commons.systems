@@ -43,10 +43,16 @@
 // the graph commit the survey read, the ids it judged, and the recommendation
 // hash of every node of the graph. A judged node whose recommendation still
 // matches its pin receives `review.survey` and its findings; one that has
-// moved receives nothing and is reported. A `frontier` finding naming any
-// node that has moved is discarded with a note and applied to none of its
-// nodes, for the same reason: a review attests to the text it read -- and so
-// is a `probes` entry naming a node that has moved. `probes` is top-level and
+// moved receives nothing and is reported. A `frontier` finding is discarded
+// per support and not per finding (`survey-selection`, "a finding one of
+// whose supports moved is re-derived"): the ids that moved are dropped, the
+// finding is applied to the ids that did not, and the run reports what was
+// dropped and why, which the subsection written on each surviving node also
+// names. A finding whose every id moved is discarded whole, and so is a
+// `merge` or `decomposition` finding one of whose ids moved, since the object
+// of a proposed merge or split is the set of nodes it spans and half of one
+// is not a proposal. A `probes` entry naming a node that has moved is
+// discarded, having one node and no part to keep. `probes` is top-level and
 // not nested in `nodes`, since a probe reaches any node in the graph, judged
 // or not, the same as a `frontier` finding; the same stage rule as the draft
 // applies node by node.
@@ -83,6 +89,16 @@ const FRONTIER_KINDS = new Set([
   // what the node recommends.
   "merge", "stale-recommendation",
 ]);
+// The kinds a partial apply cannot keep. Every other kind records itself on
+// each node it names, one subsection per node, so dropping the nodes that
+// moved leaves the finding standing on the rest (`survey-selection`: "a
+// finding one of whose supports moved is re-derived", per support and not
+// per finding). These two propose one edit spanning the nodes they name --
+// `merge`, that two nodes become one, and `decomposition`, the split that
+// divides one node's material across others -- so their object is the set
+// itself, and a merge applied to one side of a pair proposes nothing. One
+// moved id discards them whole.
+const WHOLE_OR_NOTHING_KINDS = new Set(["merge", "decomposition"]);
 // the reader's own rule for an option's name (read.mjs OPTION_NAME_RE),
 // checked here so a bad name is refused before any file is touched rather
 // than caught by the post-write parse.
@@ -809,23 +825,29 @@ const RECOMMENDED_AT_READING_RE = /^Recommended at this reading: `([^`]+)`\.$/m;
  * answer it closes; and a section that names, on its own "Recommended at
  * this reading" line, an option other than `currentRecommends` -- a moved
  * recommendation is a new answer exactly as a kickback is, per review-cost,
- * and the two are boundaries of the same kind. A section with no such line
- * (every one written before this recording existed) is unknown rather than
- * assumed to match, and stops the walk too, so the counter never over-counts
- * a historical node it cannot actually read. Non-fatal by design -- this is
- * read by the caller to warn on stderr and never to refuse a write, since
- * the cap binds the movement and not this mechanical step.
+ * and the two are boundaries of the same kind. A third boundary is a
+ * '### Frontier finding,' section: the survey wrote it to send the node back
+ * to an earlier stage, so a reading after it answers that finding and is not
+ * an overrun of the readings before it. A section with no recorded
+ * "Recommended at this reading" line (every one written before this
+ * recording existed) is unknown rather than assumed to match, and stops the
+ * walk too, so the counter never over-counts a historical node it cannot
+ * actually read. Every other subsection (a frontier survey's own note, a
+ * subtree divergence) is transparent: neither counted nor a boundary.
+ * Non-fatal by design -- this is read by the caller to warn on stderr and
+ * never to refuse a write, since the cap binds the movement and not this
+ * mechanical step.
  */
 function readingSectionsSinceKickback(accountText, currentRecommends) {
   if (!accountText) return 0;
   const lines = accountText.split("\n");
   const all = headingBoundaries(lines).filter((h) => h.depth === 3);
-  const readings = all.filter((h) => /^Clean-context (review|re-reading), /.test(h.name));
   let count = 0;
-  for (let i = readings.length - 1; i >= 0; i -= 1) {
-    const h = readings[i];
-    const at = all.indexOf(h);
-    const end = at + 1 < all.length ? all[at + 1].index : lines.length;
+  for (let i = all.length - 1; i >= 0; i -= 1) {
+    const h = all[i];
+    if (/^Frontier finding, /.test(h.name)) break;
+    if (!/^Clean-context (review|re-reading), /.test(h.name)) continue;
+    const end = i + 1 < all.length ? all[i + 1].index : lines.length;
     const body = lines.slice(h.index, end).join("\n");
     if (/kicked back to the/.test(body)) break;
     const recorded = body.match(RECOMMENDED_AT_READING_RE);
@@ -919,10 +941,22 @@ function renderSubsection({
  * An option the finding proposes is named here as well as recorded on the
  * answer fact, so the node's own account says where the merge or split it
  * proposes went.
+ *
+ * `otherIds` names every other node the finding named, the ones dropped for
+ * having moved included, so the account still says what the finding was
+ * about; `droppedIds` says which of them the finding was not written on and
+ * why, so the reader of this node is not left to infer it from a missing
+ * subsection elsewhere.
  */
-function renderFrontierSubsection({ date, kind, finding, proposal, otherIds, options, id }) {
+function renderFrontierSubsection({ date, kind, finding, proposal, otherIds, droppedIds = [], options, id }) {
   const namedLine = otherIds.length > 0 ? `Also named: ${otherIds.join(", ")}.` : "Names only this node.";
   const parts = [`### Frontier finding, ${date}`, "", `Kind: ${kind}.`, "", finding, "", namedLine, "", `Proposed: ${proposal}`];
+  if (droppedIds.length > 0) {
+    parts.push(
+      "",
+      `Not written on ${droppedIds.join(", ")}: ${droppedIds.length > 1 ? "those nodes" : "that node"} moved since the survey read ${droppedIds.length > 1 ? "them" : "it"}, so this finding is re-derived there by the next survey.`,
+    );
+  }
   for (const a of options || []) {
     parts.push(
       "",
@@ -1058,8 +1092,12 @@ function validateDraft(input, { replies }) {
   if (input.kickback_stage && !KICKBACK_STAGES.includes(input.kickback_stage)) {
     problems.push(`${input.id}: kickback_stage must be 'periagogic' (the ground or the author's words are in question) or 'maieutic' (the answer must be redrafted), found '${JSON.stringify(input.kickback_stage)}'`);
   }
-  if (input.strength === "strong" && !Object.prototype.hasOwnProperty.call(replies, input.id)) {
-    problems.push(`${input.id}: strength 'strong' requires a reply in --replies`);
+  if (!isNonEmptyString(replies[input.id])) {
+    problems.push(
+      input.strength === "strong"
+        ? `${input.id}: strength 'strong' requires a reply in --replies`
+        : `${input.id}: the node under review requires a reply in --replies`,
+    );
   }
   if (Array.isArray(input.nodes) || Array.isArray(input.frontier)) {
     problems.push(`a draft or a re-reading reads one node: 'nodes' and 'frontier' belong to the survey, and this file names scope '${input.scope}'`);
@@ -1311,10 +1349,54 @@ function readPairs(selection) {
 // nodes real; every proposed option shaped, named on a node the finding
 // names, and not already on that node's answer fact; a strong
 // counter-argument answered.
+/**
+ * Whether the node `id`'s recommendation has moved since the pins sidecar's
+ * survey read it: gone from the graph, never pinned, or its recommendation
+ * hash no longer matches the pin. Shared by `applySurvey`, which discards a
+ * moved node's reading, a finding naming a moved node, or a probe on a moved
+ * node rather than write it against text the reading never saw, and by
+ * `validateSurvey`, which excludes a moved node from a frontier finding's
+ * "kept" reply requirement on the same ground: a node a finding is not
+ * written on owes no reply there.
+ */
+function pinMoved(id, nodesById, pins) {
+  const node = nodesById.get(id);
+  const pin = pins.pins ? pins.pins[id] : undefined;
+  if (node === undefined) return { moved: true, pin: pin ?? null, now: null };
+  if (pin === undefined) return { moved: true, pin: null, now: node.recommendationHash };
+  return { moved: pin !== node.recommendationHash, pin, now: node.recommendationHash };
+}
+
+/**
+ * How one frontier finding's named nodes divide against the pins: `stale`,
+ * the entries whose node has moved since the survey read it, each with its
+ * pin and the hash now; `survivors`, the nodes the finding is written on;
+ * and `whole`, whether this finding is discarded whole rather than in part.
+ * A finding is discarded per support and not per finding, so `survivors` is
+ * the unmoved nodes -- except where nothing survived, or where the kind is
+ * one whose object is the set it spans (WHOLE_OR_NOTHING_KINDS), in which
+ * case `whole` is true and `survivors` is empty.
+ *
+ * `movedOf` is `pinMoved` bound to the run's graph and pins. Shared by
+ * `applySurvey`, which writes the finding on the survivors and reports the
+ * rest, and by `validateSurvey`, which owes a reply for exactly the nodes
+ * the finding will be written on.
+ */
+function splitFindingNodes(f, movedOf) {
+  const nodeIds = f && Array.isArray(f.nodes) ? f.nodes : [];
+  const stale = nodeIds.map((id) => ({ id, ...movedOf(id) })).filter((m) => m.moved);
+  if (stale.length === 0) return { stale, staleIds: new Set(), survivors: nodeIds, whole: false };
+  const staleIds = new Set(stale.map((m) => m.id));
+  const unmoved = nodeIds.filter((id) => !staleIds.has(id));
+  const whole = unmoved.length === 0 || WHOLE_OR_NOTHING_KINDS.has(f && f.kind);
+  return { stale, staleIds, survivors: whole ? [] : unmoved, whole };
+}
+
 function validateSurvey(input, graph, { replies, overrides, pins }) {
   const problems = [];
   const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
   const judged = new Set(pins.judged);
+  const reportedMissingReply = new Set();
 
   const nodeEntries = Array.isArray(input.nodes) ? input.nodes : [];
   const seen = new Set();
@@ -1330,8 +1412,9 @@ function validateSurvey(input, graph, { replies, overrides, pins }) {
     } else if (!judged.has(entry.id)) {
       problems.push(`'nodes' names ${entry.id}, which this survey did not judge (it is not in the pins sidecar's 'judged'); only the judged set receives an entry`);
     }
-    if (entry.strength === "strong" && !Object.prototype.hasOwnProperty.call(replies, entry.id)) {
+    if (entry.strength === "strong" && !isNonEmptyString(replies[entry.id])) {
       problems.push(`${entry.id}: strength 'strong' requires a reply in --replies`);
+      reportedMissingReply.add(entry.id);
     }
   }
 
@@ -1398,6 +1481,29 @@ function validateSurvey(input, graph, { replies, overrides, pins }) {
       problems.push(`${label}: a 'merge' finding must propose at least one option (the node it goes on, its name, its prose)`);
     }
   });
+
+  // Both review skills state the rule this survey works under: one reply in
+  // '--replies' per judged node, and one per node a *kept* frontier finding
+  // names -- which is the nodes `applySurvey` will actually write the finding
+  // on (`splitFindingNodes`): a node that moved since the survey read it
+  // receives nothing, and a finding discarded whole is written nowhere, so no
+  // reply is owed in either case. The strong-finding check above already
+  // reports some of these ids with a more specific message; this check does
+  // not repeat one it already reported.
+  const keptFrontierNodeIds = new Set();
+  for (const f of frontier) {
+    for (const id of splitFindingNodes(f, (id) => pinMoved(id, nodesById, pins)).survivors) {
+      keptFrontierNodeIds.add(id);
+    }
+  }
+  const requiresReply = new Set([...judged, ...keptFrontierNodeIds]);
+  for (const id of requiresReply) {
+    if (reportedMissingReply.has(id)) continue;
+    if (!isNonEmptyString(replies[id])) {
+      problems.push(`${id}: requires a reply in --replies (judged this run, or named by a kept frontier finding)`);
+      reportedMissingReply.add(id);
+    }
+  }
 
   // subtree_divergences (frontier-consistency's placement validation,
   // alignment-order): a tangle between two unruled subtrees standing under
@@ -1529,13 +1635,18 @@ function collectTouched({ nodes, frontier, probes, readIds }) {
   }
   for (const f of frontier || []) {
     const options = Array.isArray(f.options) ? f.options : [];
+    // The ids this finding named that moved since the survey read them
+    // (`applySurvey` dropped them from `nodes`): still named in the
+    // subsection written on the survivors, never written on themselves.
+    const droppedIds = Array.isArray(f.dropped) ? f.dropped : [];
     for (const id of f.nodes) {
       ensure(id).findings.push({
         kind: f.kind,
         finding: f.finding,
         proposal: f.proposal,
         stage: f.stages ? f.stages[id] : undefined,
-        otherIds: f.nodes.filter((x) => x !== id),
+        otherIds: [...f.nodes.filter((x) => x !== id), ...droppedIds],
+        droppedIds,
         options,
         // Carried for the register a survey leaves on a judged node: which
         // of the five sections the finding rests on, and the condition that
@@ -1753,6 +1864,7 @@ async function planTouchedNode(id, t, ctx) {
       finding: f.finding,
       proposal: f.proposal,
       otherIds: f.otherIds,
+      droppedIds: f.droppedIds || [],
       options: f.options,
       id,
     }));
@@ -1824,12 +1936,23 @@ async function planTouchedNode(id, t, ctx) {
   // must not move is checked against `parsedBefore`'s hash instead. A plain
   // read pin (`surveyPin.of` null) pins no recommendation and has none to
   // check either way.
+  //
+  // Recording an option beside the recommendation does not move that hash:
+  // under `survey-selection`'s `a-pin-moves-on-what-binds-the-node` the pin
+  // is taken over what binds the node -- the question, which option the
+  // answer fact recommends, that option's sentence, its resolved content and
+  // its ledger addresses, and the status any option carries -- so a rival
+  // recorded with no status contributes nothing to it (derive.mjs
+  // `contentFactRecommendationHash`). This branch therefore fires only where
+  // an option this run wrote carries a status or where what the fact
+  // recommends moved, neither of which the survey's own write does today;
+  // the note stands for that case, and any other movement is still refused.
   if (surveyPin !== null && surveyPin.of !== null && surveyPin.of !== undefined) {
     const judgedThisRun = Boolean(t.nodeEntry);
     const fromHash = judgedThisRun ? surveyPin.of : parsedBefore.recommendationHash;
     if (parsedAfter.recommendationHash !== fromHash) {
       if (newOptions.length > 0) {
-        notes.push(`${id}: recording option${newOptions.length > 1 ? "s" : ""} ${newOptions.map((a) => `'${a.name}'`).join(", ")} moved the recommendation hash (${fromHash} -> ${parsedAfter.recommendationHash}), because the content encoding hashes every option; the node stands as moved past its survey pin and is judged again by the next survey`);
+        notes.push(`${id}: recording option${newOptions.length > 1 ? "s" : ""} ${newOptions.map((a) => `'${a.name}'`).join(", ")} moved the recommendation hash (${fromHash} -> ${parsedAfter.recommendationHash}); a pin moves on what binds the node, so an option recorded beside the recommendation moves it only where the option carries a status or changes what the fact recommends; the node stands as moved past its survey pin and is judged again by the next survey`);
       } else {
         return { id, problems: [`${id}: internal error -- the edit moved the recommendation hash (${fromHash} -> ${parsedAfter.recommendationHash}); the survey's pin must name the recommendation as it stands`] };
       }
@@ -1934,8 +2057,10 @@ async function planDivergenceNode(id, entry, ctx, existingPlan) {
  * problem; then the pin, which serializes this reading in place of a lock --
  * a judged node whose recommendation still matches what the survey read is
  * applied, one that has moved receives nothing and is reported, and a finding
- * naming any node that has moved is discarded and applied to none of its
- * nodes. Then plan every surviving touched node, layer every subtree
+ * naming a node that has moved keeps its entries on the nodes that did not,
+ * losing the moved ones with a note that names them -- unless every id it
+ * names moved, or it is a `merge` or `decomposition`, either of which is
+ * discarded whole. Then plan every surviving touched node, layer every subtree
  * divergence onto the same plans, refuse (still writing nothing) on any
  * planning problem, and otherwise write every plan and report.
  */
@@ -1949,13 +2074,7 @@ async function applySurvey({ rootDir, manifest, input, pins, selection = null, r
   const effectiveDate = date ?? input.date ?? todayIso();
   const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
   const pinOf = (id) => pins.pins[id];
-  const moved = (id) => {
-    const node = nodesById.get(id);
-    const pin = pins.pins[id];
-    if (node === undefined) return { moved: true, pin: pin ?? null, now: null };
-    if (pin === undefined) return { moved: true, pin: null, now: node.recommendationHash };
-    return { moved: pin !== node.recommendationHash, pin, now: node.recommendationHash };
-  };
+  const moved = (id) => pinMoved(id, nodesById, pins);
 
   const movedReport = [];
   const keptNodes = [];
@@ -1968,16 +2087,42 @@ async function applySurvey({ rootDir, manifest, input, pins, selection = null, r
     keptNodes.push(entry);
   }
 
+  // A finding is discarded per support, not per finding (`survey-selection`:
+  // "A finding whose support is unmoved is carried forward ...; a finding one
+  // of whose supports moved is re-derived"). The supports of a finding
+  // recorded per node are the nodes it names, so the ids that moved are
+  // dropped, the finding is applied to the ids that did not, and both the
+  // report and the subsection written on each survivor name what was dropped
+  // and why. Two cases still discard whole: a finding every one of whose ids
+  // moved, which has no survivor to stand on, and a `merge` or
+  // `decomposition` finding, whose object is the set of nodes it spans
+  // (WHOLE_OR_NOTHING_KINDS). An option proposed on a dropped id goes with
+  // it, since the answer fact it would be recorded on is on text this
+  // reading no longer attests to.
   const discardedReport = [];
   const keptFrontier = [];
   (Array.isArray(input.frontier) ? input.frontier : []).forEach((f, i) => {
-    const stale = f.nodes.map((id) => ({ id, ...moved(id) })).filter((m) => m.moved);
-    if (stale.length > 0) {
-      const which = stale.map((m) => `${m.id} (pinned ${m.pin ?? "nothing"}, now ${m.now ?? "gone"})`).join(", ");
-      discardedReport.push(`frontier[${i}] (${f.kind}): discarded — names ${which}, moved since the survey read it; applied to none of its nodes`);
+    const { stale, staleIds, survivors, whole } = splitFindingNodes(f, moved);
+    if (stale.length === 0) {
+      keptFrontier.push(f);
       return;
     }
-    keptFrontier.push(f);
+    const which = stale.map((m) => `${m.id} (pinned ${m.pin ?? "nothing"}, now ${m.now ?? "gone"})`).join(", ");
+    if (whole) {
+      const because = WHOLE_OR_NOTHING_KINDS.has(f.kind)
+        ? `a ${f.kind} finding's object is the set of nodes it spans, so it is applied whole or not at all, and it is applied to none of its nodes`
+        : "applied to none of its nodes";
+      discardedReport.push(`frontier[${i}] (${f.kind}): discarded — names ${which}, moved since the survey read it; ${because}`);
+      return;
+    }
+    const options = Array.isArray(f.options) ? f.options : [];
+    const keptOptions = options.filter((a) => !staleIds.has(a.node));
+    const droppedOptions = options.filter((a) => staleIds.has(a.node));
+    const optionText = droppedOptions.length > 0
+      ? `; the option${droppedOptions.length > 1 ? "s" : ""} it proposed there (${droppedOptions.map((a) => `'${a.name}' on ${a.node}`).join(", ")}) went with ${droppedOptions.length > 1 ? "them" : "it"}`
+      : "";
+    discardedReport.push(`frontier[${i}] (${f.kind}): applied to ${survivors.join(", ")}; not applied to ${which}, moved since the survey read it${optionText}; re-derived there by the next survey`);
+    keptFrontier.push({ ...f, nodes: survivors, dropped: [...staleIds], options: keptOptions });
   });
 
   // A probe attests to the text it read, the same as a finding: one naming a

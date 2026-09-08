@@ -241,7 +241,7 @@ describe("apply.mjs: draft, forward", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { "clean-context-review.test/main/survey-pinned": "Reviewed." },
       date: "2026-09-04",
     });
     assert.equal(result.validation.ok, true, result.validation.message);
@@ -274,7 +274,7 @@ describe("apply.mjs: draft, review.commit", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     });
     assert.equal(result.validation.ok, true, result.validation && result.validation.message);
@@ -303,7 +303,7 @@ describe("apply.mjs: draft, review.commit", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     });
     assert.equal(result.validation.ok, true, result.validation && result.validation.message);
@@ -335,7 +335,7 @@ describe("apply.mjs: draft, kickback", () => {
         facts_check: null,
         viability: null,
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     });
 
@@ -352,7 +352,6 @@ describe("apply.mjs: draft, kickback", () => {
     assert.ok(afterText.includes("The review found no strong counter-argument."));
     assert.ok(!afterText.includes("On the facts and what they recommend:"), "facts_check omitted when null");
     assert.ok(!afterText.includes("On the viability of the options:"), "viability omitted when null");
-    assert.ok(!afterText.includes("The session's reply:"), "reply line omitted when none given");
     assert.ok(!block.includes("against:"), "'review.against' omitted when counter_argument is null");
   });
 
@@ -371,7 +370,7 @@ describe("apply.mjs: draft, kickback", () => {
         counter_argument: "The ground may already be settled elsewhere and this redraws it needlessly.",
         strength: "weak",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     });
     assert.equal(result.validation.ok, true, result.validation.message);
@@ -421,7 +420,7 @@ describe("apply.mjs: draft, override", () => {
         facts_check: "Ratified/low is right; nothing here touches the ruling.",
         viability: "One option, and it is the one the author confirmed.",
       },
-      replies: {},
+      replies: { [ANSWERED_WITH_STAGE]: "Reviewed." },
       overrides: { [ANSWERED_WITH_STAGE]: "periagogic" },
       date: DATE,
     });
@@ -510,7 +509,7 @@ describe("apply.mjs: scope 'delta' (the re-reading of an amendment)", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     });
 
@@ -548,7 +547,7 @@ describe("apply.mjs: scope 'delta' (the re-reading of an amendment)", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     });
 
@@ -625,6 +624,46 @@ async function captureStderr(fn) {
   }
 }
 
+/** Splices two prior readings and, after them, a `### Frontier finding,
+ * <date>` section -- the shape `renderFrontierSubsection` in apply.mjs
+ * writes for a survey's finding -- ahead of the account's own prose, to test
+ * that the finding is a reading-cap boundary on the same ground a kickback
+ * is (defect 1): the two readings before it must not count against a
+ * reading that comes after it. */
+function withReadingsThenFrontierFinding(text, readingSections, frontierDate) {
+  const readingsRendered = readingSections.map(({ date, kind = "review", verdict = "forward", stage = null, recommends = null }) => [
+    `### Clean-context ${kind === "delta" ? "re-reading" : "review"}, ${date}`,
+    "",
+    kind === "delta"
+      ? `Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. ${verdict === "forward" ? "Verdict: the amendment stands, forwarded to the author's ruling." : `Verdict: kicked back to the ${stage} stage.`}`
+      : `Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. ${verdict === "forward" ? "Verdict: forward to the author's ruling." : `Verdict: kicked back to the ${stage} stage.`}`,
+    ...(recommends ? ["", `Recommended at this reading: \`${recommends}\`.`] : []),
+    "",
+    "Findings:",
+    "",
+    "- Answer: as read.",
+    "",
+    "The review found no strong counter-argument.",
+    "",
+  ].join("\n")).join("\n");
+  const frontierRendered = [
+    `### Frontier finding, ${frontierDate}`,
+    "",
+    "Kind: coverage.",
+    "",
+    "A frontier finding landed on this node after its two prior readings.",
+    "",
+    "Names only this node.",
+    "",
+    "Proposed: no change.",
+    "",
+  ].join("\n");
+  const rendered = `${readingsRendered}\n${frontierRendered}`;
+  const withSections = text.replace("## Account\n\n", `## Account\n\n${rendered}`);
+  assert.notEqual(withSections, text, "fixture precondition: '## Account' present to splice readings and the finding ahead of");
+  return withSections;
+}
+
 describe("apply.mjs: the two-reading cap (review-cost)", () => {
   test("a third reading with no intervening kickback prints a non-fatal stderr warning naming the node; the write still succeeds", async () => {
     const rootDir = await freshFixture("cap-warn-");
@@ -645,7 +684,7 @@ describe("apply.mjs: the two-reading cap (review-cost)", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     }));
 
@@ -676,7 +715,7 @@ describe("apply.mjs: the two-reading cap (review-cost)", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     }));
     assert.equal(stderr, "", "the kickback in between resets the cap: this reading is only the second one since it");
@@ -700,7 +739,7 @@ describe("apply.mjs: the two-reading cap (review-cost)", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     }));
     assert.equal(stderr, "", "only the first reading stands so far: the second is not yet the cap's third");
@@ -772,7 +811,7 @@ describe("apply.mjs: the two-reading cap (review-cost)", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     }));
     assert.ok(stderr.includes("caps a single answer at two readings"), `two readings of one answer already stand; the third must warn: ${stderr}`);
@@ -798,7 +837,7 @@ describe("apply.mjs: the two-reading cap (review-cost)", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     }));
     assert.equal(stderr, "", `the two prior readings recorded 'standing', and the node now recommends 'reconsidered'; the move is a new answer and this is its first reading, so the cap must not warn: ${stderr}`);
@@ -825,10 +864,38 @@ describe("apply.mjs: the two-reading cap (review-cost)", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     }));
     assert.equal(stderr, "", `the oldest section's missing record must stop the count rather than assume it matches, so only one reading is counted: ${stderr}`);
+  });
+  test("a frontier finding dated after two prior readings is itself a boundary: the next reading after it does not warn", async () => {
+    const rootDir = await freshFixture("cap-frontier-boundary-");
+    const file = reviewNodePath(rootDir);
+    const seeded = withReadingsThenFrontierFinding(
+      await readFile(file, "utf8"),
+      [
+        { date: "2026-08-01", kind: "review", verdict: "forward", recommends: REVIEW_NODE_RECOMMENDS },
+        { date: "2026-08-15", kind: "delta", verdict: "forward", recommends: REVIEW_NODE_RECOMMENDS },
+      ],
+      "2026-08-20",
+    );
+    await writeFile(file, seeded);
+
+    const { stderr } = await captureStderr(() => applyReviews({
+      rootDir,
+      input: {
+        scope: "delta",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["The first reading since the frontier finding, though it would be a naive third since the two readings before it."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: { [REVIEW_NODE]: "Reviewed." },
+      date: DATE,
+    }));
+    assert.equal(stderr, "", `the frontier finding is a boundary the walk must stop at, same as a kickback: the two readings before it do not count against this one: ${stderr}`);
   });
 });
 
@@ -890,7 +957,7 @@ describe("apply.mjs: draft, probes", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     });
     assert.equal(result.validation.ok, true, result.validation.message);
@@ -928,7 +995,7 @@ describe("apply.mjs: draft, probes", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
     });
     assert.equal(result.validation.ok, true, result.validation.message);
@@ -960,7 +1027,7 @@ describe("apply.mjs: draft, probes", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [RULING_NODE]: "Reviewed." },
       overrides: { [RULING_NODE]: "ruling" },
       date: DATE,
     });
@@ -984,7 +1051,7 @@ describe("apply.mjs: draft, probes", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [ANSWERED_WITH_STAGE]: "Reviewed." },
       overrides: { [ANSWERED_WITH_STAGE]: "periagogic" },
       date: DATE,
     });
@@ -1009,7 +1076,7 @@ describe("apply.mjs: draft, probes", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [FRONTIER_PERIAGOGIC]: "Reviewed." },
       overrides: { [FRONTIER_PERIAGOGIC]: "maieutic" },
       date: DATE,
     });
@@ -1032,7 +1099,7 @@ describe("apply.mjs: draft, probes", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [FRONTIER_PERIAGOGIC]: "Reviewed." },
       overrides: { [FRONTIER_PERIAGOGIC]: "maieutic" },
       date: DATE,
     });
@@ -1068,7 +1135,7 @@ describe("apply.mjs: draft, probes", () => {
         counter_argument: null,
         strength: "none",
       },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: "2026-09-05",
     });
     assert.equal(result.validation.ok, true, result.validation.message);
@@ -1102,6 +1169,23 @@ describe("apply.mjs: draft refusals write nothing", () => {
     assert.equal(await readFile(file, "utf8"), before);
   });
 
+  test("a draft with no strong finding still requires a reply for the node under review, and is refused naming the id", async () => {
+    const rootDir = await freshFixture("draft-noreply-");
+    const file = reviewNodePath(rootDir);
+    const before = await readFile(file, "utf8");
+
+    await assert.rejects(
+      () => applyReviews({
+        rootDir,
+        input: { scope: "draft", id: REVIEW_NODE, verdict: "forward", findings: ["x"], counter_argument: null, strength: "none" },
+        replies: {},
+        date: DATE,
+      }),
+      new RegExp(`${escapeRe(REVIEW_NODE)}: the node under review requires a reply in --replies`),
+    );
+    assert.equal(await readFile(file, "utf8"), before);
+  });
+
   test("a draft entry on a non-review node with no override is refused", async () => {
     const rootDir = await freshFixture("wrong-stage-");
     const file = rulingNodePath(rootDir);
@@ -1111,7 +1195,7 @@ describe("apply.mjs: draft refusals write nothing", () => {
       () => applyReviews({
         rootDir,
         input: { scope: "draft", id: RULING_NODE, verdict: "forward", findings: [], counter_argument: null, strength: "none" },
-        replies: {},
+        replies: { [RULING_NODE]: "Reviewed." },
         date: DATE,
       }),
       /the review of a draft runs on a node at stage 'review' \(or an override\), found 'ruling'/,
@@ -1142,7 +1226,7 @@ describe("apply.mjs: draft --dry and the CLI", () => {
     const result = await applyReviews({
       rootDir,
       input: { scope: "draft", id: REVIEW_NODE, verdict: "forward", findings: ["x"], counter_argument: null, strength: "none" },
-      replies: {},
+      replies: { [REVIEW_NODE]: "Reviewed." },
       date: DATE,
       dry: true,
     });
@@ -1158,8 +1242,10 @@ describe("apply.mjs: draft --dry and the CLI", () => {
     await writeFile(jsonFile, JSON.stringify({
       scope: "draft", id: REVIEW_NODE, verdict: "forward", findings: ["x"], counter_argument: null, strength: "none",
     }));
+    const repliesFile = path.join(dir, "replies.json");
+    await writeFile(repliesFile, JSON.stringify({ [REVIEW_NODE]: "Reviewed." }));
 
-    const stdout = execFileSync(process.execPath, [APPLY_MJS, jsonFile, "--date", DATE, "--dry"], { cwd: dir, encoding: "utf8" });
+    const stdout = execFileSync(process.execPath, [APPLY_MJS, jsonFile, "--replies", repliesFile, "--date", DATE, "--dry"], { cwd: dir, encoding: "utf8" });
     assert.equal(stdout, "example.test/main/review-node: Clean-context review (forward), review → ruling\n(dry run: 1 node(s) planned, nothing written)\n");
     assert.equal(
       await readFile(path.join(dir, "disposition/main/review-node.md"), "utf8"),
@@ -1189,6 +1275,8 @@ const REVIEW_A = "clean-context-review.test/main/review-a";
 const REVIEW_B = "clean-context-review.test/main/review-b";
 const REVIEW_LOW = "clean-context-review.test/main/review-low";
 const RULING_A = "clean-context-review.test/main/ruling-a";
+const REVIEW_GLOBAL = "clean-context-review.test/main/review-global";
+const REVIEW_SETTLES = "clean-context-review.test/main/review-settles";
 const ANSWERED_NODE = "clean-context-review.test/main/answered-ratified";
 const SURVEY_PINNED = "clean-context-review.test/main/survey-pinned";
 const SURVEY_DATE = "2026-09-03";
@@ -1242,6 +1330,26 @@ function surveyInput(extra = {}) {
   return { scope: "survey", commit: COMMIT, date: SURVEY_DATE, nodes: judgedEntries(), frontier: [], subtree_divergences: [], ...extra };
 }
 
+/**
+ * A reply for every node the frontier fixture's survey judges (`pinsFor`'s
+ * `judged` list, `surveyJudges` over `fixtures/frontier`), independent of
+ * which of them a given test's `nodes` array happens to carry an entry for:
+ * `validateSurvey`'s reply requirement binds to the pins sidecar's judged
+ * set, one reply per node the survey read, not to which judged node got a
+ * written finding this run.
+ */
+function allJudgedReplies(extra = {}) {
+  return {
+    [REVIEW_A]: "Reviewed.",
+    [REVIEW_B]: "Reviewed.",
+    [REVIEW_GLOBAL]: "Reviewed.",
+    [REVIEW_LOW]: "Reviewed.",
+    [REVIEW_SETTLES]: "Reviewed.",
+    [RULING_A]: "Reviewed.",
+    ...extra,
+  };
+}
+
 describe("apply.mjs: survey", () => {
   test("writes the survey's pin on every judged node whose recommendation still matches, beside the draft review it already carries", async () => {
     const rootDir = await freshFrontierFixture("survey-pin-");
@@ -1255,7 +1363,7 @@ describe("apply.mjs: survey", () => {
       input: surveyInput({
         nodes: [...judgedEntries(), { id: RULING_A, findings: ["Nothing across the frontier moves this one."], counter_argument: null, strength: "none" }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.deepEqual(result.moved, [], "nothing moved since the survey read it");
@@ -1295,7 +1403,7 @@ describe("apply.mjs: survey", () => {
     await writeFile(file, withAgainst);
     const pins = await pinsFor(rootDir);
 
-    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: allJudgedReplies() });
     assert.equal(result.validation.ok, true, result.validation.message);
 
     const reviewA = await parseAt(rootDir, "review-a", REVIEW_A);
@@ -1312,7 +1420,7 @@ describe("apply.mjs: survey", () => {
     const pins = await pinsFor(rootDir, { patch: { [REVIEW_A]: "cccccccccccccccccccccccccccccccccccccccc" } });
     const before = await readFile(nodePath(rootDir, "review-a"), "utf8");
 
-    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: allJudgedReplies() });
     assert.equal(result.validation.ok, true, result.validation.message);
 
     assert.equal(await readFile(nodePath(rootDir, "review-a"), "utf8"), before, "the moved node is left exactly as it stands");
@@ -1324,11 +1432,16 @@ describe("apply.mjs: survey", () => {
     assert.deepEqual(reviewB.review.survey, plainSurveyPin(pins.pins[REVIEW_B]), "the rest of the run still applies");
   });
 
-  test("a frontier finding naming a node that moved is discarded with a note and applied to none of its nodes", async () => {
+  // `survey-selection`: "A finding whose support is unmoved is carried
+  // forward ...; a finding one of whose supports moved is re-derived" -- per
+  // support, and the supports of a finding recorded per node are the nodes it
+  // names. So a contradiction naming one moved node and one unmoved one is
+  // written on the unmoved one, with the moved one named in the subsection
+  // and in the run's report as dropped and why.
+  test("a frontier finding naming a node that moved keeps its entries on the nodes that did not, and names the one it dropped", async () => {
     const rootDir = await freshFrontierFixture("survey-discard-");
     const pins = await pinsFor(rootDir, { patch: { [MAIEUTIC_NODE]: "dddddddddddddddddddddddddddddddddddddddd" } });
     const maieuticBefore = await readFile(nodePath(rootDir, "maieutic-node"), "utf8");
-    const periagogicBefore = await readFile(nodePath(rootDir, "periagogic-node"), "utf8");
 
     const result = await applyReviews({
       rootDir,
@@ -1336,11 +1449,11 @@ describe("apply.mjs: survey", () => {
       input: surveyInput({
         frontier: [
           {
-            kind: "placement",
+            kind: "contradiction",
             nodes: [MAIEUTIC_NODE, PERIAGOGIC_NODE],
-            finding: "These two overlap in scope and should trade stages.",
-            proposal: "Swap them.",
-            stages: { [MAIEUTIC_NODE]: "periagogic", [PERIAGOGIC_NODE]: "maieutic" },
+            finding: "These two answer the same question two ways.",
+            proposal: "Redraft the later one.",
+            stages: { [MAIEUTIC_NODE]: "periagogic", [PERIAGOGIC_NODE]: "periagogic" },
           },
           {
             kind: "vocabulary",
@@ -1351,23 +1464,142 @@ describe("apply.mjs: survey", () => {
           },
         ],
       }),
-      replies: {},
+      // The surviving node is now a node a kept finding names, so it owes a
+      // reply; the moved one does not, since nothing is written on it.
+      replies: allJudgedReplies({ [PERIAGOGIC_NODE]: "Checked against the record: the contradiction stands on this side." }),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
 
     assert.equal(result.discarded.length, 1);
-    assert.match(result.discarded[0], /^frontier\[0\] \(placement\): discarded — names .*maieutic-node \(pinned dddd.*\), moved since the survey read it; applied to none of its nodes$/);
+    assert.match(
+      result.discarded[0],
+      new RegExp(`^frontier\\[0\\] \\(contradiction\\): applied to ${escapeRe(PERIAGOGIC_NODE)}; not applied to ${escapeRe(MAIEUTIC_NODE)} \\(pinned dddd.*, now [0-9a-f]{40}\\), moved since the survey read it; re-derived there by the next survey$`),
+    );
+    assert.ok(result.report.includes(result.discarded[0]), "the report carries the line");
     assert.equal(await readFile(nodePath(rootDir, "maieutic-node"), "utf8"), maieuticBefore, "the moved node the finding names is untouched");
-    assert.equal(
-      await readFile(nodePath(rootDir, "periagogic-node"), "utf8"),
-      periagogicBefore,
-      "and so is the other node it names: a discarded finding is applied to none of them",
+
+    const periagogicText = await readFile(nodePath(rootDir, "periagogic-node"), "utf8");
+    assert.ok(periagogicText.includes("Kind: contradiction."), "the finding lands on the node that did not move");
+    assert.ok(periagogicText.includes(`Also named: ${MAIEUTIC_NODE}.`), "the subsection still says what the finding was about");
+    assert.ok(
+      periagogicText.includes(`Not written on ${MAIEUTIC_NODE}: that node moved since the survey read it, so this finding is re-derived there by the next survey.`),
+      `the subsection names what was dropped and why: ${periagogicText}`,
     );
 
     // the finding that names only current nodes still applies
     const reviewA = await parseAt(rootDir, "review-a", REVIEW_A);
     assert.equal(reviewA.stage, "maieutic");
     assert.ok((await readFile(nodePath(rootDir, "review-a"), "utf8")).includes("Kind: vocabulary."));
+  });
+
+  test("the surviving node of a partly-applied finding owes a reply, and the node that moved does not", async () => {
+    const rootDir = await freshFrontierFixture("survey-partial-reply-");
+    const pins = await pinsFor(rootDir, { patch: { [MAIEUTIC_NODE]: "dddddddddddddddddddddddddddddddddddddddd" } });
+    const input = surveyInput({
+      frontier: [{
+        kind: "contradiction",
+        nodes: [MAIEUTIC_NODE, PERIAGOGIC_NODE],
+        finding: "These two answer the same question two ways.",
+        proposal: "Redraft the later one.",
+        stages: { [MAIEUTIC_NODE]: "periagogic", [PERIAGOGIC_NODE]: "periagogic" },
+      }],
+    });
+
+    await assert.rejects(
+      () => applyReviews({ rootDir, pins, input, replies: allJudgedReplies() }),
+      new RegExp(`^Error: ${escapeRe(PERIAGOGIC_NODE)}: requires a reply in --replies`),
+      "the node the finding will be written on owes one",
+    );
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input,
+      replies: allJudgedReplies({ [PERIAGOGIC_NODE]: "Checked." }),
+    });
+    assert.equal(result.validation.ok, true, "and the moved node owes none: nothing is written on it");
+  });
+
+  // The exception the per-support rule leaves standing: a `merge` (and a
+  // `decomposition`, the split) proposes one edit spanning the nodes it
+  // names, so half of it proposes nothing and one moved node discards it.
+  test("a merge finding one of whose nodes moved is discarded whole, and applied to none of them", async () => {
+    const rootDir = await freshFrontierFixture("survey-merge-whole-");
+    const pins = await pinsFor(rootDir, { patch: { [MAIEUTIC_NODE]: "dddddddddddddddddddddddddddddddddddddddd" } });
+    const maieuticBefore = await readFile(nodePath(rootDir, "maieutic-node"), "utf8");
+    const periagogicBefore = await readFile(nodePath(rootDir, "periagogic-node"), "utf8");
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        frontier: [
+          {
+            kind: "merge",
+            nodes: [MAIEUTIC_NODE, PERIAGOGIC_NODE],
+            finding: "These two ask one question and should be one node.",
+            proposal: "Merge them, on the earlier-recorded node.",
+            stages: { [PERIAGOGIC_NODE]: "periagogic" },
+            options: [{ node: PERIAGOGIC_NODE, name: "the-merged-answer", text: "The two nodes answered as one." }],
+          },
+        ],
+      }),
+      replies: allJudgedReplies(),
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    assert.equal(result.discarded.length, 1);
+    assert.match(
+      result.discarded[0],
+      new RegExp(`^frontier\\[0\\] \\(merge\\): discarded — names ${escapeRe(MAIEUTIC_NODE)} \\(pinned dddd.*\\), moved since the survey read it; a merge finding's object is the set of nodes it spans, so it is applied whole or not at all, and it is applied to none of its nodes$`),
+    );
+    assert.equal(await readFile(nodePath(rootDir, "maieutic-node"), "utf8"), maieuticBefore, "the moved node is untouched");
+    assert.equal(
+      await readFile(nodePath(rootDir, "periagogic-node"), "utf8"),
+      periagogicBefore,
+      "and so is the other node it names: neither the finding nor the option it proposed there is written",
+    );
+  });
+
+  // The option a partly-applied finding proposed on a node that moved goes
+  // with that node: the answer fact it would land on is text this reading no
+  // longer attests to.
+  test("an option a partly-applied finding proposed on a moved node goes with it, and the report says so", async () => {
+    const rootDir = await freshFrontierFixture("survey-partial-option-");
+    const pins = await pinsFor(rootDir, { patch: { [MAIEUTIC_NODE]: "dddddddddddddddddddddddddddddddddddddddd" } });
+    const maieuticBefore = await readFile(nodePath(rootDir, "maieutic-node"), "utf8");
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        frontier: [
+          {
+            kind: "redundancy",
+            nodes: [MAIEUTIC_NODE, REVIEW_B],
+            finding: "Both say the same thing about the same object.",
+            proposal: "Answer it once, and record the alternative on each.",
+            stages: { [MAIEUTIC_NODE]: "maieutic", [REVIEW_B]: "maieutic" },
+            options: [
+              { node: MAIEUTIC_NODE, name: "said-once-there", text: "Said once, on the other node." },
+              { node: REVIEW_B, name: "said-once-here", text: "Said once, here." },
+            ],
+          },
+        ],
+      }),
+      replies: allJudgedReplies(),
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    assert.equal(result.discarded.length, 1);
+    assert.match(result.discarded[0], /the option it proposed there \('said-once-there' on .*maieutic-node\) went with it/);
+    assert.equal(await readFile(nodePath(rootDir, "maieutic-node"), "utf8"), maieuticBefore, "the moved node gets neither the finding nor its option");
+
+    const reviewB = await parseAt(rootDir, "review-b", REVIEW_B);
+    assert.ok(
+      reviewB.facts.find((f) => f.name === "answer").options.some((o) => o.name === "said-once-here"),
+      "the option on the node that did not move is recorded",
+    );
   });
 
   test("a finding naming a node the survey never pinned at all is discarded too", async () => {
@@ -1382,7 +1614,7 @@ describe("apply.mjs: survey", () => {
       input: surveyInput({
         frontier: [{ kind: "coverage", nodes: [PERIAGOGIC_NODE], finding: "x", proposal: "y", stages: { [PERIAGOGIC_NODE]: "maieutic" } }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.discarded.length, 1);
     assert.match(result.discarded[0], /pinned nothing/);
@@ -1432,6 +1664,22 @@ describe("apply.mjs: survey", () => {
     assert.equal(await readFile(nodePath(rootDir, "review-a"), "utf8"), before, "nothing written on any refusal");
   });
 
+  test("a survey with no strong finding still requires a reply for every judged node, and is refused listing the missing ids", async () => {
+    const rootDir = await freshFrontierFixture("survey-noreply-");
+    const before = await readFile(nodePath(rootDir, "review-a"), "utf8");
+    const pins = await pinsFor(rootDir);
+
+    await assert.rejects(
+      () => applyReviews({ rootDir, pins, input: surveyInput(), replies: {} }),
+      new RegExp(`${escapeRe(REVIEW_A)}: requires a reply in --replies \\(judged this run, or named by a kept frontier finding\\)`),
+    );
+    await assert.rejects(
+      () => applyReviews({ rootDir, pins, input: surveyInput(), replies: {} }),
+      new RegExp(`${escapeRe(RULING_A)}: requires a reply in --replies \\(judged this run, or named by a kept frontier finding\\)`),
+    );
+    assert.equal(await readFile(nodePath(rootDir, "review-a"), "utf8"), before, "nothing written on refusal");
+  });
+
   test("refuses without a pins sidecar: a survey applied unpinned is applied to text no reading attests to", async () => {
     const dir = await freshFrontierScratch("survey-nopins-");
     const jsonFile = path.join(dir, "survey.json");
@@ -1457,7 +1705,7 @@ describe("apply.mjs: survey", () => {
       rootDir,
       pins,
       input: surveyInput({ commit: "2222222222222222222222222222222222222222" }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.ok(result.notes.some((n) => n.includes("the survey names graph commit 2222")), `no note about the commit: ${result.notes.join(" | ")}`);
     assert.equal(result.validation.ok, true, result.validation.message);
@@ -1468,7 +1716,7 @@ describe("apply.mjs: survey", () => {
     const pins = await pinsFor(rootDir);
     const before = await readFile(nodePath(rootDir, "review-a"), "utf8");
 
-    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {}, dry: true });
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: allJudgedReplies(), dry: true });
     assert.equal(result.validation, null);
     assert.ok(result.report.some((l) => l.startsWith(`${REVIEW_A}: Frontier survey`)));
     assert.equal(await readFile(nodePath(rootDir, "review-a"), "utf8"), before, "nothing written under --dry");
@@ -1480,8 +1728,10 @@ describe("apply.mjs: survey", () => {
     const jsonFile = path.join(dir, "survey.json");
     await writeFile(jsonFile, JSON.stringify(surveyInput()));
     await writeFile(path.join(dir, "survey.pins.json"), JSON.stringify(await pinsFor(rootDir)));
+    const repliesFile = path.join(dir, "replies.json");
+    await writeFile(repliesFile, JSON.stringify(allJudgedReplies()));
 
-    const stdout = execFileSync(process.execPath, [APPLY_MJS, jsonFile, "--date", SURVEY_DATE, "--dry"], { cwd: dir, encoding: "utf8" });
+    const stdout = execFileSync(process.execPath, [APPLY_MJS, jsonFile, "--replies", repliesFile, "--date", SURVEY_DATE, "--dry"], { cwd: dir, encoding: "utf8" });
     assert.match(stdout, new RegExp(`^${escapeRe(REVIEW_A)}: Frontier survey \\+ draft review kept, review → review\\n`));
     assert.match(stdout, /\(dry run: 2 node\(s\) planned, nothing written\)\n$/);
   });
@@ -1489,12 +1739,12 @@ describe("apply.mjs: survey", () => {
   test("date resolution: --date wins, else the survey's own date", async () => {
     const rootDir = await freshFrontierFixture("survey-date-");
     const pins = await pinsFor(rootDir);
-    await applyReviews({ rootDir, pins, input: surveyInput({ date: "2020-01-01" }), replies: {} });
+    await applyReviews({ rootDir, pins, input: surveyInput({ date: "2020-01-01" }), replies: allJudgedReplies() });
     assert.ok((await readFile(nodePath(rootDir, "review-a"), "utf8")).includes("### Frontier survey, 2020-01-01"));
 
     const rootDir2 = await freshFrontierFixture("survey-date-flag-");
     const pins2 = await pinsFor(rootDir2);
-    await applyReviews({ rootDir: rootDir2, pins: pins2, input: surveyInput({ date: "2020-01-01" }), replies: {}, date: "2021-06-06" });
+    await applyReviews({ rootDir: rootDir2, pins: pins2, input: surveyInput({ date: "2020-01-01" }), replies: allJudgedReplies(), date: "2021-06-06" });
     assert.ok((await readFile(nodePath(rootDir2, "review-a"), "utf8")).includes("### Frontier survey, 2021-06-06"));
   });
 });
@@ -1528,7 +1778,7 @@ describe("apply.mjs: survey, read pins", () => {
       { id: SURVEY_PINNED, text: pinnedText },
     ];
 
-    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: allJudgedReplies() });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.equal(result.moved.length, 0, "neither read entry moved");
 
@@ -1584,7 +1834,7 @@ describe("apply.mjs: survey, read pins", () => {
       input: surveyInput({
         frontier: [{ kind: "vocabulary", nodes: [SURVEY_PINNED], finding: "x", proposal: "y", stages: {} }],
       }),
-      replies: {},
+      replies: allJudgedReplies({ [SURVEY_PINNED]: "Reviewed." }),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.ok(
@@ -1609,7 +1859,7 @@ describe("apply.mjs: survey, read pins", () => {
       { id: ANSWERED_NODE, text: { question: "0".repeat(64), answer: "1".repeat(64), options: "2".repeat(64), rivals: "3".repeat(64), words: "4".repeat(64) } },
     ];
 
-    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: allJudgedReplies() });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.equal(await readFile(nodePath(rootDir, "answered-ratified"), "utf8"), before, "the moved read entry writes nothing");
     assert.equal(result.moved.length, 1);
@@ -1626,7 +1876,7 @@ describe("apply.mjs: survey, read pins", () => {
     const pins = await pinsFor(rootDir);
     assert.equal(pins.read, undefined, "fixture precondition: pinsFor builds no 'read' list on its own");
 
-    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: allJudgedReplies() });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.equal(await readFile(nodePath(rootDir, "answered-ratified"), "utf8"), before, "untouched: no read pin, same as before this change");
 
@@ -1652,7 +1902,7 @@ describe("apply.mjs: survey, probes", () => {
           fact: "answer",
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
 
@@ -1683,7 +1933,7 @@ describe("apply.mjs: survey, probes", () => {
           fact: null,
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
 
@@ -1709,7 +1959,7 @@ describe("apply.mjs: survey, probes", () => {
         }],
       }),
       overrides: { [REVIEW_A]: "ruling" },
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     const reviewA = await parseAt(rootDir, "review-a", REVIEW_A);
@@ -1732,7 +1982,7 @@ describe("apply.mjs: survey, probes", () => {
         }],
       }),
       overrides: { [REVIEW_B]: "periagogic" },
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     const reviewB = await parseAt(rootDir, "review-b", REVIEW_B);
@@ -1757,7 +2007,7 @@ describe("apply.mjs: survey, probes", () => {
         }],
       }),
       overrides: { [PERIAGOGIC_NODE]: "maieutic" },
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(resultWith.validation.ok, true, resultWith.validation.message);
     const withProbeAfter = await parseAt(withProbe, "periagogic-node", PERIAGOGIC_NODE);
@@ -1774,7 +2024,7 @@ describe("apply.mjs: survey, probes", () => {
         }],
       }),
       overrides: { [PERIAGOGIC_NODE]: "maieutic" },
-      replies: {},
+      replies: allJudgedReplies({ [PERIAGOGIC_NODE]: "Reviewed." }),
     });
     assert.equal(resultWithout.validation.ok, true, resultWithout.validation.message);
     const withoutProbeAfter = await parseAt(withoutProbe, "periagogic-node", PERIAGOGIC_NODE);
@@ -1800,7 +2050,7 @@ describe("apply.mjs: survey, probes", () => {
           discharges: "Whether 'the ground' in this sentence means the disposition or the account.",
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
 
@@ -1830,7 +2080,7 @@ describe("apply.mjs: survey, probes", () => {
           discharges: "Whether 'narrower' still belongs on the table.",
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.equal(await readFile(nodePath(rootDir, "review-b"), "utf8"), before, "the moved node is left exactly as it stands");
@@ -1875,7 +2125,7 @@ describe("apply.mjs: a survey finding may name any node", () => {
           stages: { [PERIAGOGIC_NODE]: "maieutic" },
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies({ [MAIEUTIC_NODE]: "Reviewed.", [PERIAGOGIC_NODE]: "Reviewed." }),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.ok(result.report.includes(`${MAIEUTIC_NODE}: Frontier finding, maieutic → maieutic`), "unstaged: reported as unchanged");
@@ -1903,7 +2153,7 @@ describe("apply.mjs: a survey finding may name any node", () => {
           { kind: "supersession", nodes: [REVIEW_A], finding: "and its ground was superseded.", proposal: "Draw the ground again.", stages: { [REVIEW_A]: "periagogic" } },
         ],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     const after = await readFile(nodePath(rootDir, "review-a"), "utf8");
@@ -1920,7 +2170,7 @@ describe("apply.mjs: a survey finding may name any node", () => {
       rootDir,
       pins,
       input: surveyInput({ frontier: [{ kind: "vocabulary", nodes: [MAIEUTIC_NODE], finding: "x", proposal: "y", stages: {} }] }),
-      replies: {},
+      replies: allJudgedReplies({ [MAIEUTIC_NODE]: "Reviewed." }),
       overrides: { [MAIEUTIC_NODE]: "periagogic" },
     });
     assert.equal(fieldValue(await readFile(nodePath(rootDir, "maieutic-node"), "utf8"), "stage"), "periagogic");
@@ -1938,7 +2188,7 @@ describe("apply.mjs: a survey finding may name any node", () => {
         rootDir,
         pins,
         input: surveyInput({ frontier: [{ kind: "coverage", nodes: [ANSWERED_NODE], finding: "Cited for context only.", proposal: "Nothing.", stages: {} }] }),
-        replies: {},
+        replies: allJudgedReplies({ [ANSWERED_NODE]: "Reviewed." }),
       }),
       /carries no stage, and nothing in this survey names one for it/,
     );
@@ -1956,7 +2206,7 @@ describe("apply.mjs: a survey finding may name any node", () => {
           stages: { [ANSWERED_NODE]: "periagogic" },
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies({ [ANSWERED_NODE]: "Reviewed." }),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.ok(result.report.includes(`${ANSWERED_NODE}: Frontier finding, no stage → periagogic`));
@@ -1993,7 +2243,7 @@ describe("apply.mjs: a merge finding is recorded as an option on the answer fact
           }],
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies({ [MAIEUTIC_NODE]: "Reviewed." }),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.ok(result.report.some((l) => l.includes("option 'folded-from-maieutic'")), `report does not name the option: ${result.report.join(" | ")}`);
@@ -2043,7 +2293,7 @@ describe("apply.mjs: a merge finding is recorded as an option on the answer fact
           options: [{ node: REVIEW_A, name: "the-authors-own", text: "Answer A as the author's words already answer it." }],
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
 
@@ -2074,7 +2324,7 @@ describe("apply.mjs: a merge finding is recorded as an option on the answer fact
           options: [{ node: REVIEW_B, name: "narrower", text: "A second wording of the option already listed." }],
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.ok(
@@ -2126,16 +2376,18 @@ describe("apply.mjs: a merge finding is recorded as an option on the answer fact
 
 // --------------------------------------------------------------------------
 // apply.mjs: a merge finding's option on a node in the *content* encoding
-// moves the node's own recommendation hash, because `contentFactRecommendationHash`
-// (packages/disposition/derive.mjs) hashes every option's name/source/ref/
-// status/reason/supports/diverges -- unlike the legacy encoding, where the
-// hash tracked only the recommended option. The survey's pin still names the
-// hash it read (the pre-edit one); the post-edit mismatch is expected and
-// noted rather than refused, since recording the option is exactly what
-// moved it.
+// leaves the node's own recommendation hash where it stands. Under
+// `survey-selection`'s `a-pin-moves-on-what-binds-the-node`,
+// `contentFactRecommendationHash` (packages/disposition/derive.mjs) digests
+// what binds the node -- the question, which option the answer fact
+// recommends, that option's name, sentence, resolved content and ledger
+// addresses, and the status any option carries -- so a rival recorded beside
+// the recommendation with no status contributes nothing to it. The pin the
+// survey writes is therefore still current after the write, and there is
+// nothing to note.
 // --------------------------------------------------------------------------
 
-describe("apply.mjs: a merge finding's option on a content-encoding node moves the recommendation hash", () => {
+describe("apply.mjs: a merge finding's option on a content-encoding node leaves the recommendation hash where it stands", () => {
   /**
    * A content-encoding node at the review stage, standing in for review-b:
    * one answer option ('standing'), an authority fact, and the content the
@@ -2191,7 +2443,7 @@ The node's standing answer, whole.
 Fixture body for the content-encoding recommendation-hash-moved test.
 `;
 
-  test("produces a plan (no problem); the pin's 'of' is the pre-edit hash; a note names the moved hash", async () => {
+  test("produces a plan (no problem); the option is recorded, the hash is unchanged, the pin is current, and no note names a moved hash", async () => {
     const rootDir = await freshFrontierFixture("content-option-");
     const file = nodePath(rootDir, "review-b");
     await writeFile(file, CONTENT_NODE_TEXT);
@@ -2217,7 +2469,7 @@ Fixture body for the content-encoding recommendation-hash-moved test.
           options: [{ node: REVIEW_B, name: "another-answer", text: "A different sentence answering the same question." }],
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
 
     // No problem: applyReviews would have thrown (planProblems) had the
@@ -2228,16 +2480,24 @@ Fixture body for the content-encoding recommendation-hash-moved test.
     const after = await readFile(file, "utf8");
     const parsedAfter = parseNode(after, { id: REVIEW_B, graph: "main", slug: "review-b", path: file });
 
-    // The pin written on the node names the hash the survey read, not the
-    // hash the edit produced: a pin names what was read.
-    assert.equal(parsedAfter.review.survey.of, beforeHash, "the pin's 'of' is the pre-edit hash");
-    assert.notEqual(parsedAfter.recommendationHash, beforeHash, "fixture precondition: the option did move the hash");
+    // The option is on the answer fact, and it did not move the hash: a pin
+    // moves on what binds the node, and a rival carrying no status is not
+    // that.
+    const answerOptions = parsedAfter.facts.find((f) => f.name === "answer").options.map((o) => o.name);
+    assert.deepEqual(answerOptions, ["standing", "another-answer"], "the proposed option is recorded on the answer fact");
+    assert.equal(parsedAfter.recommendationHash, beforeHash, "recording a rival with no status leaves the recommendation hash where it stands");
 
-    // The note explains the move rather than leaving it silent.
-    const note = result.notes.find((n) => n.includes(REVIEW_B) && n.includes("moved the recommendation hash"));
-    assert.ok(note, `no note recorded the moved hash: ${result.notes.join(" | ")}`);
-    assert.ok(note.includes("another-answer"), `note does not name the option: ${note}`);
-    assert.ok(result.report.includes(note), "the note lands in the report too");
+    // The pin written on the node names that same hash, and is current
+    // against the node as it now stands.
+    assert.equal(parsedAfter.review.survey.of, beforeHash, "the pin's 'of' is the hash the survey read");
+    assert.equal(parsedAfter.surveyStale, false, "and the pin is still current after the write");
+
+    // Nothing to note: the hash did not move.
+    assert.equal(
+      result.notes.find((n) => n.includes("moved the recommendation hash")),
+      undefined,
+      `no note is owed for a hash that did not move: ${result.notes.join(" | ")}`,
+    );
   });
 });
 
@@ -2321,7 +2581,7 @@ node of its own.
           options: [{ node: REVIEW_B, name: "appended-last", text: "A third reading, distinct from both on the table." }],
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
 
@@ -2379,7 +2639,7 @@ describe("apply.mjs: subtree_divergences", () => {
           finding: "maieutic-node stands under 'whole-thing' and periagogic-node stands under 'keep-part'; a ruling for one discards the ground the other rests on.",
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
 
@@ -2515,7 +2775,7 @@ describe("apply.mjs: subtree_divergences", () => {
           finding: "maieutic-node stands under 'whole-thing', confirmed on a second look.",
         }],
       }),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
 
@@ -2547,7 +2807,7 @@ describe("apply.mjs: a reading's heading is an address", () => {
     // is the heading, and a forward would otherwise move the node to 'ruling'
     // and the second apply would refuse it.
     const overrides = { [REVIEW_NODE]: "review" };
-    const first = await applyReviews({ rootDir, input, replies: {}, overrides, date: DATE });
+    const first = await applyReviews({ rootDir, input, replies: { [REVIEW_NODE]: "Reviewed." }, overrides, date: DATE });
     assert.equal(first.validation.ok, true, JSON.stringify(first.validation));
     const afterFirst = await readFile(file, "utf8");
     const pin = /^  of: ([0-9a-f]{40})$/m.exec(afterFirst);
@@ -2558,7 +2818,7 @@ describe("apply.mjs: a reading's heading is an address", () => {
     // The same answer read again on the same day: the cap forbids it and the
     // caller warns, but the heading must still name one section and not two.
     const { result: second } = await captureStderr(() => applyReviews({
-      rootDir, input: { ...input, findings: ["Answer: read twice."] }, replies: {}, overrides, date: DATE,
+      rootDir, input: { ...input, findings: ["Answer: read twice."] }, replies: { [REVIEW_NODE]: "Reviewed." }, overrides, date: DATE,
     }));
     assert.equal(second.validation.ok, true, JSON.stringify(second.validation));
     const afterSecond = await readFile(file, "utf8");
@@ -2700,7 +2960,7 @@ describe("apply.mjs: survey, the pairs it read", () => {
       pins,
       selection: selectionOf([{ a: REVIEW_A, b: REVIEW_B, keys: ["parent:x", "cites"] }]),
       input: surveyInput(),
-      replies: {},
+      replies: allJudgedReplies(),
     });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.equal(
@@ -2731,7 +2991,7 @@ describe("apply.mjs: survey, the pairs it read", () => {
   test("a survey applied without one says so per node: the next cut will freeze more than it should", async () => {
     const rootDir = await freshFrontierFixture("survey-nopairs-");
     const pins = await pinsFor(rootDir);
-    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: allJudgedReplies() });
     assert.equal(result.validation.ok, true, result.validation.message);
     const note = result.notes.find((n) => n.includes("survey.selection.json"));
     assert.ok(note, "the absence of the sidecar is reported and not silent");
@@ -2749,7 +3009,7 @@ describe("apply.mjs: survey, the pairs it read", () => {
         probe: [],
       },
     };
-    const result = await applyReviews({ rootDir, pins, selection, input: surveyInput(), replies: {} });
+    const result = await applyReviews({ rootDir, pins, selection, input: surveyInput(), replies: allJudgedReplies() });
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.ok(
       result.notes.some((n) => n.includes("survey.selection.json")) === false,

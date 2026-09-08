@@ -11,7 +11,7 @@ facts:
         ruling:
           response: confirm
           date: "2026-09-07"
-          of: "3a341630c53bcd4d4b0e4a2c575b3e64879708f1"
+          of: "f0ccdd6ad4fc263f983d27d5479f83c89f6f97b0"
           reason: This is what I meant.
       - name: the-recommended-one
         source: ai

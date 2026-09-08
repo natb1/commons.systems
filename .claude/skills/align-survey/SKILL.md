@@ -286,9 +286,19 @@ as a finding of nothing.
      names on a judged node — and applies that node's findings; a judged node
      whose recommendation moved since receives nothing, is reported, and is
      judged again by the next survey. A finding naming a node whose
-     recommendation has moved since the graph commit read is discarded with a
-     note, for the same reason: a reading attests to the text it read. Giving
-     `--selection` is what lets `pairs` be recorded at all; omitting it
+     recommendation has moved since the graph commit read is discarded on that
+     node for the same reason — a reading attests to the text it read — and on
+     that node alone: the discard is per support and not per finding
+     (`survey-selection`, "a finding one of whose supports moved is
+     re-derived"), so the finding is still written on every node it names that
+     did not move, and the moved ones are named as dropped both in the run's
+     report and in the subsection written on the survivors, along with any
+     option it proposed on them. Two cases discard it whole: a finding every
+     one of whose nodes moved, and a `merge` or a `decomposition`, whose object
+     is the set of nodes it spans, so that half of one proposes nothing. A
+     reply in `--replies` is owed for the nodes a finding is written on, and
+     not for the ones dropped. Giving `--selection` is what lets `pairs` be
+     recorded at all; omitting it
      records the other five keys and notes that this survey's cut therefore
      falls back to the survey date rather than to the pairs actually read,
      which freezes more than it should on the next run;

@@ -21,8 +21,17 @@ import { after, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { concordance, nodeText, usesTerm } from './concordance.mjs';
-import { PASSAGE_BYTES, TIER_CHECKS, checkTier, foldableSections, tierNotes } from './tier.mjs';
+import { TERM_KEY_MAX_SHARE, concordance, nodeText, usesTerm } from './concordance.mjs';
+import {
+  PASSAGE_BYTES,
+  TIER_CHECKS,
+  TIER_GATE_CHECKS,
+  TIER_REPORT_CHECKS,
+  checkTier,
+  foldableSections,
+  partitionTier,
+  tierNotes,
+} from './tier.mjs';
 
 const execFileAsync = promisify(execFile);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -89,6 +98,89 @@ describe('TIER_CHECKS', () => {
 
   test('a graph with nothing wrong with it reports nothing', () => {
     assert.deepEqual(checkTier({ nodes: [node('g/a'), node('g/b')] }), []);
+  });
+});
+
+describe('TIER_GATE_CHECKS and TIER_REPORT_CHECKS', () => {
+  test('every check the tier holds has a kind', () => {
+    for (const check of TIER_CHECKS) {
+      assert.ok(
+        TIER_GATE_CHECKS.includes(check) || TIER_REPORT_CHECKS.includes(check),
+        `${check} is neither a gate check nor a report check`,
+      );
+    }
+  });
+
+  test('the two lists partition TIER_CHECKS exactly: no overlap, nothing left over', () => {
+    const union = new Set([...TIER_GATE_CHECKS, ...TIER_REPORT_CHECKS]);
+    assert.deepEqual([...union].sort(), [...TIER_CHECKS].sort());
+    assert.equal(TIER_GATE_CHECKS.length + TIER_REPORT_CHECKS.length, TIER_CHECKS.length);
+    for (const check of TIER_GATE_CHECKS) assert.ok(!TIER_REPORT_CHECKS.includes(check));
+  });
+
+  test('the four defects of the encoding gate; the four states of the record report', () => {
+    assert.deepEqual(TIER_GATE_CHECKS, [
+      'unresolved-reference',
+      'duplicate-option-name',
+      'option-content-unresolvable',
+      'unresolved-words-reference',
+    ]);
+    assert.deepEqual(TIER_REPORT_CHECKS, [
+      'recommendation-past-its-pin',
+      'term-without-a-path',
+      'duplicated-passage',
+      'unfolded-account-section',
+    ]);
+  });
+});
+
+describe('checkTier: every finding carries its check\'s kind', () => {
+  test('a gate finding and a report finding are each stamped correctly', () => {
+    const findings = checkTier({
+      nodes: [
+        node('g/a', { under: ['g/gone'] }),
+        node('g/b', { facts: [{ name: 'answer', options: [{ name: 'x' }, { name: 'x' }] }] }),
+      ],
+    });
+    const unresolved = findings.find((f) => f.check === 'unresolved-reference');
+    const duplicate = findings.find((f) => f.check === 'duplicate-option-name');
+    assert.equal(unresolved.kind, 'gate');
+    assert.equal(duplicate.kind, 'gate');
+  });
+});
+
+describe('partitionTier', () => {
+  test('splits findings by kind', () => {
+    const findings = [
+      { check: 'unresolved-reference', node: 'g/a', detail: 'x', kind: 'gate' },
+      { check: 'term-without-a-path', node: 'g/b', detail: 'y', kind: 'report' },
+    ];
+    assert.deepEqual(partitionTier(findings), {
+      gate: [findings[0]],
+      report: [findings[1]],
+    });
+  });
+
+  test('a fixture with one gating defect and one report finding yields one of each', () => {
+    const definer = node('g/def', { defines: [{ term: 'judged set', gloss: 'what a survey reads' }] });
+    const filler = Array.from({ length: 10 }, (_, i) => node(`g/filler${i}`));
+    const findings = checkTier({
+      nodes: [
+        node('g/a', { under: ['g/gone'] }),
+        definer,
+        node('g/user', { question: 'What is the judged set?' }),
+        ...filler,
+      ],
+    });
+    const { gate, report } = partitionTier(findings);
+    assert.equal(gate.length, 1);
+    assert.equal(gate[0].check, 'unresolved-reference');
+    assert.equal(report.length, 1);
+    assert.equal(report[0].check, 'term-without-a-path');
+  });
+
+  test('an empty finding list partitions to two empty lists', () => {
+    assert.deepEqual(partitionTier([]), { gate: [], report: [] });
   });
 });
 
@@ -281,9 +373,19 @@ describe('checkTier: option-content-unresolvable', () => {
 describe('checkTier: term-without-a-path', () => {
   const definer = node('g/def', { defines: [{ term: 'judged set', gloss: 'what a survey reads' }] });
 
+  // A term used by only one node of two is a share of one half, which the
+  // hub-share bound below would itself skip; every test here that expects a
+  // finding pads the graph with enough plain nodes that the term's share
+  // stays under `TERM_KEY_MAX_SHARE`, so the bound is not what is under
+  // test in this block.
+  const padded = (nodes) => [
+    ...nodes,
+    ...Array.from({ length: 10 }, (_, i) => node(`g/filler${i}`)),
+  ];
+
   test('a user with no path to the definer', () => {
     const findings = of('term-without-a-path', checkTier({
-      nodes: [definer, node('g/user', { question: 'What is the judged set?' })],
+      nodes: padded([definer, node('g/user', { question: 'What is the judged set?' })]),
     }));
     assert.equal(findings.length, 1);
     assert.equal(findings[0].node, 'g/user');
@@ -322,6 +424,37 @@ describe('checkTier: term-without-a-path', () => {
       checkTier(graph, { concordance: concordance(graph) }),
       checkTier(graph),
     );
+  });
+
+  test('a term used by more than TERM_KEY_MAX_SHARE of the nodes nominates nothing', () => {
+    // 2 users of 3 nodes is a share of 2/3, well past the tenth the record's
+    // own ordinary vocabulary clears; the record's rule
+    // (`survey-selection`, quoted in `candidatePairs`) is that such a term
+    // "orders nothing and grows with the graph", the same reason
+    // `candidatePairs` already skips it. Before this fix every one of these
+    // users was its own finding.
+    const graph = {
+      nodes: [
+        definer,
+        node('g/u1', { question: 'What is the judged set?' }),
+        node('g/u2', { question: 'What is the judged set?' }),
+      ],
+    };
+    assert.equal(concordance(graph).terms[0].users.length, 2);
+    assert.ok(2 > TERM_KEY_MAX_SHARE * graph.nodes.length, 'the fixture is actually over the ceiling');
+    assert.deepEqual(of('term-without-a-path', checkTier(graph)), []);
+  });
+
+  test('a term at or under the share still reports its unreachable users', () => {
+    // The same term, the same absolute count of users (1), but padded out
+    // with enough other nodes that the share falls at the record's ordinary
+    // vocabulary threshold and the check still holds it.
+    const filler = Array.from({ length: 10 }, (_, i) => node(`g/filler${i}`));
+    const graph = { nodes: [definer, node('g/user', { question: 'What is the judged set?' }), ...filler] };
+    assert.ok(1 <= TERM_KEY_MAX_SHARE * graph.nodes.length, 'the fixture sits at or under the ceiling');
+    const findings = of('term-without-a-path', checkTier(graph));
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].node, 'g/user');
   });
 });
 
@@ -379,6 +512,27 @@ describe('checkTier: duplicated-passage', () => {
       nodes: [node('g/a', { answer: paragraph }), node('g/b', { answer: paragraph })],
     }));
     assert.equal(findings.length, 1);
+  });
+
+  test('the same passage shared only in the account is not a finding: the apply script writes it there itself', () => {
+    // The regression this guards: the apply script's own generated account
+    // sentence -- e.g. the 238-byte "Read in clean context by a subagent
+    // given the amendment, ..." notice -- lands on every node it touches,
+    // which is not the duplication the check exists to find (prose two
+    // authors wrote alike). `nodeText` is read here with `account: false`.
+    assert.deepEqual(of('duplicated-passage', checkTier({
+      nodes: [node('g/a', { account: long }), node('g/b', { account: long })],
+    })), []);
+  });
+
+  test('the same passage in one node\'s account and another\'s answer is not a finding: only the answer side is text', () => {
+    // With `account` excluded, `g/a` no longer carries the passage at all,
+    // so this is not duplication of anything -- confirming the account is
+    // actually dropped from the text the check reads, not merely
+    // deprioritized.
+    assert.deepEqual(of('duplicated-passage', checkTier({
+      nodes: [node('g/a', { account: long }), node('g/b', { answer: long })],
+    })), []);
   });
 });
 
@@ -507,6 +661,55 @@ describe('concordance', () => {
     }
   });
 
+  test('nodeText omits the account when told to', () => {
+    const withAccount = nodeText(node('g/a', { account: 'Only in the account.' }));
+    const without = nodeText(node('g/a', { account: 'Only in the account.' }), { account: false });
+    assert.ok(withAccount.includes('Only in the account.'));
+    assert.ok(!without.includes('Only in the account.'));
+  });
+
+  test('nodeText contributes an option held whole once, not once as its raw fence and again as its resolution', () => {
+    // In the content encoding `prose` is the whole `#### <option>`
+    // subsection, content fence included, and for an option held whole
+    // `resolved` is exactly that fence's text -- pushing both put the same
+    // body into the concordance, the passage check, and `candidatePairs`'
+    // `cites` key twice.
+    const wholeFenceText = 'The node as it would stand under this option.';
+    const text = nodeText(node('g/a', {
+      facts: [{
+        name: 'answer',
+        options: [{
+          name: 'x',
+          prose: `A sentence.\n\n**Content.**\n\n\`\`\`markdown\n${wholeFenceText}\n\`\`\``,
+          sentence: 'A sentence.',
+          resolved: wholeFenceText,
+        }],
+      }],
+    }));
+    const occurrences = text.split(wholeFenceText).length - 1;
+    assert.equal(occurrences, 1, `the fence's text should appear once, appeared ${occurrences} times`);
+  });
+
+  test('nodeText still carries a named change\'s resolution, which never appears in prose at all', () => {
+    // `prose` for a named change carries the diff hunks, never the resolved
+    // text those hunks produce, so `resolved` is not a duplicate here and
+    // must still be pushed -- the fix is a containment check, not a
+    // blanket drop of `resolved`.
+    const resolvedText = 'The base with the hunk applied.';
+    const text = nodeText(node('g/a', {
+      facts: [{
+        name: 'answer',
+        options: [{
+          name: 'x',
+          prose: "A sentence.\n\nFrom: base\n\n```diff\n-old line\n+new line\n```",
+          sentence: 'A sentence.',
+          resolved: resolvedText,
+        }],
+      }],
+    }));
+    assert.ok(text.includes(resolvedText));
+  });
+
   test('the CLI writes the concordance as JSON to --out', async () => {
     const dir = await freshValid('conc-cli-');
     const out = path.join(dir, 'concordance.json');
@@ -528,12 +731,17 @@ describe('validate.mjs --tier', () => {
   test('a graph with a finding exits 1 and names the check, the node and the detail', async () => {
     const dir = await freshValid('cli-finding-');
     // A passage over the floor, written into two node files: the check is
-    // byte identity across nodes, so this is a finding wherever it lands.
+    // byte identity across nodes, so this is a finding wherever it lands --
+    // in the '## Answer' section, which every node carries and which
+    // `duplicated-passage` always reads, unlike '## Account'.
     const passage = 'A paragraph long enough to clear the two hundred byte floor the tier holds, written into two node files of this fixture so that the duplicated-passage check has something to find, and byte-identical in both.';
     const files = (await execFileAsync('find', [dir, '-name', '*.md'])).stdout.split('\n').filter(Boolean).slice(0, 2);
     assert.equal(files.length, 2, 'the fixture carries at least two node files');
     for (const file of files) {
-      await writeFile(file, `${await readFile(file, 'utf8')}\n${passage}\n`);
+      const content = await readFile(file, 'utf8');
+      const updated = content.replace(/^## Answer\n/m, `$&\n${passage}\n`);
+      assert.notEqual(updated, content, `${file} carries an '## Answer' heading to insert after`);
+      await writeFile(file, updated);
     }
 
     const err = await execFileAsync(process.execPath, [VALIDATE_MJS, dir, '--tier']).then(

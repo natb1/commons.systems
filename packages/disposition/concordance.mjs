@@ -35,6 +35,18 @@ import { fileURLToPath } from 'node:url';
 import { readGraph, defineTerms } from './read.mjs';
 
 /**
+ * The record's own bound on a term key: "a term used by more than a tenth
+ * of the record's nodes nominates nothing, since a key that pairs a hub
+ * with everything orders nothing and grows with the graph"
+ * (`survey-selection`, `the-whole-reading-is-a-backfill-and-the-delta-is-
+ * the-norm`). `candidatePairs` (packages/clean-context-review/brief.mjs)
+ * and the tier's `term-without-a-path` check (tier.mjs) both skip a term
+ * past this share; the constant is defined once, here, so the two do not
+ * carry two copies of the record's own number.
+ */
+export const TERM_KEY_MAX_SHARE = 0.10;
+
+/**
  * The canonical text of one node, for every scan that asks what a node says:
  * its question, the sections it carries, every fact's prose, every option's
  * prose, and the '## Recommendation' fence where it has one. The reader
@@ -43,10 +55,24 @@ import { readGraph, defineTerms } from './read.mjs';
  * -- a scan that composed its own would find terms and passages the other
  * did not.
  *
+ * An option's body enters the text once. In the content encoding
+ * `option.prose` is the whole `#### <option>` subsection, content fence
+ * included, and `option.resolved` is that fence resolved -- the same body a
+ * second time for an option held whole, where the fence's own text and its
+ * resolution are byte-identical. `resolved` is pushed only where `prose`
+ * does not already carry it, which keeps a named change's resolution (never
+ * present in `prose`, which holds only the diff) in the text exactly once.
+ *
+ * `account` defaults true; `duplicated-passage` reads a node with it
+ * `false`, since the apply script's own generated account sentences are not
+ * a passage two *authors* wrote alike and are not that check's business.
+ * No other caller passes the option, so `nodeText(node)` is unchanged.
+ *
  * @param {object} node
+ * @param {{account?: boolean}} [options]
  * @returns {string}
  */
-export function nodeText(node) {
+export function nodeText(node, { account = true } = {}) {
   const parts = [];
   const push = (s) => {
     if (typeof s === 'string' && s.length > 0) parts.push(s);
@@ -55,7 +81,7 @@ export function nodeText(node) {
   push(node?.disposition);
   push(node?.answer);
   push(node?.rationale);
-  push(node?.account);
+  if (account) push(node?.account);
   for (const fact of node?.facts ?? []) {
     push(fact?.prose);
     for (const option of fact?.options ?? []) {
@@ -63,7 +89,11 @@ export function nodeText(node) {
       push(option?.sentence);
       push(option?.aiSupport);
       push(option?.aiDivergence);
-      push(option?.resolved);
+      const resolved = option?.resolved;
+      const prose = option?.prose;
+      if (typeof resolved === 'string' && !(typeof prose === 'string' && prose.includes(resolved))) {
+        push(resolved);
+      }
     }
   }
   if (node?.fence && typeof node.fence.raw === 'string') push(node.fence.raw);

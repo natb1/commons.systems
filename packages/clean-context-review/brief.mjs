@@ -4,17 +4,26 @@
 // Writes one reviewer's brief for one clean-context reading, in the two
 // readings the review divides into by their object (clean-context-review.md,
 // "running two reviews divided by their object"; frontier-consistency.md,
-// which divides the fifteen validations between them; review-skills.md, which
+// which divides the sixteen validations between them; review-skills.md, which
 // makes the two readings two skills over this one package).
 //
 //   --node <id>  the review of one draft. Its object is that node's
 //                recommendation, and it runs the moment the recommendation is
 //                recorded, which is the node's transition to the review
-//                stage. The reader is given the node whole -- the '## Account'
-//                included, since a draft's dialogue is its own history -- its
-//                ancestry and the rules that bind everywhere, its siblings
-//                under the same parent, the nodes it names, and the index of
-//                every other question the record asks. Validations 1 to 6 and
+//                stage. The reader is given the node whole in the sense
+//                `review-cost` fixes and not file by file: its question, the
+//                resolved content of every option on its answer fact -- the
+//                recommended one once, under '#### Answer', and each rival as
+//                its difference from it -- its facts with every option's
+//                sentence and the AI's accumulated support and divergence,
+//                the probes standing on it, and the last '### ' section of
+//                its '## Account' with a line counting the earlier sections
+//                it omits and naming the file they are in, since an account
+//                grows with every reading applied while the draft it records
+//                does not. Beside it: its ancestry and the rules that bind
+//                everywhere, its siblings under the same parent, the nodes it
+//                names, and the index of every other question the record
+//                asks. Validations 1 to 6 and
 //                15. Writes tmp/review/draft-<slug>.brief.md and names
 //                tmp/review/draft-<slug>.json. It computes no model: the
 //                model and the effort both readings run on are the
@@ -29,7 +38,11 @@
 //                (`surveyJudges`), in the ruling order, carries their
 //                neighbourhood by what it answers, and freezes on one line
 //                every node whose pin still matches the text it holds.
-//                Validations 7 to 15. The whole reading, in which nothing
+//                Validations 7 to 15 of `frontier-consistency`, and the
+//                sixteenth, `probe-or-node`'s independence test, which only
+//                a reading holding the whole graph can run -- the sixteen
+//                as the survey's own template states them. The whole
+//                reading, in which nothing
 //                is frozen, is the backfill and not the norm: --whole or
 //                --validations-changed, and no cadence.
 //                No '## Account' goes into this brief -- the accounts are the
@@ -49,19 +62,21 @@
 // drafts never wait on each other, and the survey is serialized by the pin
 // its findings carry.
 //
-// Which brief a `--node` review writes is read off the record and not off
-// the verdict: a delta (re-reading) brief is written whenever the node's
-// `review.commit` is set and the node's file has changed since that commit,
-// whatever the last verdict was, forward or kickback, and whatever moved it
-// -- a kickback repaired in a few sentences, or a survey's frontier finding
-// landed on the node's own account. `review-cost`'s rule is that the
-// re-reading's object is the amendment and not the node, and the amendment
-// is the diff since the pin whichever reading or finding provoked it. A
-// draft brief is written when no commit is pinned yet (no reading has run,
-// or the graph was dirty when the last one did), or when the caller passes
-// `--draft` to force it regardless of what the record would otherwise
+// Which brief a `--node` review writes is read off the record and never off
+// a flag: a delta (re-reading) brief is written whenever the node's
+// `review.commit` is set, its last verdict was a forward, and the node's
+// file has changed since that commit -- whatever moved it, an amendment the
+// session wrote or a survey's frontier finding landed on the node's own
+// account. `review-cost`'s rule is that the re-reading's object is the
+// amendment and not the node, and the amendment is the diff since the pin
+// whichever reading or finding provoked it. A draft brief is written where a
+// fresh reading is what the record owes: after a kickback, since "a fresh
+// reading is owed only where the answer itself was redrawn, which is what a
+// kickback is" (`review-cost`), when no commit is pinned yet (no reading has
+// run, or the graph was dirty when the last one did), or when the caller
+// passes `--draft` to force it regardless of what the record would otherwise
 // choose (`--fresh` remains as a deprecated alias). No `--delta` flag is
-// needed to force the other way: wherever a commit is pinned and the file
+// needed to force the other way: wherever a forward is pinned and the file
 // has moved, the delta is what the record already owes.
 //
 // Usage:
@@ -79,8 +94,11 @@ import {
 } from "@commons.systems/disposition/read.mjs";
 import { diffText } from "@commons.systems/disposition/patch.mjs";
 import { renderFrontier } from "@commons.systems/disposition/project.mjs";
-import { concordance, nodeText } from "@commons.systems/disposition/concordance.mjs";
-import { checkTier, tierNotes, loadFoldable, TIER_CHECKS } from "@commons.systems/disposition/tier.mjs";
+import { concordance, nodeText, TERM_KEY_MAX_SHARE } from "@commons.systems/disposition/concordance.mjs";
+import {
+  checkTier, tierNotes, loadFoldable, partitionTier,
+  TIER_CHECKS, TIER_GATE_CHECKS, TIER_REPORT_CHECKS,
+} from "@commons.systems/disposition/tier.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRAFT_TEMPLATE_PATH = path.join(HERE, "brief-draft.md");
@@ -112,9 +130,10 @@ export const USAGE = [
   "exactly one of --node <id> and --survey is given: the review of one draft,",
   "or the survey of the frontier. The choice between a draft brief and a",
   "delta (re-reading) brief is read off the record and not off a flag: a",
-  "delta is written whenever the node's review.commit is set and its file",
-  "has changed since, whatever the last verdict; --draft (--node only)",
-  "forces the draft brief regardless (--fresh is a deprecated alias).",
+  "delta is written whenever the node's review.commit is set, its last",
+  "verdict was a forward, and its file has changed since; a kickback owes a",
+  "fresh reading and takes the draft brief; --draft (--node only) forces the",
+  "draft brief regardless (--fresh is a deprecated alias).",
 ].join("\n");
 
 function todayIsoUtc() {
@@ -530,11 +549,13 @@ function recommendationDiffersFromStanding(node) {
 }
 
 /**
- * The recommended option's own resolved content, content encoding only,
- * for the two call sites that render it once `recommendationDiffersFromStanding`
- * says it differs from what stands: `renderNeighbourNode`'s "Now recommends"
- * and `renderWholeNode`'s "Recommendation" section, where the legacy
- * encoding reads the '## Recommendation' fence instead and never calls this.
+ * The recommended option's own resolved content, content encoding only, for
+ * the one call site that renders it once `recommendationDiffersFromStanding`
+ * says it differs from what stands: `renderNeighbourNode`'s "Now recommends",
+ * where the legacy encoding reads the '## Recommendation' fence instead and
+ * never calls this. The node under review has no such section: there the
+ * recommended content is the '#### Answer' itself and every rival is a
+ * difference from it (`renderWholeNode`).
  */
 function recommendedOptionText(node) {
   const fact = node.answerFact;
@@ -543,11 +564,103 @@ function recommendedOptionText(node) {
     || `(the recommended option \`${fact.recommends}\` carries no content yet: nothing resolves to render)`;
 }
 
+/** Two spaces under the option's own bullet, blank lines left blank rather
+ * than turned into trailing whitespace. */
+function indentUnder(lines) {
+  return lines.map((line) => (line === "" ? "" : `  ${line}`));
+}
+
+/**
+ * What one option says for itself, under its own bullet: its sentence, the
+ * AI's accumulated support and divergence, and -- on the answer fact of a
+ * content-encoded node -- its content, compacted against the answer that
+ * already stands above.
+ *
+ * The sentence is read from `option.sentence` in the content encoding and
+ * never through `optionSentence`'s fallback to `option.prose`, which is the
+ * whole `#### <option>` subsection and so carries the content fence with it:
+ * that fallback exists for legacy options, which have no content, and taking
+ * it on a content option would put the option's whole node back in the brief
+ * -- the double carriage this compaction exists to strike. Where the
+ * sentence is empty, `missingProseText` says which kind of silence it is.
+ *
+ * The support and the divergence are kept, unlike `renderJudgedNode`, which
+ * strikes them: the draft's reader judges the AI's case for what it
+ * recommends, and that case is exactly this pair; the survey judges the
+ * frontier's consistency and no validation from the seventh to the sixteenth
+ * reads them (`review-cost`: "a part no validation reaches is struck rather
+ * than shortened").
+ *
+ * The content is `optionContentAgainstAnswer`'s, the same rule the survey
+ * applies: the recommended option's content is the '#### Answer' above and
+ * is named rather than repeated, and every rival is its sectionwise
+ * difference from it. Only the answer fact carries content on this record,
+ * and only a content-encoded node has any at all.
+ */
+function renderOptionCase(node, fact, option) {
+  const content = (node.encoding ?? "legacy") === "content";
+  const sentence = content
+    ? ((option.sentence || "").trim() || missingProseText(fact, option))
+    : (optionSentence(option) ?? missingProseText(fact, option));
+  const out = [...sentence.split("\n")];
+  if (option.aiSupport) out.push("", ...`**AI support.** ${option.aiSupport}`.split("\n"));
+  if (option.aiDivergence) out.push("", ...`**AI divergence.** ${option.aiDivergence}`.split("\n"));
+  if (content && fact.name === ANSWER_FACT) {
+    out.push("", ...optionContentAgainstAnswer(node, option, carriedOptionName(node), "#### Answer (the text that stands)"));
+  }
+  while (out.length > 0 && out[out.length - 1] === "") out.pop();
+  return out;
+}
+
+/**
+ * The probes standing on one node: the questions the record needs the author
+ * to answer before a recommendation on it can be grounded, which
+ * `author-questions` caps at three open on one node, "a compound probe
+ * counting as the probes it compounds, and the reading checks it as a
+ * finding naming the node and the probes; the parser does not enforce it".
+ *
+ * Every brief that asks its reader to check that cap carries this block, for
+ * the reason the cap is the reading's and not the parser's: a reader asked to
+ * enforce a cap against a set it is never shown counts only the probes it
+ * raises itself, and re-raises the questions the record has already asked.
+ * The discharged ones are carried for the same reason and with their reasons,
+ * since a discharged probe is precisely the question a fresh context is
+ * likeliest to ask again.
+ *
+ * One line each, which is what a count needs: the id, because a finding
+ * naming a probe names it by id; what it asks; the fact it bears on where it
+ * bears on one; and, for a discharged probe, what discharged it.
+ */
+function renderProbes(node, headingPrefix = "####") {
+  const probes = node.probes || [];
+  const open = probes.filter((p) => p.status !== "discharged");
+  const discharged = probes.filter((p) => p.status === "discharged");
+  const out = [
+    `${headingPrefix} Probes (the questions this node stands open on for the author)`,
+    "",
+    `${open.length} open of a cap of three, and ${discharged.length} discharged. `
+    + "A compound probe counts as the probes it compounds. The cap binds the movement and is checked by this reading, never by the parser.",
+    "",
+  ];
+  if (probes.length === 0) {
+    out.push("(no probe has been raised on this node)", "");
+    return out;
+  }
+  for (const p of open) {
+    out.push(`- \`${p.id}\` — open${p.fact ? `, on its \`${p.fact}\` fact` : ""}, raised ${p.raised} by ${p.source}: ${p.asks}`);
+  }
+  for (const p of discharged) {
+    out.push(`- \`${p.id}\` — discharged${p.fact ? `, on its \`${p.fact}\` fact` : ""}, raised ${p.raised} by ${p.source}: ${p.asks} — discharged: ${p.reason}`);
+  }
+  out.push("");
+  return out;
+}
+
 /**
  * Every fact of one node, whole: the reason the recommendation gives, then
  * each option with its source and reference, whether it is the recommended
  * one, the one that stands, or the ruled one, the readings that bear on it,
- * and the prose that says what it would answer.
+ * and, under its bullet, what it says for itself (`renderOptionCase`).
  */
 function renderFacts(node, headingPrefix, byId = null) {
   const facts = node.facts || [];
@@ -572,8 +685,7 @@ function renderFacts(node, headingPrefix, byId = null) {
       out.push(`- \`${option.name}\` — ${origin}${marks.length > 0 ? ` — ${marks.join("; ")}` : ""}`);
       const readings = readingsText(option, byId);
       if (readings) out.push(`  - Readings bearing on it: ${readings}`);
-      const prose = option.prose && option.prose.length > 0 ? option.prose : missingProseText(fact, option);
-      for (const line of prose.split("\n")) out.push(`  ${line}`);
+      out.push(...indentUnder(renderOptionCase(node, fact, option)));
       out.push("");
     }
   }
@@ -581,17 +693,38 @@ function renderFacts(node, headingPrefix, byId = null) {
 }
 
 /**
- * One node in full: question, the author's words, the text that stands, the
- * rationale, every fact with every option it holds viable, the
- * '## Recommendation' fence when there is one, and the account.
+ * One node in full, in the sense `review-cost` fixes for the one node a
+ * reading is judging: question, the author's words, the text that stands,
+ * the rationale, the probes standing on it, and every fact with every option
+ * it holds viable -- each option's sentence, the AI's support and divergence
+ * on it, and its content -- together with the last section of its account.
+ *
+ * Whole is not the same as twice. The answer that stands is the recommended
+ * option's own resolved content, so a render that prints that content under
+ * '#### Answer' and then prints every option's `#### <option>` subsection
+ * raw prints the recommendation's whole node twice and carries every rival's
+ * whole node beside it: 437,719 bytes for `review-cost` on 2026-09-08,
+ * against the 2,000-line bound the reading's own launch prompt promises. So
+ * the option content goes through `optionContentAgainstAnswer`, the survey's
+ * own compaction (`renderJudgedNode`): the recommended content stands once,
+ * under '#### Answer', and every rival is its sectionwise difference from
+ * it. What the draft's reader keeps that the survey's does not is the
+ * option's sentence and the AI's accumulated support and divergence, which
+ * are the case the draft's reader is judging (`renderOptionCase`).
+ *
+ * There is no '#### Recommendation' section: in the content encoding
+ * '## Recommendation' is a struck section and `renderedAnswerText` above
+ * already resolves the recommended option's content, so the block said
+ * "(no '## Recommendation' fence...)" on all 154 nodes of the record and
+ * repeated the answer on any node it ever fired for.
  *
  * `account: false` leaves the '## Account' out. The survey's brief never
  * carries an account (`clean-context-review`: the accounts "are the
  * dialogue's history and not its text"), and neither do the neighbourhood
- * nodes of a draft's brief; the draft under review carries its own, since a
- * verdict on it answers the dialogue that produced it.
+ * nodes of a draft's brief; the draft under review carries its own last
+ * section, since a verdict on it answers the dialogue that produced it.
  */
-function renderWholeNode(node, { account = true, byId = null } = {}) {
+export function renderWholeNode(node, { account = true, byId = null } = {}) {
   const parts = [
     `### ${node.id}`,
     "",
@@ -620,19 +753,15 @@ function renderWholeNode(node, { account = true, byId = null } = {}) {
     "",
     node.rationale || "(no '## Rationale' section)",
     "",
+  );
+  parts.push(...renderProbes(node));
+  parts.push(
     "#### Facts (every decision on this node, and every option it holds viable)",
+    "",
+    "The recommended option's content is the '#### Answer' above and is not carried again; every other option's content is the difference from it, section by section, and the node's file is one read away at the path in the heading above.",
     "",
   );
   parts.push(...renderFacts(node, "#####", byId));
-
-  parts.push("#### Recommendation (the recommended node in full, when the recommended option is not the one that stands)", "");
-  if (node.fence && typeof node.fence.raw === "string") {
-    parts.push("```markdown", node.fence.raw, "```", "");
-  } else if ((node.encoding ?? "legacy") === "content" && recommendationDiffersFromStanding(node)) {
-    parts.push("```markdown", recommendedOptionText(node), "```", "");
-  } else {
-    parts.push("(no '## Recommendation' fence: the answer fact recommends the option that stands, or recommends nothing)", "");
-  }
 
   if (account) {
     const { text: lastSection, omitted } = lastAccountSectionOnly(node.account);
@@ -1013,23 +1142,29 @@ export function frontierFindingSectionsSince(accountText, sinceDate) {
 
 /**
  * Which brief a `--node` review writes, decided from the record and never
- * from the verdict or a flag the session sets on its own account
- * (`review-cost`: "an amendment made for a reading's findings is read once
- * more, that re-reading's object being the amendment and not the node"). A
- * delta is owed whenever `review.commit` is set -- a reading has pinned a
- * commit -- and the node's file has changed since, whatever the last
- * verdict: a forward later amended, a kickback repaired in a few sentences,
- * or a node a survey's frontier finding sent back without ever touching
- * `review.verdict` at all. The verdict is not asked, because "whatever
- * moved it" includes cases the verdict cannot name: `apply.mjs` writes a
- * survey's finding onto a node's `## Account` and its answer fact and can
- * move its `stage` back to `maieutic` or `periagogic` without writing
- * `review.verdict: kickback`, and that amendment owes exactly the same
- * re-reading a kickback's does. `--draft` remains as an override that
- * always forces the draft brief regardless (`--fresh` is a deprecated
- * alias); no `--delta` flag is needed the other way, since wherever a
- * commit is pinned and the file has moved, the delta is what the record
- * already owes.
+ * from a flag the session sets on its own account (`review-cost`: "an
+ * amendment made for a reading's findings is read once more, that
+ * re-reading's object being the amendment and not the node"). A delta is
+ * owed where the last reading forwarded the draft, `review.commit` is set --
+ * that reading pinned a commit -- and the node's file has changed since:
+ * a forward later amended, or a node a survey's frontier finding sent back
+ * without ever touching `review.verdict` at all. The verdict is asked, and
+ * asked for one thing only: the same node's answer says "a fresh reading is
+ * owed only where the answer itself was redrawn, which is what a kickback
+ * is", so a `review.verdict: kickback` takes the draft brief and not the
+ * delta. A kickback is not an amendment answering findings, it is a new
+ * answer, and reading it as a difference against the answer it replaced
+ * both under-reads the redraw and mis-counts it against the two-reading cap,
+ * whose own clause is that "a kickback is a new answer, which owes a reading
+ * of its own". What the verdict is not asked to decide is the case it cannot
+ * name: `apply.mjs` writes a survey's finding onto a node's `## Account` and
+ * its answer fact and can move its `stage` back to `maieutic` or
+ * `periagogic` while leaving `review.verdict` exactly as the last reading
+ * wrote it, and that amendment owes the delta, which is why the test is the
+ * verdict and never the stage. `--draft` remains as an override that always
+ * forces the draft brief regardless (`--fresh` is a deprecated alias); no
+ * `--delta` flag is needed the other way, since wherever a forward is
+ * pinned and the file has moved, the delta is what the record already owes.
  *
  * Falls back to the draft brief, with `fallback: true` and a reason naming
  * it, wherever the re-reading has nothing to read against: no commit
@@ -1038,13 +1173,17 @@ export function frontierFindingSectionsSince(accountText, sinceDate) {
  * git checkout at the time), a commit `git show` cannot resolve the node's
  * file at, or an account carrying no prior `### Clean-context review,` or
  * `### Clean-context re-reading,` subsection to re-read against.
+ * The fallback checks that name a defect of the record are asked before
+ * the verdict is, so a kickback whose review pinned no commit is reported
+ * as the missing pin it is and not as the kickback it also is.
+ *
  * `fallback: false` on a draft means there is nothing new to read at all
  * (no review yet, or the file matches the pinned commit exactly) and not
  * that a re-reading was owed and could not be produced.
  *
  * @returns {{mode: "draft"|"delta", reason: string, fallback: boolean,
  *   commit?: string, diff?: string, previous?: string,
- *   frontierFindings?: string[], kickback?: boolean}}
+ *   frontierFindings?: string[]}}
  */
 export function chooseMode(node, { rootDir, draft }) {
   if (draft) {
@@ -1063,6 +1202,13 @@ export function chooseMode(node, { rootDir, draft }) {
       mode: "draft",
       reason: "the node's last review names no commit to diff against: nothing for a re-reading to read",
       fallback: true,
+    };
+  }
+  if (node.review.verdict === "kickback") {
+    return {
+      mode: "draft",
+      reason: "the last reading kicked this answer back, and a kickback redraws the answer: a fresh reading is owed and not a re-reading of an amendment",
+      fallback: false,
     };
   }
   const relPath = `${node.graph}/${node.slug}.md`;
@@ -1089,19 +1235,15 @@ export function chooseMode(node, { rootDir, draft }) {
       fallback: true,
     };
   }
-  const kickback = node.review.verdict === "kickback";
   const frontierFindings = frontierFindingSectionsSince(node.account, node.review.date);
   return {
     mode: "delta",
-    reason: kickback
-      ? "the last reading kicked this answer back, and review.commit is set with the file since amended: the re-reading's object is the repair"
-      : "review.commit is set and the node's file has changed since: a re-reading is owed on the difference, whatever moved it",
+    reason: "the last reading forwarded this answer, review.commit is set, and the node's file has changed since: a re-reading is owed on the difference, whatever moved it",
     fallback: false,
     commit,
     diff,
     previous,
     frontierFindings,
-    kickback,
   };
 }
 
@@ -1475,9 +1617,6 @@ export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry
     frontier_findings: mode.frontierFindings.length > 0
       ? mode.frontierFindings.join("\n\n")
       : "(no `### Frontier finding` section dated on or after the last review: the repair answers only the previous reading's findings above)",
-    kickback_note: mode.kickback
-      ? "**The last reading kicked this node back; the amendment below is the repair, and your object is whether each finding is answered.**\n\n"
-      : "",
     graph_commit: commitText(graphCommit(rootDir)),
     out: outFile,
   });
@@ -1521,13 +1660,14 @@ const ANSWER_FACT = "answer";
  * standing check. */
 const PROBE_DENOMINATOR = 20;
 const PROBE_FLOOR = 10;
-/** "a defined term outside the record's commonest ... where a term used by
- * more than a tenth of the record's nodes nominates nothing, since a key
- * that pairs a hub with everything orders nothing and grows with the
- * graph". Measured at graph commit 11191654 the two commonest terms,
- * `readings` and `growth`, were used by 153 and 140 of 154 nodes and
- * nominated the whole graph. */
-const TERM_KEY_MAX_SHARE = 0.10;
+// TERM_KEY_MAX_SHARE: "a defined term outside the record's commonest ...
+// where a term used by more than a tenth of the record's nodes nominates
+// nothing, since a key that pairs a hub with everything orders nothing and
+// grows with the graph". Measured at graph commit 11191654 the two
+// commonest terms, `readings` and `growth`, were used by 153 and 140 of 154
+// nodes and nominated the whole graph. Defined once, in concordance.mjs,
+// and imported here so the tier's own use of the same bound
+// (`term-without-a-path`) cannot drift from this one.
 /** "near-duplicate resemblance, a Jaccard similarity over word shingles of
  * a half or more". The shingle length is not fixed by the answer; three
  * words is the usual choice and is stated here rather than buried. */
@@ -1832,6 +1972,23 @@ export function jaccard(a, b) {
  * reading and does not partition the brief, and every node the brief
  * carries stays readable whether a key reached it or not.
  *
+ * **The hub bound holds for every key, and not for one of them.** Whatever
+ * relation a key runs on, what stands at more than `TERM_KEY_MAX_SHARE` of
+ * the record's nodes nominates nothing on that key: a term more than a
+ * tenth of the nodes use pairs with none of them, and a node whose prose
+ * names more than a tenth of the record names none of them here. A key that
+ * pairs a hub with everything orders nothing and grows with the graph,
+ * which is the author's bound of 2026-09-07 (`words/2026-09-07/23`) --
+ * "no process of this record grows with the record's size without bound" --
+ * applied to the generator. It is a share and not a count, so that it holds
+ * at any size of record, and it silences a key and never an edge the record
+ * declared: a hub's `depends` entries are written on purpose and are
+ * nominated by their own key (`depends`, never folded into `cites`), which
+ * is what stands where the scraped citation falls away. Stating it once is
+ * what stops the next key from arriving unbounded, which is how the
+ * citation key arrived (`survey-selection`, the option
+ * `the-hub-bound-holds-for-every-key`).
+ *
  * @param {object} graph
  * @param {{concordance?: object}} [options] - a concordance already
  *   computed (the tier has one), to save the second walk.
@@ -1841,6 +1998,11 @@ export function candidatePairs(graph, { concordance: conc = null } = {}) {
   const nodes = graph?.nodes ?? [];
   const ids = new Set(nodes.map((n) => n.id));
   const map = new Map();
+
+  // The one bound, measured once for every key that runs on a relation a
+  // node can stand at the hub of: more than this many nodes on the far side
+  // and the key nominates nothing from that side. See the docblock.
+  const hubCeiling = nodes.length * TERM_KEY_MAX_SHARE;
 
   // a term where one node defines it and the other uses it -- never two
   // users of the same term with each other. Pairing every user with every
@@ -1862,7 +2024,6 @@ export function candidatePairs(graph, { concordance: conc = null } = {}) {
   // (`the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`), and it is
   // a share and not a count so that it holds at any size of record.
   const terms = (conc ?? concordance(graph)).terms;
-  const hubCeiling = nodes.length * TERM_KEY_MAX_SHARE;
   for (const entry of terms) {
     const users = new Set(entry.users.map((u) => u.node));
     if (users.size > hubCeiling) continue;
@@ -1891,17 +2052,39 @@ export function candidatePairs(graph, { concordance: conc = null } = {}) {
   }
   for (const [parent, kin] of byParent) pairsAmong(map, [...kin], `parent:${parent}`);
 
-  // a citation either way, in prose or in `depends`
+  // a citation either way, in prose or in `depends` -- two keys and not one,
+  // so that the bound below silences the scrape and leaves the declaration
+  // standing.
+  //
+  // The scrape is where the hub bound bites hardest: `namesNode` counts a
+  // slug followed by the word "node" in prose, and the nodes whose whole
+  // business is to name their neighbours -- the readings, `dialogue`,
+  // `authority` -- pair with almost everything there is. Measured at graph
+  // deb24ce4, `cites` nominated 2,525 of the generator's 2,991 pairs and was
+  // the sole key on 2,010 of them, with 86 of the record's 154 nodes naming
+  // more than a tenth of it; the median node named 19 others against a
+  // ceiling of 15.4. So the out-degree is measured once per node and the key
+  // is silenced from that node's side where it exceeds the ceiling. What
+  // that node declared in `depends` is untouched: those pairs are nominated
+  // on their own key above, which is the point of keeping the two apart.
   const texts = new Map(nodes.map((n) => [n.id, nodeText(n)]));
+  const namedBy = new Map();
+  for (const node of nodes) {
+    const text = texts.get(node.id) ?? "";
+    const named = [];
+    for (const other of nodes) {
+      if (other.id === node.id) continue;
+      if (namesNode(text, other)) named.push(other.id);
+    }
+    namedBy.set(node.id, named);
+  }
   for (const node of nodes) {
     for (const d of node.depends ?? []) {
       if (ids.has(d.id)) addPair(map, node.id, d.id, "depends");
     }
-    const text = texts.get(node.id) ?? "";
-    for (const other of nodes) {
-      if (other.id === node.id) continue;
-      if (namesNode(text, other)) addPair(map, node.id, other.id, "cites");
-    }
+    const named = namedBy.get(node.id) ?? [];
+    if (named.length > hubCeiling) continue;
+    for (const other of named) addPair(map, node.id, other, "cites");
   }
 
   // near-duplicate resemblance
@@ -2136,6 +2319,12 @@ export async function appendSurveyHistory(historyPath, history, entry) {
  * source still moves the node for the next delta even though this render
  * shows less of it.
  *
+ * The probes stay, open and discharged alike (`renderProbes`), for the one
+ * reason a part earns its place in a brief: a validation reads it. This
+ * reading is asked to check the cap of three open probes on every node it
+ * judges, counting what the node already carries together with what it
+ * raises, and a reader shown no probe counts only its own.
+ *
  * The heading, the file and the stage line stay: a reading's heading is an
  * address, and a finding names the node it is written on.
  */
@@ -2154,6 +2343,11 @@ export function renderJudgedNode(node, words = null, byId = null) {
   const bears = bearsText(node);
   if (bears) parts.push(`- Bears on (this node is a reading): ${bears}`);
   parts.push(`- Review state: ${reviewLine(node)}`);
+
+  parts.push("", ...renderProbes(node));
+  // `renderProbes` closes on a blank line, and the next section opens with
+  // one of its own below.
+  while (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
 
   const carried = carriedOptionName(node);
   const fact = node.answerFact ?? null;
@@ -2393,10 +2587,18 @@ function renderSectionwiseDifference(node, base, target) {
  * measured rather than assumed (`survey-selection`'s "its content never
  * rendered twice"): whichever is shorter, the section's body whole or its
  * difference from the judged node's own.
+ *
+ * The two readings head the carried answer differently -- the survey writes
+ * "#### The one answer that binds", the draft "#### Answer (the text that
+ * stands)" -- so the caller names its own heading and the line that points
+ * the reader back to it points at a heading that is actually there.
+ *
+ * @param {string} answerHeading - the heading the resolved answer stands
+ *   under in the caller's own block.
  */
-function optionContentAgainstAnswer(node, option, carried) {
+function optionContentAgainstAnswer(node, option, carried, answerHeading = "#### The one answer that binds") {
   if (option.name === carried) {
-    return ["Content: the node as rendered above, under '#### The one answer that binds'.", ""];
+    return [`Content: the node as rendered above, under '${answerHeading}'.`, ""];
   }
   const content = option.content ?? null;
   if (content === null) {
@@ -2583,6 +2785,91 @@ export function groupedPairLines(live, judged, probeIds = new Set()) {
 
 // ------------------------------------------------------ the frontier survey
 
+/** The heading the tier's report kind is carried under in the survey brief. */
+export const TIER_REPORT_HEADING = "## What the record already knows about itself";
+
+/**
+ * The tier's two kinds, each given its own job
+ * (`survey-selection`, the option
+ * `the-gate-refuses-only-what-an-instrument-clears`).
+ *
+ * The **gate** kind is a defect of the encoding, which an instrument or the
+ * session clears before the launch: it refuses the launch, and `forceTier`
+ * is the diagnostic override for it and for nothing else. The **report**
+ * kind is a state of the record no instrument clears, only a sitting: it
+ * gates nothing and is carried into the brief. A gate whose findings the
+ * session can only acknowledge is refused on every run and bypassed on
+ * every run, and the bypass is then the launch -- which is what this split
+ * ends, measured at graph 513edc3b as 211 findings of which the gate kind
+ * was 0.
+ *
+ * The refusal names only the gating checks and their count: a reader told
+ * that eight checks refused it, four of which cannot, has been told the
+ * wrong thing.
+ *
+ * @param {Array<{check: string, node: string|null, detail: string, kind: string}>} findings
+ * @param {{rootDir?: string|null, forceTier?: boolean}} [options]
+ * @returns {{gate: object[], report: object[], error: Error|null}}
+ */
+export function tierGate(findings, { rootDir = null, forceTier = false } = {}) {
+  const { gate, report } = partitionTier(findings);
+  if (gate.length === 0 || forceTier) return { gate, report, error: null };
+  const shown = gate.slice(0, 20).map((f) => `  ${f.check}: ${f.node ?? "(graph)"}: ${f.detail}`);
+  const error = new Error(
+    `the mechanical tier reports ${gate.length} finding(s) over the ${TIER_GATE_CHECKS.length} checks that gate `
+    + `the launch (${TIER_GATE_CHECKS.join(", ")}), so no reader is launched: repair the nodes or kick them back.\n`
+    + `${shown.join("\n")}\n`
+    + (gate.length > shown.length
+      ? `  ... and ${gate.length - shown.length} more (node packages/disposition/validate.mjs ${rootDir ?? "<graph>"} --tier)\n`
+      : "")
+    + "Pass --force-tier to write the brief anyway, for diagnosis; the brief then says it was launched over a failing tier.",
+  );
+  error.exitCode = 3;
+  error.tierFindings = gate;
+  return { gate, report, error };
+}
+
+/**
+ * The tier's report kind, and the notes beside it, as the brief carries
+ * them: one line each under a heading of their own, grouped by check with a
+ * count per check, in the tier's own order. "They are reported beside the
+ * tier and carried into the brief as one line each, so that the reader has
+ * what the record already knows about itself and is not stopped by it."
+ *
+ * @param {Array<{check: string, node: string|null, detail: string}>} report
+ * @param {Array<{note: string, detail: string}>} [notes]
+ * @returns {string}
+ */
+export function tierReportSection(report, notes = []) {
+  const groups = new Map();
+  for (const f of report) {
+    if (!groups.has(f.check)) groups.set(f.check, []);
+    groups.get(f.check).push(`- ${f.node ?? "(graph)"}: ${f.detail}`);
+  }
+  for (const n of notes) {
+    if (!groups.has(n.note)) groups.set(n.note, []);
+    groups.get(n.note).push(`- ${n.detail}`);
+  }
+  const order = [...TIER_REPORT_CHECKS, ...[...groups.keys()].filter((k) => !TIER_REPORT_CHECKS.includes(k))];
+  const lead = [
+    TIER_REPORT_HEADING,
+    "",
+    "These are states of the record that no instrument clears and that only a sitting can, so they gate nothing and you are not stopped by them: they are here as what the record already knows about itself, and a finding of yours that repeats one of them tells the record nothing it has not already measured.",
+    "",
+  ];
+  const total = report.length + notes.length;
+  if (total === 0) {
+    return [...lead, "(nothing: the tier's report kind found no state of the record to name, and every ledger entry is referenced)"].join("\n");
+  }
+  const body = [];
+  for (const check of order) {
+    const lines = groups.get(check);
+    if (!lines || lines.length === 0) continue;
+    body.push(`### \`${check}\` (${lines.length})`, "", ...lines, "");
+  }
+  return [...lead, ...body].join("\n").trimEnd();
+}
+
 /**
  * The sidecar the apply step compares against, written the moment the survey
  * is briefed: the graph commit the survey reads, the ids it judges, and the
@@ -2650,7 +2937,10 @@ export function surveyPins({ graph, judged, read = [], date, commit, dirty }) {
  *
  * Three things happen before any of that, and they are the answer's order:
  * the mechanical tier runs over the whole graph and refuses the launch on a
- * finding (`forceTier` bypasses it and stamps the brief); the run is whole
+ * finding of its gate kind, the report kind gating nothing and being carried
+ * into the brief instead (`tierGate`, `tierReportSection`; `forceTier`
+ * bypasses a gating finding and stamps the brief, and stamps nothing where
+ * there was none to bypass); the run is whole
  * or a delta, the whole reading being a backfill the caller asks for; and
  * the candidate pairs are nominated and cut, leaving the frozen set and the
  * drift probe drawn from it on the recorded seed.
@@ -2674,28 +2964,18 @@ export async function writeSurveyBrief({
   const effectiveDate = date ?? todayIsoUtc();
   const { commit, dirty } = graphCommit(rootDir);
 
-  // The tier gates the launch: "no reader is launched while one of them
-  // reports a finding". It runs over the whole graph and not over the judged
-  // set, because a finding on a node the survey merely reads as context is
-  // still a defect the reader would spend its context on.
+  // The tier runs over the whole graph and not over the judged set, because
+  // a finding on a node the survey merely reads as context is still a defect
+  // the reader would spend its context on. Only the gate kind refuses the
+  // launch; the report kind is carried into the brief below (`tierGate`).
   const conc = concordance(graph);
   const foldable = await loadFoldable();
   const tierFindings = checkTier(graph, { words: graph.words, foldable, concordance: conc });
   const notes = tierNotes(graph, { words: graph.words });
-  if (tierFindings.length > 0 && !forceTier) {
-    const shown = tierFindings.slice(0, 20)
-      .map((f) => `  ${f.check}: ${f.node ?? "(graph)"}: ${f.detail}`);
-    const err = new Error(
-      `the mechanical tier reports ${tierFindings.length} finding(s) over ${TIER_CHECKS.length} checks, `
-      + "so no reader is launched: repair the nodes or kick them back.\n"
-      + `${shown.join("\n")}\n`
-      + (tierFindings.length > shown.length ? `  ... and ${tierFindings.length - shown.length} more (node packages/disposition/validate.mjs ${rootDir} --tier)\n` : "")
-      + "Pass --force-tier to write the brief anyway, for diagnosis; the brief then says it was launched over a failing tier.",
-    );
-    err.exitCode = 3;
-    err.tierFindings = tierFindings;
-    throw err;
-  }
+  const { gate: gateFindings, report: reportFindings, error: tierError } = tierGate(
+    tierFindings, { rootDir, forceTier },
+  );
+  if (tierError !== null) throw tierError;
 
   // Whole or delta. The delta is the norm and the whole reading is the
   // backfill: `--whole` is the author's word and `--validations-changed`
@@ -2752,12 +3032,18 @@ export async function writeSurveyBrief({
   // compare, and the reached-but-unchanged lines with the neighbourhood.
   // Each fills its own named placeholder; none of them is folded into a
   // single `###`-headed blob the way `batch_index` used to carry all six.
+  // "The reading's own report says which checks ran, of which kind, and what
+  // the second kind found." So the stamp counts the two kinds separately and
+  // points at the section that carries the second, and the forced line fires
+  // only where the override actually bypassed a gating finding.
   const tierStamp = [
-    `- The mechanical tier ran ${TIER_CHECKS.length} checks (${TIER_CHECKS.join(", ")}) and reported `
-      + `${tierFindings.length} finding(s)${notes.length > 0 ? `, with ${notes.length} note(s) beside it, gating nothing` : ""}.`
+    `- The mechanical tier ran ${TIER_CHECKS.length} checks of two kinds. The ${TIER_GATE_CHECKS.length} that gate the launch `
+      + `(${TIER_GATE_CHECKS.join(", ")}) reported ${gateFindings.length} finding(s); the ${TIER_REPORT_CHECKS.length} that report a state of the record `
+      + `(${TIER_REPORT_CHECKS.join(", ")}) reported ${reportFindings.length} finding(s)`
+      + `${notes.length > 0 ? `, with ${notes.length} note(s) beside them` : ""}, and gate nothing: they are carried below, under "${TIER_REPORT_HEADING.replace(/^#+ /, "")}".`
       + " A clean tier is not a clean frontier: these checks are what a machine can decide, and nothing else.",
-    tierFindings.length > 0
-      ? `- **This brief was launched over a failing tier (\`--force-tier\`), for diagnosis.** ${tierFindings.length} finding(s) stand unrepaired; treat what they name with suspicion.`
+    gateFindings.length > 0
+      ? `- **This brief was launched over a failing tier (\`--force-tier\`), for diagnosis.** ${gateFindings.length} gating finding(s) stand unrepaired; treat what they name with suspicion.`
       : null,
   ].filter((line) => line !== null).join("\n");
 
@@ -2829,6 +3115,7 @@ export async function writeSurveyBrief({
     neighbourhood_count: String(neighbourNodes.length),
     context_count: String(contextNodes.length + unchangedReached.length),
     tier_stamp: tierStamp,
+    tier_report: tierReportSection(reportFindings, notes),
     selection_summary: selectionSummary,
     judged_index: judgedIndex,
     live_pairs: livePairs,
@@ -2858,7 +3145,15 @@ export async function writeSurveyBrief({
     whole: isWhole,
     demand,
     seed,
-    tier: { checks: TIER_CHECKS, findings: tierFindings, notes, forced: forceTier && tierFindings.length > 0 },
+    tier: {
+      checks: TIER_CHECKS,
+      gateChecks: TIER_GATE_CHECKS,
+      reportChecks: TIER_REPORT_CHECKS,
+      findings: tierFindings,
+      report: reportFindings,
+      notes,
+      forced: forceTier && gateFindings.length > 0,
+    },
     judged: judged.map((n) => ({ node: n.id, why: reasons.get(n.id) ?? null })),
     // The three node lists the selection is made of, each by id: what the
     // brief carried by what it answers, what the pins froze, and which of
@@ -2896,9 +3191,12 @@ export async function writeSurveyBrief({
     whole: isWhole,
     wholeDemanded: demand.demanded,
     wholeWhy: demand.why,
-    tierFindingCount: tierFindings.length,
+    // `tierFindingCount` is the gating count: it is what the launch turns
+    // on, and the report kind is counted beside it and never in it.
+    tierFindingCount: gateFindings.length,
+    tierReportCount: reportFindings.length,
     tierNoteCount: notes.length,
-    tierForced: forceTier && tierFindings.length > 0,
+    tierForced: forceTier && gateFindings.length > 0,
     lines,
     bytes,
     commit,
@@ -2985,7 +3283,7 @@ if (isMain) {
         });
         console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
         console.log(`survey: ${r.batchCount} node(s) judged; neighbourhood ${r.neighbourhoodCount} node(s); reached but unchanged, one line each: ${r.unchangedReachedCount}; context: ${r.contextCount} node(s); ${r.bytes} bytes over ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);
-        console.log(`tier: ${r.tierFindingCount} finding(s) over ${TIER_CHECKS.length} checks, ${r.tierNoteCount} note(s)${r.tierForced ? " -- LAUNCHED OVER A FAILING TIER (--force-tier)" : ""}`);
+        console.log(`tier: ${r.tierFindingCount} gating finding(s) over ${TIER_GATE_CHECKS.length} gating checks, ${r.tierReportCount} reported over ${TIER_REPORT_CHECKS.length} reporting checks, ${r.tierNoteCount} note(s)${r.tierForced ? " -- LAUNCHED OVER A FAILING TIER (--force-tier)" : ""}`);
         console.log(`survey: ${r.whole ? "whole" : "delta"}${r.wholeDemanded ? " (demanded)" : ""}: ${r.wholeWhy}`);
         // What the reading cost, in the terms the bound is stated in: what
         // moved, what its partners are, and what the pins froze.

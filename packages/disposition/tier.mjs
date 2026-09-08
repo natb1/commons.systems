@@ -51,22 +51,63 @@
 // since it may be context the record has not yet attached". `tierNotes`
 // returns those; `checkTier` never does.
 import { resolveOptionContent } from './read.mjs';
-import { concordance, nodeText } from './concordance.mjs';
+import { concordance, nodeText, TERM_KEY_MAX_SHARE } from './concordance.mjs';
+
+/**
+ * The checks the tier holds, in the order the answer lists them, each with
+ * the kind `the-gate-refuses-only-what-an-instrument-clears` divides them
+ * into: "gate", a defect of the encoding an instrument or the session
+ * clears before the launch, or "report", a state of the record that no
+ * instrument can clear and that gates nothing. Which kind a check is
+ * follows that option's own rule, stated once for the whole tier: "a check
+ * gates only where naming the defect is most of repairing it".
+ */
+const TIER_CHECK_KINDS = [
+  { name: 'unresolved-reference', kind: 'gate' },
+  { name: 'recommendation-past-its-pin', kind: 'report' },
+  { name: 'duplicate-option-name', kind: 'gate' },
+  { name: 'option-content-unresolvable', kind: 'gate' },
+  { name: 'term-without-a-path', kind: 'report' },
+  { name: 'unresolved-words-reference', kind: 'gate' },
+  { name: 'duplicated-passage', kind: 'report' },
+  { name: 'unfolded-account-section', kind: 'report' },
+];
 
 /**
  * The checks the tier holds, in the order the answer lists them. Reported by
  * every run, clean or not.
  */
-export const TIER_CHECKS = [
-  'unresolved-reference',
-  'recommendation-past-its-pin',
-  'duplicate-option-name',
-  'option-content-unresolvable',
-  'term-without-a-path',
-  'unresolved-words-reference',
-  'duplicated-passage',
-  'unfolded-account-section',
-];
+export const TIER_CHECKS = TIER_CHECK_KINDS.map((c) => c.name);
+
+/**
+ * The checks of the first kind: a defect of the encoding, cleared by an
+ * instrument or the session before the launch, and gating it while any of
+ * them reports a finding.
+ */
+export const TIER_GATE_CHECKS = TIER_CHECK_KINDS.filter((c) => c.kind === 'gate').map((c) => c.name);
+
+/**
+ * The checks of the second kind: a state of the record that no instrument
+ * can clear, reported beside the tier and gating nothing.
+ */
+export const TIER_REPORT_CHECKS = TIER_CHECK_KINDS.filter((c) => c.kind === 'report').map((c) => c.name);
+
+const TIER_CHECK_KIND = new Map(TIER_CHECK_KINDS.map((c) => [c.name, c.kind]));
+
+/**
+ * Split a list of `checkTier` findings by `kind`.
+ *
+ * @param {Array<{kind: string}>} findings
+ * @returns {{gate: object[], report: object[]}}
+ */
+export function partitionTier(findings) {
+  const gate = [];
+  const report = [];
+  for (const finding of findings) {
+    (finding.kind === 'gate' ? gate : report).push(finding);
+  }
+  return { gate, report };
+}
 
 /** The byte length at which a passage shared by two nodes is a finding. */
 export const PASSAGE_BYTES = 200;
@@ -164,14 +205,14 @@ function passagesOf(text) {
  *   place of `foldableSections`; `concordance`, where given, is one already
  *   derived over the same graph, so a caller that has both the tier and the
  *   concordance to render walks the terms once.
- * @returns {Array<{check: string, node: string|null, detail: string}>}
+ * @returns {Array<{check: string, node: string|null, detail: string, kind: string}>}
  */
 export function checkTier(graph, { words = null, foldable = null, concordance: conc = null } = {}) {
   const nodes = Array.isArray(graph) ? graph : (graph?.nodes ?? []);
   const ledger = words ?? (Array.isArray(graph) ? null : graph?.words) ?? new Map();
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const findings = [];
-  const add = (check, node, detail) => findings.push({ check, node, detail });
+  const add = (check, node, detail) => findings.push({ check, node, detail, kind: TIER_CHECK_KIND.get(check) });
 
   // unresolved-reference
   for (const node of nodes) {
@@ -295,7 +336,17 @@ export function checkTier(graph, { words = null, foldable = null, concordance: c
   }
 
   // term-without-a-path
+  //
+  // A term used by more than a tenth of the record's nodes is the record's
+  // own ordinary vocabulary and not a term a reader meets with no way back
+  // to its definer -- `candidatePairs` (brief.mjs) already applies this
+  // bound to the same concordance for the same reason, "a key that pairs a
+  // hub with everything orders nothing and grows with the graph"
+  // (`survey-selection`). `TERM_KEY_MAX_SHARE` is that one constant, shared
+  // rather than duplicated.
+  const hubCeiling = nodes.length * TERM_KEY_MAX_SHARE;
   for (const entry of (conc ?? concordance({ nodes })).terms) {
+    if (entry.users.length > hubCeiling) continue;
     for (const user of entry.users) {
       if (user.reachable) continue;
       add('term-without-a-path', user.node, `uses the term '${entry.term}', which ${entry.defines} defines, with no path to it over 'under', 'depends' or 'cites'`);
@@ -320,9 +371,15 @@ export function checkTier(graph, { words = null, foldable = null, concordance: c
   }
 
   // duplicated-passage
+  //
+  // Without its account: the apply script writes some account sentences
+  // onto every node it touches (the survey and review notices among them),
+  // so a passage shared only because two nodes were touched the same way is
+  // not the duplication this check exists to find, which is prose two
+  // authors wrote alike.
   const byPassage = new Map();
   for (const node of nodes) {
-    for (const passage of passagesOf(nodeText(node))) {
+    for (const passage of passagesOf(nodeText(node, { account: false }))) {
       if (!byPassage.has(passage)) byPassage.set(passage, []);
       byPassage.get(passage).push(node.id);
     }

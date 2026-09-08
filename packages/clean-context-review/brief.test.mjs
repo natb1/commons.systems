@@ -21,7 +21,8 @@ import {
   frontierFindingSectionsSince,
   sectionHashes, movedSections, SECTION_HASH_KEYS, judgedSet, candidatePairs,
   cutPairs, probeSeed, drawProbe, wholeDemand, frozenOnPin, frozenNodeIds,
-  renderJudgedNode, groupedPairLines, shortId, shortKey, probePairLine,
+  renderJudgedNode, renderWholeNode, groupedPairLines, shortId, shortKey, probePairLine,
+  tierGate, tierReportSection, TIER_REPORT_HEADING,
 } from "./brief.mjs";
 import { readGraph, surveyJudges } from "@commons.systems/disposition/read.mjs";
 import { diffText } from "@commons.systems/disposition/patch.mjs";
@@ -29,6 +30,11 @@ import { diffText } from "@commons.systems/disposition/patch.mjs";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../..");
 const FRONTIER_FIXTURE_SRC = path.join(HERE, "fixtures/frontier");
+const DRAFT_TEMPLATE_PATH = path.join(HERE, "brief-draft.md");
+const DELTA_TEMPLATE_PATH = path.join(HERE, "brief-delta.md");
+const SURVEY_TEMPLATE_PATH = path.join(HERE, "brief-survey.md");
+const BOUNDS_FRAGMENT_PATH = path.join(HERE, "brief-bounds.md");
+const RECORD_FRAGMENT_PATH = path.join(HERE, "brief-record.md");
 const BRIEF_MJS = path.join(HERE, "brief.mjs");
 
 const tmpDirs = [];
@@ -758,12 +764,42 @@ describe("renderNeighbourNode: the answer in both encodings", () => {
 
 // -------------------------------------------------------- the survey
 
-test("the survey template no longer tells the reader to read thirteen node files whole; it says the brief is the whole of what they read", async () => {
+test("the survey template no longer tells the reader to read thirteen node files whole; the rendered brief says the brief is the whole of what they read", async () => {
   const template = await readFile(path.join(HERE, "brief-survey.md"), "utf8");
   assert.ok(!template.includes("Read first, in full"),
     "the paragraph that doubled what the reader had to hold, and overflowed a reader on 2026-09-07, is gone");
-  assert.ok(template.includes("This brief is the whole of what you read"),
-    "its replacement bounds the reader to the brief itself");
+  assert.ok(template.includes("thirteen nodes"),
+    "the survey keeps the clause naming what an earlier form of the brief told the reader");
+  const bounds = await readFile(BOUNDS_FRAGMENT_PATH, "utf8");
+  const rendered = template.split("{{bounds}}").join(bounds.trimEnd());
+  assert.ok(rendered.includes("Everything you read comes from this brief, whole"),
+    "the one reading discipline reaches the survey through the shared bounds fragment");
+});
+
+test("none of the three templates states its own line-count discipline; the shared bounds fragment states it once", async () => {
+  const [draft, delta, survey, bounds] = await Promise.all([
+    readFile(DRAFT_TEMPLATE_PATH, "utf8"),
+    readFile(DELTA_TEMPLATE_PATH, "utf8"),
+    readFile(SURVEY_TEMPLATE_PATH, "utf8"),
+    readFile(BOUNDS_FRAGMENT_PATH, "utf8"),
+  ]);
+  for (const [name, template] of [["draft", draft], ["delta", delta], ["survey", survey]]) {
+    assert.ok(!template.includes("300 lines"), `${name} template no longer states a 300-line piece size`);
+    assert.ok(!template.includes("600 lines"), `${name} template no longer states a 600-line piece size`);
+  }
+  assert.ok(bounds.includes("fewest pieces"), "the bounds fragment states the one discipline: fewest pieces");
+  assert.ok(bounds.includes("left unread"), "the bounds fragment covers what an unfinished read reports");
+});
+
+test("the record fragment describes the content encoding and names none of the sections or keys the encoding struck", async () => {
+  const record = await readFile(RECORD_FRAGMENT_PATH, "utf8");
+  for (const struck of ["## Answer", "## Rationale", "## Recommendation", "## Disposition"]) {
+    assert.ok(!record.includes(struck), `the primer no longer sends the reader to a ${struck} section`);
+  }
+  assert.ok(!record.includes("`stands`"), "no fact carries the retired key that named the option whose text stood");
+  assert.ok(!record.includes("survey: {date, of}"), "the survey pin is no longer the two-key block it was");
+  assert.ok(record.includes("content encoding"), "the primer names the encoding every node is written in");
+  assert.ok(record.includes("**Content.**"), "the primer names the marker under which an option holds the node as it would stand");
 });
 
 describe("writeSurveyBrief", () => {
@@ -871,7 +907,7 @@ describe("writeSurveyBrief", () => {
     const dry = runCli(["--survey", rootDir, "--date", "2026-09-04", "--dry"], cwd);
     assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
     assert.match(dry, /survey: 6 node\(s\) judged; neighbourhood 5 node\(s\); reached but unchanged, one line each: \d+; context: 3 node\(s\); \d+ bytes over \d+ lines; graph commit \(unknown/);
-    assert.match(dry, /tier: 0 finding\(s\) over 8 checks, 0 note\(s\)/, "the run always says which tier ran and what it found");
+    assert.match(dry, /tier: 0 gating finding\(s\) over 4 gating checks, 0 reported over 4 reporting checks, 0 note\(s\)/, "the run always says which tier ran, of which kind, and what it found");
     assert.match(dry, /survey: delta: the delta is the survey's only recurring form/, "no history and no --whole: the delta is the norm, and a graph with no pins is a delta that freezes nothing");
     assert.match(dry, /freeze: \d+ node\(s\) frozen on their pins; \d+ carried by what they answer; 6 judged and carried whole; \d+ bytes/);
     assert.match(dry, /pairs: \d+ nominated; \d+ live, 0 frozen, 0 drawn as the drift probe on seed \d+/);
@@ -1140,11 +1176,12 @@ describe("chooseMode: the re-reading's own mode, derived from the record and nev
     assert.match(mode.reason, /--draft/);
   });
 
-  test("a kickback with review.commit set and the file since amended: delta, whatever the verdict", async () => {
-    // `review-cost`: an amendment made for a reading's findings is read once
-    // more, that re-reading's object being the amendment and not the node --
-    // a kickback repaired in a few sentences owes exactly that, and not a
-    // whole fresh draft reading of the redrawn answer.
+  test("a kickback with review.commit set and the file since amended: the draft brief, because a kickback redraws the answer", async () => {
+    // `review-cost`: "A fresh reading is owed only where the answer itself was
+    // redrawn, which is what a kickback is." The delta brief's object is an
+    // amendment made for a forward reading's findings; a kickback sent the
+    // answer back to be drawn again, and the re-reading of a difference is not
+    // the reading that owes.
     const { rootDir } = await stageReReading("mode-kickback-");
     const file = path.join(rootDir, "main", "review-low.md");
     const staged = (await readFile(file, "utf8")).replace("  verdict: forward\n", "  verdict: kickback\n");
@@ -1155,25 +1192,25 @@ describe("chooseMode: the re-reading's own mode, derived from the record and nev
     assert.equal(node.review.verdict, "kickback", "fixture precondition: the reading kicked it back");
 
     const mode = chooseMode(node, { rootDir, draft: false });
-    assert.equal(mode.mode, "delta", "the repair is the re-reading's object, not the whole node");
+    assert.equal(mode.mode, "draft", "a kickback owes a fresh reading, not a re-reading of a difference");
     assert.equal(mode.fallback, false);
-    assert.equal(mode.kickback, true);
     assert.match(mode.reason, /kicked this answer back/);
+    assert.match(mode.reason, /fresh reading is owed/);
 
-    // The same node with a forward verdict takes the same mode: the choice
-    // never turns on the verdict, only on the commit and the diff.
+    // The same node with a forward verdict is the delta case: the verdict is
+    // exactly what divides them.
     const forwarded = { ...node, review: { ...node.review, verdict: "forward" } };
     const forwardedMode = chooseMode(forwarded, { rootDir, draft: false });
     assert.equal(forwardedMode.mode, "delta");
-    assert.equal(forwardedMode.kickback, false);
+    assert.match(forwardedMode.reason, /forwarded this answer/);
   });
 
   test("a survey's frontier finding sent the node back without ever writing review.verdict: kickback: delta all the same", async () => {
     // Mirrors the record's own growth.md at 2026-09-07: a survey finding can
     // move a node's stage away from 'review' or 'ruling' on its own account,
     // leaving 'review.verdict' exactly as the last reading wrote it. The
-    // choice between draft and delta does not read the verdict at all, so
-    // this case takes the same delta a kickback would.
+    // choice between draft and delta reads the verdict only for a kickback,
+    // and this verdict still stands at forward, so the delta is owed.
     const { rootDir } = await stageFrontierFinding("mode-frontier-");
     const graph = await readGraph(rootDir);
     const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
@@ -1183,7 +1220,6 @@ describe("chooseMode: the re-reading's own mode, derived from the record and nev
     const mode = chooseMode(node, { rootDir, draft: false });
     assert.equal(mode.mode, "delta");
     assert.equal(mode.fallback, false);
-    assert.equal(mode.kickback, false);
     assert.deepEqual(mode.frontierFindings.length, 1);
     assert.ok(mode.frontierFindings[0].startsWith("### Frontier finding, 2026-09-04"));
     assert.ok(mode.frontierFindings[0].includes(FRONTIER_FINDING_TEXT));
@@ -1480,23 +1516,33 @@ describe("writeDeltaBrief", () => {
     );
   });
 
-  test("carries the graph commit it was generated at, and no kickback note on a forward", async () => {
+  test("carries the graph commit it was generated at, and says the last reading forwarded", async () => {
     const { rootDir, reviewDir } = await stageReReading("delta-graph-commit-");
     const result = await writeDeltaBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-05" });
     const brief = await readFile(result.briefPath, "utf8");
     assert.match(brief, /\*\*The graph commit you are reading is `[0-9a-f]{40}( \(dirty\))?`\.\*\*/);
-    assert.ok(!brief.includes("kicked this node back"), "the last verdict was forward: no kickback note");
+    assert.ok(brief.includes("the last reading **forwarded** this answer"),
+      "the scope section says which verdict this brief is generated under");
+    assert.ok(!brief.includes("{{kickback_note}}"), "no placeholder survives the fill");
   });
 
-  test("a kickback: the opening line says so, and the mode is still derived from the record", async () => {
-    const { rootDir, reviewDir } = await stageReReading("delta-kickback-note-");
+  test("a kickback takes no re-reading brief at all: writeDeltaBrief refuses it, exit 2", async () => {
+    // Item 9 of the gap analysis, on `review-cost`'s "A fresh reading is owed
+    // only where the answer itself was redrawn, which is what a kickback is."
+    const { rootDir, reviewDir } = await stageReReading("delta-kickback-refused-");
     const file = path.join(rootDir, "main", "review-low.md");
     const staged = (await readFile(file, "utf8")).replace("  verdict: forward\n", "  verdict: kickback\n");
     await writeFile(file, staged);
 
-    const result = await writeDeltaBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-05" });
-    const brief = await readFile(result.briefPath, "utf8");
-    assert.match(brief, /The last reading kicked this node back; the amendment below is the repair/);
+    await assert.rejects(
+      () => writeDeltaBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-05" }),
+      (err) => {
+        assert.match(err.message, /cannot take a re-reading brief/);
+        assert.match(err.message, /kicked this answer back/);
+        assert.equal(err.exitCode, 2);
+        return true;
+      },
+    );
   });
 
   test("a survey's frontier finding dated on or after the review's date is carried verbatim, under its own heading", async () => {
@@ -1506,8 +1552,8 @@ describe("writeDeltaBrief", () => {
     assert.ok(brief.includes("## The survey's findings the repair answers"));
     assert.ok(brief.includes("### Frontier finding, 2026-09-04"));
     assert.ok(brief.includes(FRONTIER_FINDING_TEXT));
-    // The verdict never moved to kickback on this node: no kickback note.
-    assert.ok(!brief.includes("kicked this node back"));
+    // The verdict never moved to kickback on this node: the delta stands.
+    assert.ok(brief.includes("the last reading **forwarded** this answer"));
   });
 
   test("no frontier finding on or after the review's date: the section says so and carries nothing", async () => {
@@ -1879,9 +1925,41 @@ describe("candidatePairs: the five keys, each nominating on its own", () => {
       bare("g/t", { question: "What is the target?" }),
       bare("g/d", { depends: [{ id: "g/t", option: null }] }),
       bare("g/p", { answer: "As `g/t` says." }),
+      ...filler(17), // one node named of twenty: under the tenth
     ] });
     assert.ok(keysOf(pairs, "g/d", "g/t").includes("depends"));
     assert.ok(keysOf(pairs, "g/p", "g/t").includes("cites"));
+  });
+
+  test("a node naming more than a tenth of the record nominates nothing on `cites`, and its `depends` stand", () => {
+    // Twenty nodes. `g/hub` names three of them in prose, over the tenth, and
+    // declares one of the three in `depends`; `g/quiet` names two, at the
+    // tenth exactly. The bound holds for every key, so the scrape is
+    // silenced from the hub's side while the edge the record declared is
+    // nominated by its own key and stands.
+    const nodes = [
+      bare("g/t1", { question: "What is target one?" }),
+      bare("g/t2", { question: "What is target two?" }),
+      bare("g/t3", { question: "What is target three?" }),
+      bare("g/hub", {
+        answer: "As `g/t1` says, and `g/t2` too, and `g/t3` beside them.",
+        depends: [{ id: "g/t1", option: null }],
+      }),
+      bare("g/quiet", { answer: "As `g/t1` says, and `g/t2` too." }),
+      ...filler(15),
+    ];
+    assert.equal(nodes.length, 20);
+    const pairs = candidatePairs({ nodes });
+    for (const id of ["g/t1", "g/t2", "g/t3"]) {
+      assert.equal(keysOf(pairs, "g/hub", id).includes("cites"), false,
+        `three of twenty is more than a tenth: the hub nominates nothing on 'cites' against ${id}`);
+    }
+    assert.deepEqual(keysOf(pairs, "g/hub", "g/t1"), ["depends"],
+      "the edge the record declared is nominated by its own key and survives the bound");
+    assert.deepEqual(keysOf(pairs, "g/hub", "g/t2"), [], "and the scraped citations are gone");
+    assert.ok(keysOf(pairs, "g/quiet", "g/t1").includes("cites"),
+      "two of twenty is not more than a tenth: a node under the bound still nominates");
+    assert.ok(keysOf(pairs, "g/quiet", "g/t2").includes("cites"));
   });
 
   test("resemblance over word shingles, at or above the threshold and not below it", () => {
@@ -2022,50 +2100,146 @@ describe("wholeDemand: the whole reading is a backfill and runs on the two flags
   });
 });
 
-describe("writeSurveyBrief: the tier gates the launch", () => {
-  /** The fixture, with a duplicated passage written into two of its nodes. */
-  async function withTierFinding(prefix) {
+describe("writeSurveyBrief: the gate refuses only what an instrument clears", () => {
+  /**
+   * The fixture, with a duplicated passage written into two of its nodes.
+   * `duplicated-passage` is of the tier's *report* kind: a state of the
+   * record no instrument clears, so it gates nothing and is carried into
+   * the brief instead.
+   */
+  async function withTierReportFinding(prefix) {
     const rootDir = await freshFrontierFixture(prefix);
     const passage = "A paragraph long enough to clear the two hundred byte floor the tier holds, written into two node files of this fixture so that the duplicated-passage check has something to find, and byte-identical in both of them.";
     for (const id of [REVIEW_A, REVIEW_B]) {
       const file = path.join(rootDir, "main", `${id.split("/").pop()}.md`);
-      await writeFile(file, `${await readFile(file, "utf8")}\n${passage}\n`);
+      const content = await readFile(file, "utf8");
+      const updated = content.replace(/^## Answer\n/m, `$&\n${passage}\n`);
+      assert.notEqual(updated, content, `${file} carries an '## Answer' heading to insert after`);
+      await writeFile(file, updated);
     }
     return rootDir;
   }
 
-  test("a finding refuses the launch, names the count and the checks, and writes nothing", async () => {
-    const rootDir = await withTierFinding("tier-gate-");
+  test("a report-kind finding does not refuse the launch, and is carried into the brief as a line", async () => {
+    const rootDir = await withTierReportFinding("tier-report-");
     const reviewDir = path.join(rootDir, "out");
-    const err = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" }).then(() => null, (e) => e);
-    assert.ok(err !== null, "the tier refuses the launch");
-    assert.equal(err.exitCode, 3);
-    assert.match(err.message, /the mechanical tier reports \d+ finding\(s\) over 8 checks/);
-    assert.match(err.message, /duplicated-passage/);
-    assert.match(err.message, /--force-tier/);
-    await assert.rejects(readFile(path.join(reviewDir, "survey.brief.md"), "utf8"), "nothing written");
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
+    assert.equal(result.tierFindingCount, 0, "nothing of the gate kind: the launch stands");
+    assert.ok(result.tierReportCount > 0, "and the report kind found the duplicated passage");
+    assert.equal(result.tierForced, false, "nothing was bypassed, so nothing is stamped");
+    const brief = await readFile(path.join(reviewDir, "survey.brief.md"), "utf8");
+    assert.match(brief, /## What the record already knows about itself/);
+    assert.match(brief, /### `duplicated-passage` \(\d+\)/);
+    assert.match(brief, /^- \S+: .*byte-identical/m, "one line per finding, naming the node it stands on");
+    assert.doesNotMatch(brief, /launched over a failing tier/);
   });
 
-  test("--force-tier writes the brief and stamps it as launched over a failing tier", async () => {
-    const rootDir = await withTierFinding("tier-force-");
+  test("the tier line says how many checks ran of each kind and what the report kind found", async () => {
+    const rootDir = await withTierReportFinding("tier-line-");
     const reviewDir = path.join(rootDir, "out");
-    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07", forceTier: true });
-    assert.ok(result.tierFindingCount > 0);
-    assert.equal(result.tierForced, true);
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
     const brief = await readFile(path.join(reviewDir, "survey.brief.md"), "utf8");
-    assert.match(brief, /launched over a failing tier/);
+    assert.match(brief, /ran 8 checks of two kinds/);
+    assert.match(brief, /The 4 that gate the launch \([^)]*\) reported 0 finding\(s\)/);
+    assert.match(
+      brief,
+      new RegExp(`the 4 that report a state of the record \\([^)]*\\) reported ${result.tierReportCount} finding\\(s\\)`),
+    );
+    assert.match(brief, /gate nothing: they are carried below, under "What the record already knows about itself"/);
     assert.match(brief, /A clean tier is not a clean frontier/);
   });
 
-  test("a clean tier writes the brief, says how many checks ran, and says a clean tier is not a clean frontier", async () => {
+  test("a clean tier says so on both kinds and carries an empty report section", async () => {
     const rootDir = await freshFrontierFixture("tier-clean-");
     const reviewDir = path.join(rootDir, "out");
     const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
     assert.equal(result.tierFindingCount, 0);
+    assert.equal(result.tierReportCount, 0);
     const brief = await readFile(path.join(reviewDir, "survey.brief.md"), "utf8");
-    assert.match(brief, /ran 8 checks/);
-    assert.match(brief, /A clean tier is not a clean frontier/);
+    assert.match(brief, /ran 8 checks of two kinds/);
+    assert.match(brief, /## What the record already knows about itself/);
+    assert.match(brief, /\(nothing: the tier's report kind found no state of the record to name/);
     assert.doesNotMatch(brief, /launched over a failing tier/);
+  });
+
+  test("--force-tier over a clean gate stamps nothing: there was nothing to bypass", async () => {
+    const rootDir = await withTierReportFinding("tier-force-clean-");
+    const reviewDir = path.join(rootDir, "out");
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07", forceTier: true });
+    assert.equal(result.tierForced, false);
+    const brief = await readFile(path.join(reviewDir, "survey.brief.md"), "utf8");
+    assert.doesNotMatch(brief, /launched over a failing tier/);
+  });
+});
+
+describe("tierGate and tierReportSection: what refuses, and what is carried", () => {
+  // The gate kind cannot be reached through a fixture on disk. Every one of
+  // the four gating checks is refused by `read.mjs` at parse time -- an
+  // unresolved `under`/`depends`/`bears`, a duplicate option name, an
+  // option whose content resolves through a name no option carries, and a
+  // `supports` naming no ledger entry are each a `parseNode`/`readGraph`
+  // problem, measured by running each of the four against a copy of
+  // fixtures/frontier on 2026-09-08 -- so `writeSurveyBrief`, which reads
+  // its graph with `readGraph`, never sees one. That is the divergence the
+  // option itself records ("On today's record the reformed gate never fires
+  // either"), and it is why the gate is exercised here on the findings
+  // themselves, which is the shape `checkTier` hands it and the shape a
+  // reader whose refusal is relaxed to a finding would hand it too.
+  const gateFinding = (check, node) => ({
+    check, node, detail: `${check} on ${node}`, kind: "gate",
+  });
+  const reportFinding = (check, node) => ({
+    check, node, detail: `${check} on ${node}`, kind: "report",
+  });
+
+  test("a gate-kind finding refuses the launch, and the message names only the gating checks and their count", () => {
+    const { gate, report, error } = tierGate([
+      gateFinding("duplicate-option-name", "g/a"),
+      gateFinding("unresolved-reference", "g/b"),
+      reportFinding("duplicated-passage", "g/c"),
+    ], { rootDir: "disposition" });
+    assert.equal(gate.length, 2);
+    assert.equal(report.length, 1);
+    assert.ok(error !== null, "the gate refuses the launch");
+    assert.equal(error.exitCode, 3);
+    assert.match(error.message, /the mechanical tier reports 2 finding\(s\) over the 4 checks that gate the launch/);
+    assert.match(error.message, /duplicate-option-name/);
+    assert.match(error.message, /--force-tier/);
+    assert.doesNotMatch(error.message, /duplicated-passage/,
+      "the report kind gates nothing and is not named in the refusal");
+  });
+
+  test("report-kind findings alone refuse nothing, whatever their count", () => {
+    const { gate, report, error } = tierGate([
+      reportFinding("term-without-a-path", "g/a"),
+      reportFinding("recommendation-past-its-pin", "g/b"),
+      reportFinding("unfolded-account-section", "g/c"),
+    ]);
+    assert.equal(gate.length, 0);
+    assert.equal(report.length, 3);
+    assert.equal(error, null);
+  });
+
+  test("--force-tier is the override for a gating finding, and for nothing else", () => {
+    const findings = [gateFinding("unresolved-words-reference", "g/a")];
+    assert.ok(tierGate(findings).error !== null);
+    assert.equal(tierGate(findings, { forceTier: true }).error, null);
+  });
+
+  test("the report section groups by check, counts each, and carries one line per finding", () => {
+    const section = tierReportSection([
+      reportFinding("term-without-a-path", "g/a"),
+      reportFinding("term-without-a-path", "g/b"),
+      reportFinding("duplicated-passage", "g/c"),
+    ], [{ note: "unreferenced-ledger-entry", detail: "the ledger entry words/2026-09-07/1 is referenced by no option" }]);
+    assert.ok(section.startsWith(TIER_REPORT_HEADING));
+    assert.match(section, /no instrument clears/);
+    assert.match(section, /### `term-without-a-path` \(2\)/);
+    assert.match(section, /### `duplicated-passage` \(1\)/);
+    assert.match(section, /### `unreferenced-ledger-entry` \(1\)/);
+    assert.equal(section.split("\n").filter((l) => l.startsWith("- ")).length, 4);
+    // The tier's own order, and never the order the findings arrived in.
+    assert.ok(section.indexOf("term-without-a-path") < section.indexOf("duplicated-passage"));
   });
 });
 
@@ -2395,6 +2569,124 @@ async function fixtureWithContentNode(prefix) {
   await writeFile(path.join(rootDir, "main", "content-node.md"), contentEncodedNode());
   return rootDir;
 }
+
+// The two probes item 7 pins the `#### Probes` block against: one open, one
+// discharged, so that both branches of the block render in one read.
+const PROBE_YAML = [
+  "probes:",
+  "  - id: what-a-whole-means",
+  "    asks: Does 'whole' mean the file or the answer?",
+  "    why: The record uses the word both ways and settles neither.",
+  "    discharges: Which option on the answer fact the node recommends.",
+  "    fact: answer",
+  "    source: clean-context review",
+  '    raised: "2026-09-07"',
+  "  - id: who-pays-the-second-read",
+  "    asks: Who pays for a second reading of the same draft?",
+  "    why: The cost node names no payer.",
+  "    discharges: The boldness of the answer fact.",
+  "    source: clean-context review",
+  '    raised: "2026-09-06"',
+  "    status: discharged",
+  "    reason: The author answered it in the sitting of 2026-09-07.",
+].join("\n");
+
+function contentEncodedNodeWithProbes() {
+  const text = contentEncodedNode();
+  const marker = "review:\n  verdict: forward\n";
+  assert.ok(text.includes(marker), "fixture precondition: the review block is where the probes go above it");
+  return text.replace(marker, `${PROBE_YAML}\n${marker}`);
+}
+
+async function fixtureWithProbedContentNode(prefix) {
+  const rootDir = await freshFrontierFixture(prefix);
+  await writeFile(path.join(rootDir, "main", "content-node.md"), contentEncodedNodeWithProbes());
+  return rootDir;
+}
+
+describe("renderWholeNode: the draft reading's node block, compacted the way the survey's is", () => {
+  test("the recommended content stands once and every rival is a difference, the case for each option kept", async () => {
+    const rootDir = await fixtureWithContentNode("whole-content-");
+    const graph = await readGraph(rootDir);
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    const node = graph.nodes.find((n) => n.id === CONTENT_NODE);
+    assert.equal(node.encoding, "content");
+
+    const block = renderWholeNode(node, { byId });
+
+    // The recommended option's content is the '#### Answer' and is carried
+    // there and nowhere else: `renderFacts` used to emit the whole raw
+    // subsection of every option, fence and all, so this line stood twice.
+    const answerSentence = "The recommended answer, which is the one that binds.";
+    const asItsOwnLine = block.split("\n").filter((line) => line.trim() === answerSentence);
+    assert.equal(asItsOwnLine.length, 1,
+      "the recommended content stands once in the draft's node block, under '#### Answer'");
+    assert.match(block, /^#### Answer/m);
+    assert.match(block, /^- `recommended-whole`/m);
+    assert.ok(block.includes("Content: the node as rendered above, under '#### Answer (the text that stands)'."),
+      "the recommended option points at the answer by this reading's own heading, not the survey's");
+
+    // A rival is a difference from the answer, never its own raw subsection:
+    // `renderFacts` no longer emits `option.prose`, which carries the
+    // '**Content.**' marker and the fence under it verbatim.
+    assert.ok(!block.includes("**Content.**"),
+      "no option's raw content fence is carried: every rival is resolved against the answer");
+    const nearCopy = block.slice(block.indexOf("- `near-copy-whole`"), block.indexOf("- `same-as-recommended`"));
+    assert.ok(!nearCopy.includes("```markdown"), "the near copy is a diff and not a second copy of the node");
+    assert.ok(!block.includes(NEAR_COPY_CONTENT.trim()),
+      "the near copy is not carried whole");
+    assert.ok(block.includes("Content: identical to the answer above."),
+      "an option resolving to the answer's own text is one line");
+    assert.match(block, /```diff/);
+
+    // Unlike the survey's block, the draft keeps each option's own case: its
+    // sentence and the AI's accumulated support and divergence.
+    assert.ok(block.includes("**AI support.** Support the survey never reads."),
+      "the draft reading judges the case for each option and is given it");
+    assert.ok(block.includes("**AI divergence.** Divergence the survey never reads either."),
+      "the divergence stands with it");
+    assert.ok(block.includes("The recommendation with its second paragraph rewritten."),
+      "every option's sentence is kept");
+
+    // The dead blocks are gone: nothing on this node has a ruling, so the
+    // '#### Recommendation' section fired on no node in the graph.
+    assert.ok(!block.includes("#### Recommendation"), "the dead recommendation block is gone");
+    assert.ok(!block.includes("#### Now recommends"), "and the dead 'now recommends' block with it");
+
+    // The last account section rule still holds.
+    assert.match(block, /#### Account \(the AI's account: only the last '### ' section/);
+  });
+
+  test("the probes block: an open probe with its text, a discharged one with its reason, and the count against the cap", async () => {
+    const rootDir = await fixtureWithProbedContentNode("whole-probes-");
+    const graph = await readGraph(rootDir);
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    const node = graph.nodes.find((n) => n.id === CONTENT_NODE);
+    assert.equal(node.probes.length, 2, "fixture precondition: one open probe and one discharged");
+
+    const block = renderWholeNode(node, { byId });
+    assert.match(block, /#### Probes \(the questions this node stands open on for the author\)/);
+    assert.match(block, /1 open of a cap of three, and 1 discharged\./);
+    assert.match(block, /^- `what-a-whole-means` — open, on its `answer` fact, raised 2026-09-07 by clean-context review: Does 'whole' mean the file or the answer\?$/m);
+    assert.match(block, /^- `who-pays-the-second-read` — discharged, raised 2026-09-06 by clean-context review: .* — discharged: The author answered it in the sitting of 2026-09-07\.$/m);
+
+    // The survey's node block carries the same block, for the same cap.
+    const judged = renderJudgedNode(node, graph.words, byId);
+    assert.match(judged, /#### Probes \(the questions this node stands open on for the author\)/);
+    assert.match(judged, /1 open of a cap of three, and 1 discharged\./);
+    assert.match(judged, /^- `what-a-whole-means` — open, on its `answer` fact/m);
+  });
+
+  test("a node with no probe says so, rather than leaving the reading to guess", async () => {
+    const rootDir = await fixtureWithContentNode("whole-noprobe-");
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === CONTENT_NODE);
+    assert.equal(node.probes.length, 0);
+    const block = renderWholeNode(node, { byId: new Map(graph.nodes.map((n) => [n.id, n])) });
+    assert.match(block, /0 open of a cap of three, and 0 discharged\./);
+    assert.match(block, /\(no probe has been raised on this node\)/);
+  });
+});
 
 describe("renderJudgedNode: the content of every option, and the answer never twice", () => {
   test("the answer is carried once; a near copy and a named change are differences, an equal option one line, a different draft whole", async () => {

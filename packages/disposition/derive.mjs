@@ -704,24 +704,74 @@ export function deriveStandingHash(node) {
  * @returns {string} 40-hex sha1, or '' when `recommends` is absent.
  */
 /**
- * The hash one fact's ruling pins on a node in the *content* encoding: the
- * node's question; the fact's name, `recommends`, `boldness` and `against`;
- * every option's name, source, ref, status, reason, `supports` and
- * `diverges`, in the fact's option order and rulings excluded; and, on the
- * answer and persistence facts, the recommended option's sentence and its
- * resolved content.
+ * The hash one fact's ruling pins on a node in the *content* encoding: what
+ * binds the node and nothing beside it
+ * (commons.systems/disposition-graph/survey-selection, "What moves the pin
+ * the judged set turns on is what binds the node and nothing beside it: the
+ * question, which option the answer fact recommends, that option's sentence,
+ * its resolved content and the ledger addresses it references, and the
+ * status any option of the fact carries, a status being the record's own
+ * ruling that an option is out").
  *
- * What that leaves out is what the pin must not move for: an option's AI
- * support or divergence, the fact's own reason prose, the account, and the
- * content of any option the fact does not recommend. What it reaches through
- * is the resolution -- editing a base option the recommended option resolves
- * through changes the recommended content, so the pin moves.
+ * It digests, in this order and newline-joined: the node's question; the
+ * fact's name and `recommends`; the recommended option's name, its sentence,
+ * its resolved content and the ledger addresses it references, `supports`
+ * then `diverges`; and then, for every option of the fact in option order,
+ * its name paired with its status -- but only where a status is set, an
+ * option carrying none contributing nothing at all.
+ *
+ * So passing an option over moves the pin, and recording a rival beside the
+ * recommendation does not. What that leaves out is a rival's body -- its
+ * sentence, its source, its ref, its reason, the AI's case on it and its
+ * content -- together with the fact's own `boldness` and `against`, its
+ * reason prose, and the account. What it reaches through is the resolution:
+ * editing a base option the recommended option resolves through changes the
+ * recommended content, so the pin moves. A resolution that failed is a
+ * validator problem on the node and leaves `resolved` null, which hashes as
+ * the empty string, as does a `sentence` no fact writes on its options --
+ * the reader fills both in for the per-node facts alone.
  *
  * @param {DeriveNode} node
  * @param {Fact} fact
  * @returns {string} 40-hex sha1
  */
 function contentFactRecommendationHash(node, fact) {
+  const recommended = (fact.options ?? []).find((o) => o && o.name === fact.recommends) ?? null;
+  const parts = [
+    node?.question ?? '',
+    fact.name,
+    fact.recommends,
+    recommended ? (recommended.name ?? '') : '',
+    recommended ? (recommended.sentence ?? '') : '',
+    recommended ? (recommended.resolved ?? '') : '',
+    recommended ? (recommended.supports ?? []).join(',') : '',
+    recommended ? (recommended.diverges ?? []).join(',') : '',
+  ];
+  for (const option of fact.options ?? []) {
+    const status = option?.status ?? null;
+    if (status === null || status === undefined || status === '') continue;
+    parts.push(option?.name ?? '', status);
+  }
+  return sha1(parts.join('\n'));
+}
+
+/**
+ * The same hash in the form the record carried before
+ * `a-pin-moves-on-what-binds-the-node`: the node's question; the fact's
+ * name, `recommends`, `boldness` and `against`; every option's name, source,
+ * ref, status, reason, `supports` and `diverges`, in the fact's option order
+ * and rulings excluded; and, on the answer and persistence facts, the
+ * recommended option's sentence and its resolved content.
+ *
+ * Kept for the migration alone (`migrate-pins.mjs`), which needs the old
+ * form to tell a pin that was current from one already stale. Nothing else
+ * reads it, and no pin is written in this form again.
+ *
+ * @param {DeriveNode} node
+ * @param {Fact} fact
+ * @returns {string} 40-hex sha1
+ */
+export function legacyContentFactRecommendationHash(node, fact) {
   const parts = [
     node?.question ?? '',
     fact.name,
@@ -743,12 +793,6 @@ function contentFactRecommendationHash(node, fact) {
   if (PER_NODE_FACT_SET.has(fact.name)) {
     const recommended = (fact.options ?? []).find((o) => o && o.name === fact.recommends) ?? null;
     parts.push(recommended ? (recommended.sentence ?? '') : '');
-    // The content the recommended option resolves to, which `read.mjs`
-    // resolved once and wrote onto the option: hashing the resolution and
-    // not the hunks is what makes an edit to a base option that the
-    // recommended option resolves through move this pin. A resolution that
-    // failed is a validator problem on the node and leaves `resolved` null,
-    // which hashes as the empty string.
     parts.push(recommended ? (recommended.resolved ?? '') : '');
   }
   return sha1(parts.join('\n'));
@@ -787,6 +831,39 @@ export function deriveRecommendationHash(node) {
   // an option's content answers it, and a fact that recommends nothing
   // folds no question in -- so it is hashed here, where every node has one,
   // rather than only inside each fact's own hash.
+  if (encodingOf(node) === 'content') return sha1([`question\n${node?.question ?? ''}`, ...lines].join('\n'));
+  return sha1(lines.join('\n'));
+}
+
+/**
+ * One fact's recommendation hash in the form the record carried before
+ * `a-pin-moves-on-what-binds-the-node`. Identical to
+ * `deriveFactRecommendationHash` on a legacy-encoded node, which the
+ * narrowing did not touch; the old content encoding on a content-encoded
+ * one. Kept for the migration alone.
+ *
+ * @param {DeriveNode} node
+ * @param {Fact} fact
+ * @returns {string} 40-hex sha1, or '' when `recommends` is absent.
+ */
+export function deriveLegacyFactRecommendationHash(node, fact) {
+  if (!fact || fact.recommends === null || fact.recommends === undefined) return '';
+  if (encodingOf(node) === 'content') return legacyContentFactRecommendationHash(node, fact);
+  return deriveFactRecommendationHash(node, fact);
+}
+
+/**
+ * The node-level fold of the old form: what `review.of` and
+ * `review.survey.of` pinned before `a-pin-moves-on-what-binds-the-node`.
+ * Kept for the migration alone, which rewrites a pin that equals this to
+ * `deriveRecommendationHash` and leaves every other pin exactly as it stood.
+ *
+ * @param {DeriveNode} node
+ * @returns {string} 40-hex sha1
+ */
+export function deriveLegacyRecommendationHash(node) {
+  const facts = node?.facts ?? [];
+  const lines = facts.map((f) => `${f.name}\n${deriveLegacyFactRecommendationHash(node, f)}`);
   if (encodingOf(node) === 'content') return sha1([`question\n${node?.question ?? ''}`, ...lines].join('\n'));
   return sha1(lines.join('\n'));
 }
