@@ -20,12 +20,16 @@
 //       that writes a new section at the head of `## Account` instead breaks
 //       the invariant, and its section is struck however new it is -- the
 //       reachability guard below does not catch that, because such text is
-//       genuinely on the ref. The rule is the right one and is not changed
-//       here; what was missing was that it rested on an invariant nothing
-//       stated and nothing checked, found by reading this file in the sitting
-//       of 2026-09-08. So the invariant is written down here, and
-//       `dateInversions` below checks it where the headings carry dates,
-//       rather than trusting the next session to have read this;
+//       genuinely on the ref. Exactly one node was found in that state, in
+//       the sitting of 2026-09-08: `graph-topology`, whose section of that
+//       day had been written above five sections of 2026-09-07. It was
+//       repaired by moving the section (6b326f02 on the disposition ref) and
+//       not by changing this rule, the rule being the right one; a sweep of
+//       all 158 nodes found no other. What was missing was not the rule but
+//       that it rested on an invariant nothing stated and nothing checked. So
+//       the invariant is written down here, and `dateInversions` below checks
+//       it where the headings carry dates, rather than trusting the next
+//       session to have read this;
 //   (b) a superseded `review` block. The encoding the reader accepts today
 //       carries at most one `review` mapping in the frontmatter and has no
 //       shape for a second (`read.mjs`, REVIEW_KEY_SET: the five draft keys
