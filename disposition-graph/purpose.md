@@ -9,7 +9,7 @@ review:
   against: "Purpose is the criterion by which coverage is ruled and by which materialization's swap prunes, and coverage stands at the periagogic stage with four of twelve surveyed functions outside the purpose as worded. The session's answer — that materialization's shim now names the coverage ruling as a condition of the swap — is verified true in the shim text and does close the deletion risk. What remains is that purpose refines an archē that has no author words on it at all: public/agency's answer is written in the author's first person by the AI, and ratifying the child of an unstated first principle fixes the record's why on the AI's draft of it."
   survey:
     date: 2026-09-07
-    of: 4720df14f032114a26a19af75e8d9d01bd57ef73
+    of: fd4eb4f3c7167bdf780339b52b17924b78b5c543
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "0ded443d59a9b6901659f0d34660fe8d63e9bd9b045cb66b902ffaf30cd1e18f"

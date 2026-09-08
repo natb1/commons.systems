@@ -5,11 +5,11 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: 3bbe247145845ab8e9e2e89b26bd76be2be09839
+  of: e666864cb9bb53bfe89acec22f745c3eadbe078e
   against: "Pruning removes the only node whose question is who the repository is for, and purpose answers it in one subordinate clause that purpose-criteria now recommends leaving permanently unguarded. The requirements tradition the record adopts does state the intended audience inside the purpose section, so the prune is well grounded; the residue is that the audience question was where coverage's survey found the most divergence, and after the prune it can be re-asked only at a periagogic sitting the record has not scheduled."
   survey:
     date: 2026-09-07
-    of: 3bbe247145845ab8e9e2e89b26bd76be2be09839
+    of: e666864cb9bb53bfe89acec22f745c3eadbe078e
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "136d28621cb313f0bc01f8b440ff150fb0b13039e9bdbe4a33ad70e0c4e4fb7a"

@@ -238,12 +238,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 184c3341ed274c0a5ae84adef73d9df9363e2de8
+  of: ec5f0c19e593b5c040e53f3a6a11f12c10d7f43e
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "The rewritten closing sentence for `every-fact-every-option` adopts the previous reading's own suggested wording almost verbatim, including the claim that the fence is extended by exactly \"one sentence\"; the fence's middle-column paragraph (unchanged by this diff, and outside this delta's scope since it predates the pinned commit) arguably carries more than one new clause/sentence describing the re-rendering behaviour, so the amendment's self-description may slightly overstate its own precision. This is inherited from the previous reading's suggested text rather than introduced independently by this repair, and it does not touch anything the previous reading or the survey's three findings actually raised, so it does not block forwarding."
   survey:
     date: 2026-09-07
-    of: 184c3341ed274c0a5ae84adef73d9df9363e2de8
+    of: ec5f0c19e593b5c040e53f3a6a11f12c10d7f43e
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "f377cb1dcf1e03192d964e4a75f94e8544fffa461eef3638caed1ba332f5bbaa"

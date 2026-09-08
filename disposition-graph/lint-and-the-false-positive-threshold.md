@@ -26,12 +26,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 05264d830a1fe1637fc86b135efd33030a30cf44
+  of: 661e519336ff03b323714d9cd26eb4838cc549f1
   commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
   against: "All six of the previous reading's findings are answered, most matching the suggested edits verbatim: the rationale/authority class agreement, the missing divergence option, the question's naming of both sources, the tier-list claim narrowed to admission, the softened false-positive sentence, and the boldness raised to `high` with the transfer named as its reason. The retarget of the `bears` entry to `candidate-pairs-with-their-nominating-key` was not one of this node's own six findings, but it answers a defect the sibling `tolerated-inconsistency`'s own review named specifically against this node (\"`fagan-entry-criteria` and `lint-and-the-false-positive-threshold` on `the-mechanical-tier-gates-the-launch`\"), so it closes a real gap rather than introducing one. The one thing the amendment does not do is rebut the review's own strongest counter-argument (that the belief mechanism has no bearer in a clean-launched session) — it instead concedes the point by raising boldness to `high` and keeping the alternate reading on record as an option, which is a legitimate way to carry a strong counter-argument forward rather than a failure to answer it."
   survey:
     date: 2026-09-07
-    of: 05264d830a1fe1637fc86b135efd33030a30cf44
+    of: 661e519336ff03b323714d9cd26eb4838cc549f1
     commit: 6611799a1dd6276691cf61f482c8e593f0234200
     text:
       question: "0e96e39a540d88321d4412297bedc023a3fb503016e5987e5827c71169f03c41"

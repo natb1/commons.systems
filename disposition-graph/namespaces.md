@@ -5,11 +5,11 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: 037fb16d831a28ae54393ec4671f94f0e1b5a0e5
+  of: 34292a80815de7aec153d0dc0cebccede3d4f479
   against: "The traditions graph inherits the manifest's shape for graphs that move — a target and a liquidation — and has neither, so the manifest would carry a graph of a third kind with no declared future, in a record that has just adopted 'addresses do not change' from Berners-Lee and made namespaces' own shim owe redirects. The author's stated model, a tradition as a mount that could be its own graph, anticipates exactly the move this entry does not, and one line in the manifest entry would settle it."
   survey:
     date: 2026-09-07
-    of: 037fb16d831a28ae54393ec4671f94f0e1b5a0e5
+    of: 34292a80815de7aec153d0dc0cebccede3d4f479
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "b0a0cd5d3fa952013073df27b5ead3ea4d0263536a8a086e637c2aec99eb5815"

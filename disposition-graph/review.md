@@ -46,7 +46,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: fb011605f42cec102191641cb226c4edc4816378
+  of: 907286d5f422f5157da7cbac284f0f6bfce77aea
   against: "The whole answer is a defence against one measured pathology — review loops that never converge — and every mechanism in it trades correctness for termination. Stated as doctrine that means a landing with a real blocking defect at the cap 'parks the landing for the author, over which nothing lands', converting a review failure into a full stop of the work queue, and 'Review never settles on zero findings' makes a clean diff evidence of a bad review rather than of good code. The cheaper answer the node never adopts is to shrink the contract so a review can finish: its own evidence blames a diff that grew between rounds, which is a scope defect, and delegation already requires one deliverable per unit."
 facts:
   - name: answer

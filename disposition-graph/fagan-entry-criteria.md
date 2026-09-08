@@ -26,12 +26,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: c9116a97f0ee97d35cf203862b49d421b153c4ef
+  of: 43ec7818e9c79e996ec6be698d850bf4a655a3bd
   commit: 2b934c69754bc5938e8374a0aab095b4526e6565
   against: "The previous reading's two findings (about the `progressive-disclosure` and `readings` cross-references) were already closed by the session's reply recorded inline in that same reading's own account, before this diff; the amendment this reading actually judges is only the bears retargeting. If `the-mechanical-tier-gates-the-launch` turns out not to be contained in `candidate-pairs-with-their-nominating-key` on `survey-selection`'s own terms, the retargeting would silently misrecord which option this reading adopts, and nothing in this delta's given scope can rule that out."
   survey:
     date: 2026-09-07
-    of: c9116a97f0ee97d35cf203862b49d421b153c4ef
+    of: 43ec7818e9c79e996ec6be698d850bf4a655a3bd
     commit: 6611799a1dd6276691cf61f482c8e593f0234200
     text:
       question: "1e5e945b62bd868911d051f4af90185cfb7eadaadba9bffdfe64ff578d2b2e46"

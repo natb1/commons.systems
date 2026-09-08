@@ -81,7 +81,7 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 1ae98b83ce27c7b090538094aac589a9a3793eb8
+  of: 2ddb0e3e5c3fa85f6fcb4ca3bc1918178871b086
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "One could argue the fix cured the fence's self-contradiction by deletion rather than reconciliation: the fence's Rationale dropped its entire discussion of the two traditions (bentham-publicity, hansard-verbatim-record) and the authority-reach paragraph that bounded the passed-over design, replacing several paragraphs of reasoning with one consolidated paragraph, so the recommended option's Rationale is now markedly thinner than the standing option's. That does not survive scrutiny: nothing in the node's own rules or the previous reading's findings required the fence to preserve every clause of the superseded Rationale, only that it argue the option it recommends without contradicting its own Answer body, which the single paragraph does, quoting the author's 2026-09-07 refinement directly and reasoning from it to the reference-both-ways match; the traditions remain adopted and cited on the option's own entry outside the fence, so nothing the author would need to rule on has gone missing."
   survey:

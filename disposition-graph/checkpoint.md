@@ -9,7 +9,7 @@ review:
   against: "The rule lands a graph commit at every stage transition of every node, which for a sixty-eight-node frontier moving through four stages is roughly two hundred and seventy landings on a ref whose history persistence calls the trail of the record. Transience's test is that only what re-derivation cannot reconstruct is stored, and three of the four things this rule checkpoints — the recommended text, the recommendation's facts, the review's state — are re-derivable by re-running the movement that produced them. The author's instruction was to survive compaction, which the author's words alone achieve; checkpointing the rest turns the record's history into a movement log, and the pending `words-only-checkpoint` alternative is the narrower rule that meets the instruction."
   survey:
     date: 2026-09-05
-    of: d0e21187d5cc2273d8ed7b523311377016844aac
+    of: f916febdf05d5063a86de28e2a74b7374bd3ee2e
 facts:
   - name: answer
     options:

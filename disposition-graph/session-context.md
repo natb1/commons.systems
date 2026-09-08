@@ -9,7 +9,7 @@ review:
   against: "The node's rule is right and its second shim is the counter-example to it. Session-context says a session loads three projections 'and nothing else', and that anything in them no node projects is a prune-by-default proposal — yet the harness configuration that decides the permissions and the worktree base every session runs with is declared as a shim over a file that is not in the checkout, is not on the ref, and no projection reads. The one surface with the most operational force over a session is the one the record cannot see, and the node ratifies that state as a declared interim rather than naming it as the gap it is."
   survey:
     date: 2026-09-07
-    of: 6caaebc0f48522074d2c2b4756dfda8a811afb1c
+    of: bf6c88ee6b04e35ad8db8744598ce1471a6076ef
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "09b7b92651a44a1467b5142e9265279297b3ae0f5c119cbad400dbd03e6d6d43"

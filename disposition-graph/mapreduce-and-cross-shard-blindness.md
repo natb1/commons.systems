@@ -26,12 +26,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 006a9bcd8049f03d9f1f2280d8b55e43481b4e9c
+  of: 0f9df9c2d0a061356c7ed88869bc6a8646927a16
   commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
   against: "All six of the previous reading's findings are answered, most matching the suggested edits verbatim: the rationale/authority class agreement, the question's naming of `survey-selection` in backticks, the `source` field dropping the uncitable descendant strand into the `against` where it already did its work, the second point in `## Answer` reframed to quote the parent's own aggregate-versus-pairwise limb rather than the false whole-node claim, the boldness raised to `high` on the transposition, and the new option recording the divergence the viability assessment flagged as missing. The one item this node's own file cannot close is the sibling half of the second finding — correcting `survey-selection`'s own account text, which still (as far as this reading can see, since it is not given that node) may describe this node as diverged on `several-readers-over-a-partition` — but this node does its own part by recording in its account that the parent's entry was that reader's error and that this node has carried `adopted` on both bearings since it was minted, which is what the suggested edit asked of this node specifically."
   survey:
     date: 2026-09-07
-    of: 006a9bcd8049f03d9f1f2280d8b55e43481b4e9c
+    of: 0f9df9c2d0a061356c7ed88869bc6a8646927a16
     commit: 6611799a1dd6276691cf61f482c8e593f0234200
     text:
       question: "7f1200e3468be0874aa45cf417a84637411bd188bbc08a2b6aff4d5ee56105e4"

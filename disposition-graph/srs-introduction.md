@@ -5,11 +5,11 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-05
-  of: 8091a9aa9d990c1ac7535cc2f1b2237f4ed34c78
+  of: 5bf529c93a0182c6224ce774350fb028fb6a0c63
   against: "Every substantive claim in this reading is the AI's recall of two standards the record does not hold and no one has checked, and this reading found one of those claims wrong in the node's own frontmatter. The authority fact nonetheless recommends delegated, which under the readings node means the AI's reading stands and the author declines to review it — so a confirmation would fix on unchecked recall the ground of four other arrangements: the onboarding walk's order, definitions met by links, the overview's home, and the readers stated inside purpose, the last of which `audience`'s prune already cites as its reason. The reading's one uncontested claim, that the standard opens with purpose and then scope, was never in doubt; the claims that carry weight in the record are exactly the unverified ones. The remedy is written into the node already and contradicted by its own fact: 'deferred until the author reads the sections'."
   survey:
     date: 2026-09-05
-    of: 8091a9aa9d990c1ac7535cc2f1b2237f4ed34c78
+    of: 5bf529c93a0182c6224ce774350fb028fb6a0c63
 facts:
   - name: answer
     options:

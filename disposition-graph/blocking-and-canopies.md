@@ -26,12 +26,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 3ed3f788f16dfb67d2c63f33cc75f58f0abeb3cb
+  of: 742de6028aeca0d3bcfb40b0d2e0026cb359e319
   commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
   against: "All five of the previous reading's findings are answered essentially verbatim against their suggested edits: the rationale/authority class agreement, the `bears` relation and closing sentence on `several-readers-over-a-partition`, the new option, and the removal of the appeal to a survey not in the record. The one soft residual is that after the fix, `as-read` (which stands) and the new option `supports-the-nomination-and-is-chosen-over-on-the-partition` now carry nearly identical `bears` entries and very similar prose, distinguished only by whether the answer calls the partition a genuine divergence the record repairs or an out-of-scope case the tradition never decided; the account's new 'AI divergence' paragraph names this distinction explicitly, so it is not a defect the diff leaves unexplained, only a close call worth the author's attention when choosing between the two."
   survey:
     date: 2026-09-07
-    of: 3ed3f788f16dfb67d2c63f33cc75f58f0abeb3cb
+    of: 742de6028aeca0d3bcfb40b0d2e0026cb359e319
     commit: 6611799a1dd6276691cf61f482c8e593f0234200
     text:
       question: "22cf599316cb51e13b25affc35d06c1e6c782a77d46381d3018f8e299de3861d"

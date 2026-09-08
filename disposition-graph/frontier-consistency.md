@@ -10,7 +10,7 @@ review:
   against: "The amendment's actual content -- delegating the judged set and its comparisons to `survey-selection` and localizing the generator's comparison to the node's survey-block hashes -- answers the author's separate 2026-09-07 instruction to optimize survey cost, not any of the three frontier findings recorded since the last reading. All three findings (contradiction, vocabulary, placement) ask for edits on other nodes (`clean-context-review`, `review-cost`, `decomposition`) and each states this node's own cited sentences are already correct or already the survivor, so the amendment leaves the sentences those findings turn on untouched and unbroken -- but it does not itself act on any of the three. If answering a finding requires an affirmative response rather than mere non-interference, none of the three has actually been engaged by this node's amendment; they remain to be closed at the nodes that own the required edits."
   survey:
     date: 2026-09-07
-    of: 5ffc5e2781dd76e99f245a5158654f9d086abe84
+    of: a398ef534e6ce15eac954a856af8d9c6c56bf46d
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "927c47bb607e1ce62ea18f694439509f2b7713eff4b34390182af7f589028c6c"

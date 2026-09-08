@@ -58,12 +58,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: cb880309df7f02481f673294727e43ad417ba7ff
+  of: d4b2329d03ce07ceaf4e0ad34658d3fb43b6e149
   commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
   against: "No defect was found in what this node's own diff shows; the only residual risk is that the amendment's own account of what it did to `review-skills`, `session-context`, `class-recommendation` and `instruments` cannot be checked from this node's file alone, so if any of those four cross-node claims turns out false the amendment would be resting on an unverified premise the last reading had no chance to catch either."
   survey:
     date: 2026-09-07
-    of: cb880309df7f02481f673294727e43ad417ba7ff
+    of: d4b2329d03ce07ceaf4e0ad34658d3fb43b6e149
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "057e7bdb644b3e30c582337fcbbb3464dc003da90d9affc57b8f1a594705c59f"

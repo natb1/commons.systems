@@ -26,12 +26,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 5893cbbdb934fe7d41d77e1043225aaec0019490
+  of: ccc3d4c08c3bdc4795ea7c3de52885706a61887e
   commit: edbe507a81c4bfe51308f5fb96845b8bbdaff4c8
   against: "The repair's own account of itself claims account entries are 'not rewritten, since an account entry is the record of its day,' yet its remedy for the previous finding is to rewrite the `### Repaired after the reading of d35b0014` entry a second time (restoring it to its pre-ed7d78d3 text). One could argue this is still an edit to a dated historical entry and so brushes the same principle the previous finding turned on. This does not hold up on inspection, though: the previous reading's own suggested edit was exactly 'revert the d35b0014 entry to its prior text and instead add the acknowledgment ... as a new dated entry,' which is precisely what the repair does — reverting an erroneous later insertion restores the entry's true historical state rather than adding new interpretive content to it, and the justification sentence itself is relocated to a fresh, separately dated entry rather than left duplicated in place."
   survey:
     date: 2026-09-07
-    of: 5893cbbdb934fe7d41d77e1043225aaec0019490
+    of: ccc3d4c08c3bdc4795ea7c3de52885706a61887e
     commit: 6611799a1dd6276691cf61f482c8e593f0234200
     text:
       question: "a9482ec71ac13b293327abcf07f668c2142fdfc5d8ff0355c72194203d9b5fe1"

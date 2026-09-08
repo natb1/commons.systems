@@ -104,7 +104,7 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: e98d683eae2469f7ac97e4048b077dd7dcaecfd8
+  of: f60456943c0cd12f77a42fef83f19e23df3e2271
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "The recommended option still confers, in one ratification, both the derivation of a class from rulings and what an option must carry — the exact bundling the last reading's counter-argument named, and which the amendment's own updated `against` clause now states outright: 'one ratification would confer both the derivation of a class and what an option must carry, which is the bundling the record's own rule that a text answering two questions is two nodes exists to prevent.' The amendment's response is a Rationale paragraph defending the bundle as 'requirement vs. form' and the recorded-but-unadopted `confirmed-is-a-derived-label` split, rather than adopting the split as the recommendation. That is a transparent, reasoned response that puts the tension squarely before the author rather than a resolution of it — which is why it is answered but not closed, and is exactly the kind of call this record reserves for the author's ruling rather than the AI's redraft."
   survey:

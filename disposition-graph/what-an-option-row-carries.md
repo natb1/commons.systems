@@ -83,7 +83,7 @@ review:
   against: "The fact-level lead paragraph (\"Recommended because every settlement on it is the author's words applied where they fall...\") was not touched by this diff and argues only for the marks arrangement, without saying why the accumulation-layer option is now recommended over the plain `three-marks-and-the-case-against` it is built on; the option's own added prose (AI support/divergence) carries that argument instead, which is a defensible split but leaves the fact's summary line silent on the actual recommended option. Separately, `a-term-is-its-own-sentence` rests on an unverified claim about `vocabulary-option-summary` and a node count neither this diff nor the previous reading established. Neither point was visible to the last reading since both are new to this diff, but neither is a false statement, a broken pin, or a contradiction this node's own text shows — they are gaps for the neighbourhood to close, not defects in the amendment itself."
   survey:
     date: 2026-09-07
-    of: 77d3e104e3aae65ad2bc5c59cb040d24459d6cf5
+    of: e1d748d7c323ead845059b3d87d540c21d49439a
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "0ac548d22006fec806b8fea188722d1ebca28a6fb5025222518f708b148d79de"

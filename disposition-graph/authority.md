@@ -5,12 +5,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 023c2848b7bb4f67d7e92769d852bef16aa75c9f
+  of: d8988dc14cd0be091955ff64a8480e657ea84150
   commit: 9b5993f5ce75ed55abdda1964cc3b7c7f1e53cf1
   against: "The last reading's two findings are both fully closed: the false 'three options / the rest are passed over' sentence is now non-exhaustive and drops the closing clause exactly as the suggested edit asked, and the `authority-derived` subsection body is deleted outright, resolving the duplication with `## Answer` the survey and the previous reading both named. One could argue the subsection deletion is a stronger remedy than the previous reading's alternative of 'add a sentence explicitly deferring the fix to `dialogue`'s pending ruling', foreclosing that option rather than choosing between the two it offered; but the record's own encoding rule quoted in this brief is unconditional ('The option named by `stands` omits its subsection'), so outright deletion is the correct fix and not merely one of two equally valid choices. No new false claim, contradiction, or stale pin is introduced by this diff."
   survey:
     date: 2026-09-07
-    of: 023c2848b7bb4f67d7e92769d852bef16aa75c9f
+    of: d8988dc14cd0be091955ff64a8480e657ea84150
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "881f5bf6246e5981e828267cd2eaefd4af061eee8cc8df62462cb4182f4fa53a"

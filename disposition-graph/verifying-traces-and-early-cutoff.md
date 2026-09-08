@@ -26,12 +26,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 7225c82b45cc4826cfad03ec9b7eb358e612ca67
+  of: e4d099826a8f2686eff47fe5bf9bebc24dfce767
   commit: 2b934c69754bc5938e8374a0aab095b4526e6565
   against: "The previous reading's two findings (the `progressive-disclosure` citation and the `acceptance-sampling-and-all-or-none` citation) and its own carried-forward counter-argument (the five sections being stipulated rather than derived) were already addressed inline by the session's reply recorded in that same reading's own account, before this diff; the amendment this reading actually judges is only the bears retargeting. If `the-delta-survey-with-a-periodic-whole` is not in fact contained in `candidate-pairs-with-their-nominating-key` on `survey-selection`'s own terms, the retargeting would silently misrecord which option this reading adopts, and nothing in this delta's given scope can rule that out."
   survey:
     date: 2026-09-07
-    of: 7225c82b45cc4826cfad03ec9b7eb358e612ca67
+    of: e4d099826a8f2686eff47fe5bf9bebc24dfce767
     commit: 6611799a1dd6276691cf61f482c8e593f0234200
     text:
       question: "97b7f28cb599343faca8c5ea4b6818d7094084a61dd0af93f03d22b4fd947dd3"

@@ -5,12 +5,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: bfb4d8ef1077decaabcaa708bcc3b5bf9c7976bc
+  of: 3f5b72b2976269e4b31e83c0e6298c850e53e699
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "All nine of the last reading's findings have textual fixes matching their suggested edits, but two spots stay short of a clean repair. First, the ledger disclosure added to 'The recording of a confirmation' states a process ('written by the migration under the author's grant of 2026-09-07') without naming it a shim or citing the record's own unmaterialized-instrument vocabulary the way the sibling `unconfirmed-accumulation` text the last reading quoted does, so a reader could still take it as a working mechanism rather than a disclosed gap. Second, in fixing the delta-option sentence the amendment also dropped the 'stands' mechanism from the surrounding text and replaced it with an unverified claim about how `dialogue` encodes an answer's resolution, which is new ground the last reading never reviewed and this delta reading cannot check against `dialogue`'s own text."
   survey:
     date: 2026-09-07
-    of: bfb4d8ef1077decaabcaa708bcc3b5bf9c7976bc
+    of: 3f5b72b2976269e4b31e83c0e6298c850e53e699
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "4f247ec819cb4467053ecb74976ac9328384ecd0b5272c4841bf81cbc02bfca8"

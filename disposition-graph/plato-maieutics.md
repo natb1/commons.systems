@@ -10,7 +10,7 @@ review:
   against: "Socrates' midwifery rests on his own bareness: he claims to originate nothing and only tests what the interlocutor already carries. The AI drafts first, and a visible, refusable draft still anchors the author's response before they have spoken -- so what the maieutic label buys may be a guarantee about whose answer emerges that the mechanism does not actually provide, and 'propose-and-critique' may be the more honest name for the interview's real method."
   survey:
     date: 2026-09-07
-    of: f62ab45b1d3496aa604a1ce4a35a5f0b4e7c8b8b
+    of: 310b8382596f13ab586bb40951106b68f3d173ed
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "e692eef086e42bf1128ece9cbc2c4c9ee89524f54e6acb381cddd0a26cd43907"

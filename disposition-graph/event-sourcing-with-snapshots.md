@@ -26,12 +26,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: c577f43f6f010c78428517f36ab6944cb698e9da
+  of: 20f9748faeeea059d3466f12ff5fe4b211e1f2d8
   commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
   against: "All five of the previous reading's findings are answered essentially verbatim against their suggested edits: the rationale/authority agreement, the `source` field's years and CQRS, the boldness figure and its `against`, the `## Answer` sentence scoping the `bears` relation away from absorption, and the new option. The remaining soft point is the same pattern seen on the sibling `blocking-and-canopies`: the answer fact's new `against` and the new option `diverges-on-the-snapshot` restate nearly the same argument (snapshot as state rather than cache) in two places, which is the shape finding five itself asked for (an argument on record both as a case-against and as a rulable option) rather than an unexplained duplication."
   survey:
     date: 2026-09-07
-    of: c577f43f6f010c78428517f36ab6944cb698e9da
+    of: 20f9748faeeea059d3466f12ff5fe4b211e1f2d8
     commit: 6611799a1dd6276691cf61f482c8e593f0234200
     text:
       question: "894fec7c0a7bbaba00b8c70ba56978ae94469a5dfde2a95ed7fc5a9aef4cd191"

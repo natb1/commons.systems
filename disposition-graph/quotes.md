@@ -10,7 +10,7 @@ review:
   against: "The disclaim answering Finding 4 is itself a new, unverified assertion about `recording`'s current answer fact and its recommended option's fence content, made in a delta-scoped reading that has no access to `recording`'s file to confirm it. If `recording` in fact carries some form of the promised option under a different name, or its cited fence does not do what this account claims, the repair would be inaccurate rather than merely silent — a stronger defect than the silence it replaces. But this is the same category of cross-node uncertainty the previous reading itself accepted as deferrable to the survey (its Finding 3 on the `commit` field), so treating this disclaim the same way is consistent rather than a double standard."
   survey:
     date: 2026-09-07
-    of: a300a951d709452b616a8a7d1f9e65f3c266ce95
+    of: 476d5db9dafc154cce6deb25aa6b2d74cd5511b8
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "8c47ddf791b1a5708972c2a0f138fef97e2dbf8fb45e8670f89720b485ac28d5"

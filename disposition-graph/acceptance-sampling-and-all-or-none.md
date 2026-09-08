@@ -26,12 +26,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 335a4e4e1a0209e78d3db2029e7aa4aae1ff3310
+  of: 0a7b061c21cbc348c55c8b128c56be3833acc191
   commit: 2b934c69754bc5938e8374a0aab095b4526e6565
   against: "The reply concedes, as the prior counter-argument itself said it must, that the record is not in the stable-defect-rate world Deming's rule presumes, yet the answer still leans on \"the tradition's escalation rule\" as the design's authority. Having granted that the rule's central premise fails here, the amendment does not explain why the escalation-rule mechanism survives that concession rather than the whole comparison being set aside as inapplicable; the answer separates the borrowed mechanism from the premise-dependent verdict (\"the tradition supplies the escalation rule and the objection, and the record's account of the two costs decides the rest\") but does not defend that separation as more than assertion."
   survey:
     date: 2026-09-07
-    of: 335a4e4e1a0209e78d3db2029e7aa4aae1ff3310
+    of: 0a7b061c21cbc348c55c8b128c56be3833acc191
     commit: 6611799a1dd6276691cf61f482c8e593f0234200
     text:
       question: "d1f4e4e42ecf748a0a3b6f1c12ef92013a52d3239e696f31a8e0635b45f213bb"

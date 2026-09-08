@@ -34,7 +34,7 @@ review:
   against: "The half the reading calls adopted may be the empty half. What the page keeps of progressive disclosure is that a row has two levels and the second is reachable, which the author specified in their own words on 2026-09-04 before any tradition was consulted, and the criterion the page uses for that split, what is needed to choose against what is needed to check, is not the tradition's frequency and importance of use; strip the criterion and what remains is generic enough to be true of almost any interface, so calling it an adoption lends the tradition's name to a shape it did not supply. On that view the honest relation is `diverged` outright, with the convergence on shape recorded as convergence, and the record loses nothing but a chip. The reply available is that the never-lost rule is a real holding the page does follow and that a discoverable second level is exactly what the tradition names; but that holding is carried on this record by Krug and by hansard-verbatim-record as well, so it is over-determined, and this reading is now on its third drawing of the same two sources in two days, each fitted to whatever the page's text said at the time. That is the pattern a delegated class makes cheap and a deferred class exists to stop, which is why the `deferred` option beside it is more live than the fact's prose allows."
   survey:
     date: 2026-09-07
-    of: c1fb82bc0a2c71a1b24f6fc1af0efb1e5e0a6404
+    of: 4cbf5493f23da063fe6acb00cfae71cca707d297
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "9807acf9092199c8bc7f4f7690b8a3d3129ae43c90e5be5d6de441c49a9aa659"

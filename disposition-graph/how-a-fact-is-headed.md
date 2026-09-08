@@ -60,12 +60,12 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-07
-  of: b81b6e224511ac07c31a06cc7d14c8e27af2e798
+  of: e5b946b42379a6f58d527750f47d1edb37f779da
   commit: f146f8f44b295c64e47a13bff338748035183d87
   against: "All five findings of the previous reading are answered, each verified at its locus: the false 'nothing in the record defines the term answer' claim is replaced with an accurate account of the bare entry at node.md:65; the passed-over reason and the fact's `against` on `heading-is-the-name-and-a-link` are corrected to the same effect; the fallback-to-dialogue clause is removed entirely rather than patched, since the new recommendation needs no fallback; every stale project.mjs/derive.mjs line citation is now given by function name; and the Account no longer calls the periagogic question a probe, instead correctly routing it through the fact's own options under `probe-or-node`. Question two also turns up nothing false: the new design (glossing `answer` and `persistence` on `dialogue` and releasing the bare entries on `node` and `transience`) is a genuinely new decision beyond what the previous reading's own suggested missing option sketched (which touched only two nodes, `node` and `transience`, by glossing them directly rather than writing to `dialogue`), but it is drawn from cited evidence (`glossary`/`definerIndex` both take the first definer and ignore later ones) and its cost is stated plainly in the fact's own `against`, so it reads as a defensible design choice made in the open rather than an unexamined addition."
   survey:
     date: 2026-09-07
-    of: b81b6e224511ac07c31a06cc7d14c8e27af2e798
+    of: e5b946b42379a6f58d527750f47d1edb37f779da
 under:
   - commons.systems/disposition-graph/alignment-page
 ---

@@ -5,12 +5,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 1b0d01a13cc96521f432ad8b7358beefc8d0608e
+  of: 460ab151668fff2aa04d0668a8bf4d66a2feb17b
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "A critic could still say the amendment does not remove the underlying coupling, only discloses it better: ratifying this node still binds the record's most widely loaded rule to an enumeration whose third term depends on `quotes`, a node under active redraft. But the previous reading explicitly offered this as one of two acceptable repairs (revert the recommendation to `standing`, or keep the option and disclose in the rule's own text what the ground leaves of the support), and the amendment takes the second path faithfully: the Answer now states outright that the ledger is unmaterialized before the cited migration, the fact's `against` now argues against the recommended option and not the superseded one, and the safer alternative is recorded on the list for the author to choose instead. The objection is therefore answered on its own stated terms, not merely deflected."
   survey:
     date: 2026-09-07
-    of: 1b0d01a13cc96521f432ad8b7358beefc8d0608e
+    of: 460ab151668fff2aa04d0668a8bf4d66a2feb17b
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "bbf975e85f1b2cccfc472f9066dfaf0d4297733577fce1765ed9f30155e4a48e"

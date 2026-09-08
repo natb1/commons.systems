@@ -46,12 +46,12 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-07
-  of: 7443e62c32e1349585432dbfeb53c047785ead32
+  of: df26462f56913b23fc14607921b8c6ee447395d0
   commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
   against: "The rule is still drawn from a single turn the author disliked, and their own words call the four forms what a prompt is 'expected to take' rather than a bound; the impediment turn only covers the sitting that cannot continue, so a session that finds something true and interesting but not of the four forms (or the impediment) still has no way to say so and must trust the record's projections to carry it to the author in time."
   survey:
     date: 2026-09-07
-    of: 7443e62c32e1349585432dbfeb53c047785ead32
+    of: df26462f56913b23fc14607921b8c6ee447395d0
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "c500b5af90fd56770f41daad8a08790aaf45fae669d1386338005eee8f27931e"

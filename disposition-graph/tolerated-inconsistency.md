@@ -26,12 +26,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: c9dd8c050d039458f6c4989b08bfd442a588d519
+  of: 035c92383c7a19ebcbb12b8788584c180fe10049
   commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
   against: "All five of the previous reading's findings are answered: the rationale/authority class agreement, the `bears` retarget to the option that stands (with the reasoning stated in `## Answer`), the narrowed \"supports on the marker and the trigger\" opening with the handling-policy departure spelled out, the boldness figure and its against, and the removal of the bare attribution to Nuseibeh. The rationale's replacement clause paraphrases rather than quotes the finding's suggested text verbatim (it now reads \"the one holding this line of work is read as attaching to tolerance\" rather than \"the one holding attributed to a named person\"), but this tracks the fifth finding's own fix removing the named-person framing from `## Answer`, so the two edits are consistent with each other rather than in tension. The `## Facts` authority prose still speaks of \"the one named condition the answer leans on\", a phrase from before the fifth finding's fix, but it was untouched by this diff and is not itself false."
   survey:
     date: 2026-09-07
-    of: c9dd8c050d039458f6c4989b08bfd442a588d519
+    of: 035c92383c7a19ebcbb12b8788584c180fe10049
     commit: 6611799a1dd6276691cf61f482c8e593f0234200
     text:
       question: "3b30767f6293e427f410f2738a6add6add173cc3dfda7cf70a6a1a330d2c483f"

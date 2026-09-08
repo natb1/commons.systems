@@ -9,7 +9,7 @@ review:
   against: "Republic VII's turning is away from appearance toward what is, and its authority is the reality the soul is turned toward. Here the author is turned back toward a record the AI drafted and the author has not ratified, and is asked to articulate it before the AI's account enters as counterpoint. That is induction into a text, with a predictable failure: the author's account converges on the record's wording, so the comprehension movement confirms the AI's framing rather than testing it. The node's defence — that the authority appealed to is the author's own past decision — is the claim that is false today, since nothing in the record is ratified, and the session's reply concedes exactly that."
   survey:
     date: 2026-09-07
-    of: 93a1750a22926bb365b6cf8b32c3f1518816600d
+    of: b7e02e31220d4ae1d127317b2d940a21a64f9991
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "f6c1c88c9a83ac36aae68bb584f91c712e07ca709d118a5dfdd56f0209822b7a"

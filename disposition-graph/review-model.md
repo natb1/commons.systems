@@ -68,12 +68,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 6c026933881c7d4137fb31e4a7fcfc6bfd030164
+  of: bd9725ce115b77475ba8154be04201ae36c6964a
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "The new option's own 'AI support' text asserts that `review-skills`'s drift sentence carries the same figures and that 'the two nodes must move together or disagree,' naming this option as 'the half of that movement that belongs here' -- but this delta's scope excludes `review-skills` itself, so whether its matching half has actually landed is unverifiable from here. If it has not, the record corrects this node's sentence while a sibling keeps citing the stale, falsified measurement, which is the same shape of unverifiable cross-node claim the previous reading raised about `n-version-programming` and that the session then had to confirm on the main thread before closing."
   survey:
     date: 2026-09-07
-    of: 6c026933881c7d4137fb31e4a7fcfc6bfd030164
+    of: bd9725ce115b77475ba8154be04201ae36c6964a
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "3dfcd8cceb86a0d69691e6cdb2331103bb5f09ae56e31ea301c3c579796bddf5"

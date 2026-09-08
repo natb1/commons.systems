@@ -5,11 +5,11 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 02bda4fc9aec183454a52afa027ad0c8cb8a3589
+  of: 826e331e6ad113446ef1d5a914f5d652befa875a
   against: "The divergence claimed — that factory literature is about the factory's own process while this record is about the owner's intent — is the divergence every specification method claims for itself, and Greenfield and Short's factories are organised around a product-line specification playing much the role this record plays. If the distinction is real it is one of ownership and authority rather than of subject matter, which puts it in Pettit's territory and not Cusumano's; if it is not, 'software factories' is a discovery term borrowed for the audience while diverging on nothing load-bearing, which purpose already concedes when it calls the phrase the audience's own vocabulary."
   survey:
     date: 2026-09-05
-    of: 02bda4fc9aec183454a52afa027ad0c8cb8a3589
+    of: 826e331e6ad113446ef1d5a914f5d652befa875a
 facts:
   - name: answer
     options:

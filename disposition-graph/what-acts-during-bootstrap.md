@@ -52,7 +52,7 @@ review:
   against: "The amendment answers two of its five findings by adding a citation of a divergence rather than by removing one, so the rule the author is asked to ratify now says twice, in the text `.claude/rules/` carries, that the node it cites holds the other position, and each contest is parked as an option on a node that is itself unruled: a session that reads the notice has nowhere to go for the resolution, and at the first ruling `.claude/rules/authority.md` will still carry 'During bootstrap no class acts' with no notice in that file. Beside that, the standing objection is untouched: the answer still says only what does not make the rule files unsupported and never what makes them binding, and the amendment's own new work — a second row for `projected-doctrine-acts` at `session-context` — moves the remedy one node further from the recommendation without moving the recommendation. None of this defeats the amendment: each of the five defects is cured at its own locus, verified at the loci below, and what is left is the record's condition and not a fault of this text."
   survey:
     date: 2026-09-07
-    of: ecc0a1e411b5735921b5144dc9a2ba61292af004
+    of: 8aace539d14bae32f54338575af53f8391a222fa
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "7b3273b9d0e6cc1605116534c3e680a3cef87c1d138c7d21b25a159f82cd89f4"

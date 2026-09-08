@@ -50,11 +50,11 @@ review:
   verdict: forward
   strength: none
   date: 2026-09-07
-  of: cac03b089a525288b22d5aab8c049cb57bac3ec3
+  of: ec174858546673d46fc2b2e011639cb608ef78ad
   commit: f146f8f44b295c64e47a13bff338748035183d87
   survey:
     date: 2026-09-07
-    of: cac03b089a525288b22d5aab8c049cb57bac3ec3
+    of: ec174858546673d46fc2b2e011639cb608ef78ad
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:

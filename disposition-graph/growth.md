@@ -5,12 +5,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: bed10a4712e392bc195d0d7d0ed20d7cf11994b0
+  of: b49c117185ec7bf37b3fe677c871c0be0ec63452
   commit: 56df6ed5b3ebb24c5c71164a1189f798877a77d3
   against: "The option's account prose, left untouched by this diff, still reads \"Adopted into the recommendation on 2026-09-07: the fence's third usage and its rationale now carry it,\" where every sibling option on this fact marked `status: passed` instead closes its prose with \"Passed over ...\" -- exactly the wording the previous reading's suggested edit asked this repair to adopt. The repair carried out only the frontmatter half of that two-part suggested edit and left the account-sentence half undone, so a strict reading of the previous finding is only partly satisfied, even though the substantive defect it named (an option that reads as undecided when the account says it was folded in) is resolved by the added status and reason."
   survey:
     date: 2026-09-07
-    of: bed10a4712e392bc195d0d7d0ed20d7cf11994b0
+    of: b49c117185ec7bf37b3fe677c871c0be0ec63452
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "040dd27b9342148a8226498a4ecb0299411ba7fe61cb75e3e8f7d98bc35e0440"

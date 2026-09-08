@@ -5,11 +5,11 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 8248bcdf85790b3dfeee3756c57fc0e3090bf6df
+  of: 73e619c683e8a98b820dae116984a1b6944b6d11
   against: "Functional-before-non-functional assumes the two classes are separable, and the node's own examples show they are not: type safety and test integrity are conditions of a functional assessment being meaningful rather than polish applied after it passes, and a security defect found after a landing costs more than the ordering saves. The evidence is one thrash of sixteen rounds, which the sibling review node explains by a growing diff rather than by class ordering, so the rule may be solving with a schedule what a smaller contract solves outright — and ISO/IEC 25010, adopted here for the class axis, separates the characteristics without ordering their assessment."
   survey:
     date: 2026-09-05
-    of: 8248bcdf85790b3dfeee3756c57fc0e3090bf6df
+    of: 73e619c683e8a98b820dae116984a1b6944b6d11
 facts:
   - name: answer
     options:

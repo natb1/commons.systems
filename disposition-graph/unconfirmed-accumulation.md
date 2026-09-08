@@ -56,12 +56,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: f77ad34cb474cebe27f97d061fad03e6ebe63d21
+  of: ece7c2f175e0ac1b386447c052aa415c51cc13b3
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "All three findings are answered on the text itself, but one loose end survives: the repaired sentence fixes the contradiction by saying `## Disposition` absorption happens 'once for each node... at the migration' and that 'no node gains the section again,' yet it never states when 'the migration' occurs relative to a node's own first checkpoint — whether it is a single graph-wide event this node either falls before or after, or something folded into each node's own first fold. This node currently carries a live `## Disposition` section and no migration has run, so the amendment's fix is consistent as written, but the timing question it leaves open could recreate the previous contradiction for a node minted between the migration and its own first checkpoint if 'the migration' turns out not to be a single one-time event. This is an underspecified point, not a restated contradiction, so it does not by itself defeat the amendment."
   survey:
     date: 2026-09-07
-    of: f77ad34cb474cebe27f97d061fad03e6ebe63d21
+    of: ece7c2f175e0ac1b386447c052aa415c51cc13b3
     commit: 6611799a1dd6276691cf61f482c8e593f0234200
     text:
       question: "f2034682be427b21ad0af7010b7363b1177b4e78619b218a9d26b2da9c243549"

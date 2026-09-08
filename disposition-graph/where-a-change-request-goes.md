@@ -60,11 +60,11 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-07
-  of: b07cc280a4699ac17d3d67471bdc7cc6db6a8874
+  of: fc7aca85c17ef18ca63721e3442c43504cac0f75
   against: "Every instance the last reading named is repaired, but the class of defect it was raised for is not: the amendment falsified a sentence of the account in the very paragraph it was editing, so for the fourth reading running this node reaches the author with an account that describes a state its own frontmatter does not carry, and the author cannot check the record from the page if the page's account of the record is what needs checking. On the first finding the repair is also the reading's own words rather than the reading's own test: \"it makes a confirmation carry a text the author confirmed in the same breath as changing it\" is the withdrawn pin objection with the word \"pin\" removed, and `recording`'s resolution — pinning `of` to the recommendation as the edits leave it, so the text confirmed is the author's own — answers that sentence as squarely as it answered the one struck from the `## Answer`. What holds the finding closed is the reason's first limb, the author's words of 2026-09-04 striking the option by name, which dominates the incumbent without the second limb; and what holds the verdict is that neither residue touches what either fact recommends, so both are correctable before the author rules without buying a redraft and a fourth reading."
   survey:
     date: 2026-09-07
-    of: b07cc280a4699ac17d3d67471bdc7cc6db6a8874
+    of: fc7aca85c17ef18ca63721e3442c43504cac0f75
 under:
   - commons.systems/disposition-graph/alignment-page
 ---

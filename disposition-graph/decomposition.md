@@ -101,12 +101,12 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 5e56e6b8fed51a4739882eb744083fd913ec916e
+  of: bffcc16fe330b0580935e936be7c2a660b74a879
   commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
   against: "The measured byte totals for the eight design units (16,432 to 44,306 bytes, 281,879 total) recompute today to 282,151 bytes across the same files, roughly 0.1% over the stated figure, which is within noise (the files may have been touched fractionally after the cited commit) and not a material misstatement. No other gap found."
   survey:
     date: 2026-09-07
-    of: 5e56e6b8fed51a4739882eb744083fd913ec916e
+    of: bffcc16fe330b0580935e936be7c2a660b74a879
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "b7be0c0bccbe17b9e3ae32c87cf3c070e291493bb1277d94af19536c80084481"

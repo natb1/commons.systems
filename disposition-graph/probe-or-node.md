@@ -114,7 +114,7 @@ review:
   verdict: kickback
   strength: moderate
   date: 2026-09-07
-  of: 378a53fb4aea7827a10ceabed59dd95943bef36e
+  of: f03d0eb4fe7d0c1203d301c1fc9475ff095bdf99
   commit: f0325d88ed52196f0551e86a7e6830e724f93c4b
   against: "The amendment can be read as a real repair rather than a relocation: by explicitly disclaiming reliance on the unruled 'a-standing-direction-acts-by-right' option ('rests... on nothing that node confers until the option is ruled') it stops claiming record-conferred authority altogether and instead treats the interim as a bounded, honest description of what one session does on its own account -- the same posture the fact's own `against` and the option's own prose already concede and price in ('honoured on trust', 'the same session that wants the file gone'). Read that way there is no new claim of right, only an accurate label for a stopgap already disclosed elsewhere on the node, and the remaining objection is to the interim's existence (already argued and already priced into its moderate boldness), not to anything this diff newly asserts."
   survey:

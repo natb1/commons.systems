@@ -11,7 +11,7 @@ review:
   against: "The recommended answer has little ground left of its own once its restatements are cited away. Its membership rule is viable-options' `passed-over-options-stay` seen from this side, its account of what an option carries is dialogue's, its account of what the projections show is alignment-page's, and its rule about the rationale is prose-and-structure's — and findings 4 and 5 show the fence still carries three of those as text rather than as citations, which is what `membership-cited-not-restated` exists to fix. What is left as this node's own is a liquidation the implementation already performed at 29d285d5 and a `defines` entry carrying a bare term with no gloss, and the third claim it makes for itself, that the record keeps no second home for a rejection, is not yet true of the record: projection's own recommended text still proposes a section carrying \"the alternatives the rationale rejected\". So a ratification here spends a ruling on a decision the author will have made one node earlier, and the answer that stands, `non-chosen-viable-options`, is the author's own words already answering the question they asked. Against that: the author asked this question twice, in 2026-09-02 and 2026-09-03, and it is entitled to an answer somewhere; deferred on the authority fact would let that answer act and keep the pair on the frontier to be ruled together, which is the exit the fact's own `against` names."
   survey:
     date: 2026-09-05
-    of: ba0ade0fcb26a5c65a623362ea060793e5c888eb
+    of: 5f3b0712edb438ae1287198c82b9a2a817cb929c
 facts:
   - name: answer
     options:

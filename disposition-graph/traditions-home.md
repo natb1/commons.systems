@@ -9,7 +9,7 @@ review:
   against: "Option 2, a graph per tradition, matches the author's stated model exactly — a mount that could be represented by its own graph with its own archē and its own references — and under it a tradition that later acquires its own repository needs no migration, because it already is one. The recommended option pays a directory move and a prefix rewrite instead, which is the liquidation the public graph carries and which the record has just adopted a principle to make owe redirects. The cost of the alternative is many near-empty manifests, which is real and cheap next to a migration the record has now priced twice."
   survey:
     date: 2026-09-07
-    of: 7c2559e6cb2172496ee2b83c26491861915f2982
+    of: 4c4da8b359c80cd71c11655b70d80fb81cf56b04
     commit: edc5af91d942319c12174309e388a244de61fa52
     text:
       question: "6a6f09f4b6af43a1c0566ee52b19773b9fc385f57181858c3547518f89a3e067"
