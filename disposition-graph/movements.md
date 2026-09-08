@@ -38,14 +38,22 @@ probes:
       party to the checked one. Two tradition surveys of 2026-09-08 found this
       independently from different families, and neither found an instrument in
       the family that terminates on agreement: adversarial collaboration ends
-      on a test both parties pre-committed to (Mellers, Hertwig and Kahneman,
-      Psychological Science 12, 2001), a Registered Report on a binding Stage 1
-      acceptance (Chambers, Cortex 49, 2013), the Theaetetus on the midwife's
-      judgment of the wind egg, and Delphi's own reviewers name termination on
-      convergence as the method's identified failure mode, since the feedback
-      produces convergence whether or not it produces accuracy (Rowe and
-      Wright, International Journal of Forecasting 15, 1999; Bolger and Wright,
-      TFSC 78, 2011).
+      on a test both parties pre-committed to and on a third party both
+      trusted to arbitrate (Mellers, Hertwig and Kahneman, Psychological
+      Science 12, 2001, where Mellers is that arbiter, a role this design has
+      nowhere), and a Registered Report on a binding Stage 1 acceptance
+      (Chambers, Cortex 49, 2013). Two further limbs stood here as first
+      written and were corrected on 2026-09-08 by a verification reading whose
+      account is below. The Theaetetus does not terminate on the midwife's
+      judgment: individual offspring are judged that way, while the dialogue
+      ends in aporia and is broken off from outside it at 210d, Socrates
+      leaving to answer Meletus's indictment, the aporia being presented at
+      210b-c as a gain. And Delphi's reviewers were cited at loci that are
+      confirmed for a claim that is not: that termination on convergence is
+      the method's identified failure mode is a secondary paraphrase in every
+      source the reading could reach (Rowe and Wright, International Journal
+      of Forecasting 15, 1999; Bolger and Wright, TFSC 78, 2011; Turoff 1970),
+      and it is held as unverified here rather than struck.
     discharges: >-
       Whether the expert paradigm needs a terminator that is not the parties'
       agreement, and therefore whether it replaces the review or precedes it.
@@ -383,3 +391,258 @@ stage is today. It is a reconciliation item on this node, owed once the answer
 is ruled on, and until then a sitting that follows the skill and a sitting that
 follows this node will run differently, which is the cost of leaving it and is
 recorded rather than argued away.
+
+### The terminator read against tradition, 2026-09-08
+
+The author's words at `words/2026-09-08/29` discharge the probe above and carry
+a question back: whether the disposition on termination is itself consistent
+with tradition. This section is the reading that answers it, and it is entered
+here because `evaluation` requires every tradition surfaced to be recorded with
+the resolution it informed, and because the record and not the session carries
+what a unit returns. The reading ran as a unit on the most capable model at high
+effort, with verification sub-units under it; its verification discipline is
+reproduced at the end, because a locus that is confirmed for a claim that is not
+is the failure this node has already committed once.
+
+**The disposition is consistent, and tradition is more definite about it than
+the record was.** The family of instruments that terminate on a joint record of
+what is agreed and not agreed, without requiring convergence, is well populated,
+and the closest member to the disposition is CPR 35.12, whose (3) directs
+experts to prepare a statement setting out the issues they agree on and those
+they disagree on "with a summary of their reasons for disagreeing", and whose
+(5) makes any agreement they reach non-binding on the parties unless the parties
+expressly agree to be bound. Beside it: IETF RFC 7282, whose §3 has rough
+consensus achieved "when all issues are addressed, but not necessarily
+accommodated" and whose §6 makes "the existence of the unaddressed open issue,
+not the number of people" determinative, which is termination on the objections
+having been engaged and is the disposition's own rule in a live standard;
+BVerfGG §30(2), under which a Justice's differing view on the decision or its
+reasoning is annexed to the decision; 5 U.S.C. §566(f), under which a committee
+that reaches no consensus may still transmit a report of the areas where it did;
+and adversarial collaboration, whose own account has it that "even successful
+collaborations will end with few minds changing" (Kahneman and Klein, American
+Psychologist 64(6), 2009, 515-526, the worked instance).
+
+The terminator has philosophical warrant. Aristotle, Topics I.1: reasoning is
+dialectical "if it reasons from opinions that are generally accepted", and
+"dialectic is a process of criticism wherein lies the path to the principles of
+all inquiries" -- shared endoxa are the input and the exchange is criticism from
+them. Wittgenstein, Philosophical Investigations §217: "If I have exhausted the
+justifications I have reached bedrock, and my spade is turned"; On Certainty
+§341, on propositions "exempt from doubt ... like hinges on which those turn".
+Justification terminates at shared hinges and not at agreement. Rawls supplies
+the licence for the divergence: the burdens of judgment, Political Liberalism
+1996 pp. 56-57, enumerate six sources of reasonable disagreement arising from
+the normal exercise of reason.
+
+**Tradition has a name for the terminal state the disposition produces, and the
+record did not have it.** Rescher argues the position at book length: The Strife
+of Systems (Pittsburgh, 1985), p. xi, "given the nature of the enterprise,
+consensus is simply not a sensible goal, and failure to achieve it is not a
+defect"; Pluralism: Against the Demand for Consensus (Clarendon, 1993), p. 5,
+"Strive to make the world safe for disagreement. Work to realize processes and
+procedures that make dissensus tolerable if not actually productive." And at
+p. 172, of the state itself: "acquiescence is indeed a co-ordination of sorts --
+it puts the parties into an alignment. But it does not involve their agreeing to
+anything ... Acquiescence and 'going along' is not tantamount to consensus." The
+disposition does not merely resemble a tradition; it restates one, and the state
+it terminates in is called acquiescence, alignment without agreement. A
+rendering of Rescher's thesis as consensus being "neither attainable nor
+desirable" is not his wording and is not to be used.
+
+**The clause on parties holding alternative dispositions to keep each side
+internally consistent has an exact ancestor, and it is a tradition shelved by
+pre-agent constraints,** which is the second evaluation `evaluation` asks for by
+name. The medieval obligationes -- Burley, Tractatus de obligationibus c. 1302;
+Swyneshed 1330-35; Ockham, Summa logicae c. 1323; Paul of Venice, Logica magna
+1397-98 -- require the respondent to answer consistently with what has been
+conceded rather than according to what is true, and were an apparatus for
+explicating what a coherent defence of a position requires. The constraint that
+shelved them is that a live disputation costs two trained people an afternoon
+per question.
+
+**Where tradition cuts against it, in six places.**
+
+First, and largest: every instrument in the family has a third party who judges
+that the grounding condition is met, and this design has none. The court directs
+the discussion under CPR 35.12, and CPR 35.3 makes the expert's duty to the
+court override any obligation to the instructing party; the chair declares rough
+consensus "in their technical judgement" under RFC 7282 §3; the 2001
+collaboration needed "an arbiter that we both trusted", and chose Mellers, which
+is the correction made to the probe's `why` above. A survey of the wider family
+found that "who adjudicates" takes four values -- no one, a counting rule, a
+named third party who certifies only that disagreement was documented, and the
+parties themselves -- and found no instrument that bounds the record's growth,
+keeps the reasons, and appoints no one. This record's fold wants all three, so
+on this evidence it is inventing rather than adopting, and that bears on
+`unconfirmed-accumulation` rather than here.
+
+Second, Aumann 1976 (Annals of Statistics 4(6), 1236-1239): "If two people have
+the same priors, and their posteriors for an event A are common knowledge, then
+these posteriors are equal", with the gloss at p. 1238 that "there is no rational
+basis for people who have always been fed precisely the same information to
+maintain different subjective probabilities." The bite is narrower than it looks
+and the narrowness matters: Aumann concerns the posterior probability of an
+event, so it bites on divergence about what is the case and is silent on
+divergence about what to do. The author's clause mixes both -- "alternative
+readings of tradition" is factual-interpretive and Aumann bites; "alternative
+disposition to keep internally consistent" is evaluative and it does not. What
+this yields is a diagnostic and not a refutation: factual divergence that
+survives common knowledge indicates either that the common ground is not in fact
+common, or that one party is not conditioning on it. The escape is denial of
+common priors, epistemic permissivism against White's Uniqueness, which is a
+live position with a stated price: once divergence may be traced to differing
+priors rather than differing information, shared grounding can no longer be
+evidence that a divergence is principled rather than an unnoticed mistake.
+
+Third, Rawls's structure is the exact inverse. Overlapping consensus converges
+on the conclusion, the political conception, while diverging in the grounds,
+because a coercive order must be single-valued (PL 1996, p. 387). This design
+converges on the grounds and diverges in the conclusion. Both are coherent, but
+a node's answer is single-valued too, so when author and AI diverge the record
+still resolves it, and it resolves it by authority rather than by agreement.
+That is legal positivism's structure and not Rawls's, and naming it is better
+than leaving it implicit.
+
+Fourth, Walton and Krabbe's typology contains no dialogue type that terminates
+this way. Their completion conditions run: persuasion, resolve issue; inquiry,
+prove hypothesis; negotiation, settle issue; deliberation, decide what to do;
+information, exchange information; discovery, support hypothesis; and eristic,
+reveal deep conflict. The only type whose success is the exposure of persisting
+disagreement is eristic, whose goal is to attack an opponent, which this design
+does not have. So the design has persuasion dialogue's initial situation and
+goal with eristic's completion condition: a mixed type, and mixing is what their
+dialectical-shift apparatus exists to scrutinise. Pragma-dialectics is adjacent
+and no friendlier: its concluding stage is defined by retraction, a successful
+defence resulting in the antagonist retracting its doubts, which this design
+does not require.
+
+Fifth, Rittel and Webber, Policy Sciences 4, 1973, Property 2, p. 162: "Wicked
+problems have no stopping rule ... The planner terminates work on a wicked
+problem, not for reasons inherent in the 'logic' of the problem. He stops for
+considerations that are external to the problem: he runs out of time, or money,
+or patience." Property 3, p. 163, supports the permissiveness -- many parties
+equally entitled to judge, none able to set formal decision rules -- but Property
+2 warns against the ambition, since the disposition specifies an internal
+stopping rule for a class Rittel holds has none, and predicts that the operative
+stopping condition will be external while the stated one supplies the
+justification afterwards. The Theaetetus is that prediction's founding instance
+and the record had it backwards: Socrates stops because he must be at the King's
+Porch.
+
+Sixth, Stalnaker, Common Ground, Linguistics and Philosophy 25 (2002), p. 717:
+"A defective context may go unnoticed; that is, it can happen that all
+participants believe that the context is nondefective even when it is
+defective." Detection is only ever downstream and by consequence, and p. 719
+adds that "not every defective context is so easily corrected: there are cases
+where accommodation is impossible." Against a terminator keyed to common ground:
+the condition can be satisfied in the belief of both parties while failing in
+fact, the failure has no signature at the moment of termination, and it is not
+guaranteed repairable once found.
+
+**Two findings about the typing of persuasion, which are the reading's own
+contribution rather than tradition's.**
+
+The clause types persuasion, and persuasion is not the only route by which a
+common-ground terminator is reached. Riker's name for the other is heresthetic:
+The Art of Political Manipulation (Yale, 1986), "structuring the world so you can
+win", which Riker holds is the stronger of the two precisely because it needs
+nobody's mind changed. The author's clause admits and excludes modes of
+persuasion and says nothing about restructuring the question so that the
+disagreement no longer arises -- and the record's machinery makes that
+restructuring routine and rewarded, since the AI raises the probes, writes their
+`asks` and `why`, splits nodes, moves clauses to children, and writes the
+discharge. The instance is on this node. The probe above named three routes to a
+common-ground terminator, "by being right, by being persuasive, and by reframing
+the question until the disagreement no longer applies"; the author's words answer
+the second; and the discharge reason closes the probe by recording that it is
+"answered by refusing its premise rather than by meeting it", which is the third.
+This is recorded because the record has no rule for the move and not because the
+move was wrong: the refusal is the author's own, in their own words, and the
+discharge reports it faithfully. What is missing is that the clause covers one
+route and the record runs on two. Beside it, and pointing the same way,
+`who-convenes-the-experts` is open while a probe whose terminator depends on who
+supplies the tradition is discharged; those two are ordered backwards.
+
+And there is a threat-model inversion inside the clause. The mode excluded,
+emotional manipulation, is the one an AI is least able to use in a written record
+and the author is best placed to notice. The mode admitted as paradigmatic,
+presenting a tradition the author was not aware of, is the one the AI is best
+placed to use and the author is least able to check, because checking it means
+knowing what was not surveyed, and this record's own words about a different
+instrument are that an omitted input "leaves no trace of the omission"
+(`clean-context-review`, on `sibling-set-named-by-the-session`). The record
+already holds three rulings of exactly this shape -- that one, `review-model`'s
+refusal of `conditional-by-boldness` because "the drafter selected the strength
+of its own reviewer", and `segregation-of-duties` on no part of an instrument's
+constitution being in the hands of the party under check -- and none of them
+reaches the tradition half of "a common understanding of tradition".
+
+**Two readings that bear on neighbours rather than on this node's answer.** The
+midwife's standing to call an offspring a wind egg rests on a property stated in
+the same passage of the Theaetetus, that Socrates is "not myself at all wise,
+nor have I anything to show which is the invention or birth of my own soul"; the
+AI in this dialogue arrives with a recommendation, so whatever else it is, it is
+not barren, and that bears on `plato-elenchus`. And Nemeth, Brown and Rogers,
+EJSP 31, 2001, 707-720, found authentic minority dissent beat all three
+devil's-advocate conditions, "underscoring the value and importance of
+authenticity and difficulty in cloning such role-playing techniques"; an AI
+arguing a position it does not hold because a convened tradition requires it is
+role-played dissent, which is the condition that underperformed, and that bears
+on the expert paradigm and on `expert-instructions` when it is minted.
+
+**The probes the reading generated, and why none of them is on this node.** This
+node stands at four open probes against `dialogue`'s cap of three, so the cap is
+already breached and adding to it would deepen the breach rather than record
+anything; the breach is named here so that a reading finds it stated rather than
+having to count. The probes are held with their homes: what plays the part every
+instrument in the family gives a third party, and what would show that the
+understanding was not in fact common, both of which belong with the terminator
+wherever it is given a node; where reframing a question until the disagreement no
+longer applies falls, when the clause types persuasion alone; whether a recorded
+divergence should say which kind it is, factual-interpretive or evaluative, which
+is Aumann's diagnostic made into a field; what makes the recorded answer the
+author's when a node's answer is single-valued and the parties diverge; whether
+a round that ends on grounding can be told from a round that ended because the
+sitting ran out, which is Rittel's Property 2 made into a test; whether the
+terminal state the record then holds is acquiescence in Rescher's sense or
+something stronger; and whether an AI arguing a convened position is giving a
+reading or playing a role, which is Nemeth's finding made into a question.
+
+**Verification discipline.** Verbatim from a primary or official text: CPR 35.3,
+35.7, 35.12(1)(3)(5); RFC 7282 §§1-6; Aumann 1976 and its Harsanyi gloss; Rosen
+2001 p. 71; White's Uniqueness; Aristotle Topics I.1, I.2, and VIII.1, VIII.2,
+VIII.5, VIII.11; Theaetetus 150c-d and 210b-d; Wittgenstein PI §217 and OC §§341,
+611, 612; Rittel and Webber Properties 1-3; van Rooyen 1999 and 2010; Nemeth
+2001; Scheel, Schijen and Lakens 2021; Goldman 2001; pragma-dialectics Rule 1;
+Riker on heresthetic; Stalnaker 2002 pp. 717, 719; BVerfGG §30(2); 5 U.S.C.
+§566(f); Murrie et al. 2013 abstract; Kahneman and Klein 2009 abstract; Rescher
+1985 p. xi and 1993 pp. 5, 172. Verified through the Stanford Encyclopedia
+quoting the primary: Rawls's burdens of judgment and overlapping consensus;
+Habermas's discourse rules adopting Alexy; the Walton and Krabbe typology;
+obligationes. Locus verified and substance not seen in a primary text, so flagged
+rather than asserted: Bachrach and Baratz 1962; Polanyi p. 4; Hardwig 1985 and
+1991; Rowe and Wright 1999; Bolger and Wright 2011; Turoff 1970. Not verified and
+not to be relied on: the pragma-dialectical resolve-versus-settle distinction and
+the concluding rule's number; Clark and Brennan's grounding criterion. Aristotle's
+Topics VIII, the book on conducting dialectical exchanges, states no termination
+condition at all across its fourteen chapters, and no one is to manufacture one
+from it; VIII.2 only rebukes a questioner for failing to break off with an
+unresponsive answerer. Two readings of the same book bear on the asymmetry the
+author named: VIII.11 apportions responsibility between both parties rather than
+to the mover alone, and VIII.5 states the mover-equals-judge case in its sharpest
+classical form, where a thesis is the answerer's own and "the standard whereby
+the latter must judge what is generally accepted or not ... is himself." VIII.5
+also records that Aristotle wrote the first rules for dialectical exchange
+because none existed, "we have no tradition bequeathed to us by others, let us
+try to say something upon the matter for ourselves", which is this record's
+position and is a respectable one rather than an anomaly.
+
+Not one of the traditions above is a reading node. The record's form for a
+tradition is a node, as `plato-elenchus` and `n-version-programming` are, and
+`evaluation`'s rule is that every tradition surfaced is recorded as a reading
+with the resolution it informed. What is written here is the resolution and the
+locus; the nodes are owed, they are a backlog this sitting did not pay, and the
+backlog is named rather than left for a later reading to discover. A locus in
+the flagged list is not to be promoted to a verbatim citation by anything short
+of a primary text.
