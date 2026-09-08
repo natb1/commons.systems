@@ -86,15 +86,31 @@ together is not compared, and a node the judged set reaches but whose read
 text has not changed since that survey is carried on one line rather than by
 what it answers, since the pair has already been read once; everything so
 struck is the frozen set, named in the survey's own output and in the
-reader's report. The selection is unsafe, and two backstops cover it. A
-whole survey, in which nothing is frozen, runs after every fourth delta
-survey, at least once in any thirty days, and unconditionally after any
-amendment to the validations, to what a reading is given, or to the tier.
-And every delta survey carries a drift probe, a random sample of one in
-twenty of the frozen pairs and never fewer than ten, drawn by a seeded
-generator whose seed the run records and handed to the reader like any other
-pair, marked as the probe; a finding anywhere in the sample forces a whole
-survey.
+reader's report. What unchanged means is the pin the survey writes on every
+node it read: the apply step (§4) pins the judged set and the whole
+neighbourhood alike, and a later run freezes a node whose five section
+hashes still match the pin it carries, judged or merely read. A pin on a
+node the survey only read carries no recommendation hash, so it freezes that
+node's text and never satisfies the survey a ruling owes: a node at the
+review or the ruling stage carrying a read pin alone is still in the next
+survey's judged set.
+
+The delta is the norm and the whole reading is a backfill
+(`survey-selection`, the option
+`the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`, on the author's
+words `words/2026-09-07/23`: no process may grow in context size with the
+graph unbounded). A whole survey, in which nothing is frozen, runs on the
+author's word (`--whole`) and after any amendment to the validations, to
+what a reading is given, or to the tier (`--validations-changed`). It runs
+on no cadence, after no count of deltas, and after no lapse of days, and
+nothing in the tooling demands one. The selection is unsafe, and one thing
+covers it: every delta survey carries a drift
+probe, a random sample of one in twenty of the frozen pairs and never fewer
+than ten, drawn by a seeded generator whose seed the run records and handed
+to the reader like any other pair, marked as the probe. A finding anywhere
+in the sample is a finding on the freeze: it is recorded on the nodes it
+names like any other finding, and reported as the freeze's failure. It puts
+a backfill in front of the author and does not launch one.
 
 A candidate pair is two nodes the generator nominates for comparison with the
 key that nominated it — a defined term (the node that defines it paired with
@@ -141,31 +157,41 @@ survey pin on the same; this reading gives the second of the two.
 `node packages/clean-context-review/brief.mjs --survey disposition
 [--date YYYY-MM-DD] [--dry] [--whole] [--validations-changed] [--force-tier]
 [--out <file>] [--sidecar-dir <dir>]` writes the brief from `brief-survey.md`
-in that package and names the reader's output file. `--whole` forces a whole
-survey (nothing frozen); `--validations-changed` forces one after an
-amendment to the validations, to what a reading is given, or to the tier
-(`survey-selection`'s unconditional backstop); the tier gate of §0 is
+in that package and names the reader's output file. Passed neither flag it
+writes a delta, which is the survey's only recurring form. `--whole` is
+passed on the author's word alone, to run a backfill in which nothing is
+frozen; `--validations-changed` is passed after an amendment to the
+validations, to what a reading is given, or to the tier, which invalidates
+every earlier reading's silence and so runs the same whole reading. Nothing
+else makes a run whole: there is no cadence, no count of deltas and no lapse
+of days behind either flag, and a run passed neither is a delta however long
+it has been since the last whole reading. The tier gate of §0 is
 `--force-tier`'s, recorded there and not repeated here.
 
 Beside the brief it writes three sidecars, by default under `tmp/review/`:
 `survey.pins.json`, the graph commit read and the recommendation hash of
 every node of the graph, judged and context alike — what the apply step
 compares against, and never a hash the reader copied, which is what
-serializes this reading so nothing is locked; `survey.selection.json`, the
-selection this run made — the frozen set, the live candidate pairs with
-their nominating keys, and the drift probe drawn from the frozen set with
-its seed — which the apply step reads to record `pairs` on each judged node
-and which the next survey's cut is taken over exactly those entries
-(`survey-selection`); and `survey.history.json`, the record of which
-surveys ran whole and which ran as deltas, which is what the two backstops
-above are certified against. All three must be read at the graph commit the
+serializes this reading so nothing is locked — and beside those, under
+`read`, every node this reading carried by what it answers with the five
+section hashes of its text, which is what the apply step pins on each of
+them and what the next delta freezes on; `survey.selection.json`, the
+selection this run made — the frozen set, the neighbourhood, the live
+candidate pairs with their nominating keys, and the drift probe drawn from
+the frozen set with its seed — which the apply step reads to record `pairs`
+on each judged node and over exactly whose entries the next survey's cut is
+taken (`survey-selection`); and `survey.history.json`, a log of the runs:
+the date, the graph commit, whether the run was whole or a delta, how many
+nodes it judged and how big the brief was. Nothing reads the history to
+demand a run, and no run is certified against it — the two flags above are
+the whole of what makes a reading whole — so it is kept for the measurement
+and for nothing else. The first two must be read at the graph commit the
 survey was launched at: a stale pair of sidecars compares against text the
-tree no longer holds. Writing the brief registers this survey in the
-history sidecar at once (a `--dry` run registers nothing), so a diagnostic
-or measurement run of this step must pass its own `--sidecar-dir` — a
-`tmp/review/` run against the live sidecars would frozen-count and register
-a survey that never reads or applies, corrupting the pins the next real
-apply reads against.
+tree no longer holds. Writing the brief appends to the history sidecar at
+once (a `--dry` run appends nothing), so a diagnostic or measurement run of
+this step passes its own `--sidecar-dir` — a `tmp/review/` run against the
+live sidecars would overwrite the pins and the selection the next real apply
+reads against.
 
 The brief carries the validations this reading runs, how a tangle and a
 subtree divergence are recorded (`alignment-order`), the admission test and
@@ -258,6 +284,14 @@ reading rather than as a finding of nothing.
      records the other five keys and notes that this survey's cut therefore
      falls back to the survey date rather than to the pairs actually read,
      which freezes more than it should on the next run;
+   - writes a **read pin** on every node the pins sidecar lists under `read` —
+     the neighbourhood this reading carried by what it answers — `date`,
+     `commit` and `text` (the same five section hashes) and no `of`, merged
+     under whatever the node's `review` block already holds and never
+     displacing a judged pin's `of`: the reading read that node, and the pin
+     is what the next delta freezes it on. A read pin satisfies nothing: a
+     node at the review or the ruling stage carrying one alone is still owed a
+     survey and is judged again by the next one;
    - appends `### Frontier finding, <date>` to every node a finding names, at
      whatever stage, with the kind, the finding, the other nodes named, the
      proposed edit, and where any proposed option was recorded, and sets each

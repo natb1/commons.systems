@@ -65,7 +65,7 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
 import { readGraph, parseNode, FACT_NAMES, REVIEW_SURVEY_KEYS } from "@commons.systems/disposition/read.mjs";
-import { graphCommit, SECTION_HASH_KEYS, movedSections } from "./brief.mjs";
+import { graphCommit, SECTION_HASH_KEYS, movedSections, sectionHashes } from "./brief.mjs";
 
 const STAGE_ORDER = ["periagogic", "maieutic", "review", "ruling"];
 // the two stages a reading may send a node back to: the ground, or the draft
@@ -1258,6 +1258,24 @@ function checkPinsShape(pins, from) {
   if (!pins.pins || typeof pins.pins !== "object" || Array.isArray(pins.pins)) {
     throw new Error(`${from}: 'pins' must be an object of node id to recommendation hash`);
   }
+  // 'read' is optional and, until brief.mjs's own migration lands, absent:
+  // the nodes the survey carried by what they answer, each with the five
+  // section hashes it read (`the-whole-reading-is-a-backfill-and-the-delta-
+  // is-the-norm`). Absent means exactly what it means today -- no read pin
+  // is written on any node this run did not otherwise touch.
+  if (pins.read !== undefined && pins.read !== null) {
+    if (!Array.isArray(pins.read)) {
+      throw new Error(`${from}: 'read' must be a list of {id, text} when given`);
+    }
+    for (const [i, entry] of pins.read.entries()) {
+      if (!entry || typeof entry !== "object" || !isNonEmptyString(entry.id)) {
+        throw new Error(`${from}: read[${i}] must be {id, text}`);
+      }
+      if (!entry.text || typeof entry.text !== "object" || Array.isArray(entry.text)) {
+        throw new Error(`${from}: read[${i}] (${entry.id}) must carry 'text', the five section hashes`);
+      }
+    }
+  }
   return pins;
 }
 
@@ -1334,6 +1352,13 @@ function validateSurvey(input, graph, { replies, overrides, pins }) {
     }
     if (!f || !isNonEmptyString(f.finding)) problems.push(`${label}: 'finding' is required`);
     if (!f || !isNonEmptyString(f.proposal)) problems.push(`${label}: 'proposal' is required`);
+    // A finding drawn from the drift probe (survey-selection: "a finding
+    // anywhere in the sample is a finding on the freeze ... reported as the
+    // freeze's failure") is applied exactly like any other finding; `probe`
+    // only changes how this run's own summary names it, below.
+    if (f && f.probe !== undefined && typeof f.probe !== "boolean") {
+      problems.push(`${label}: 'probe' must be a boolean when given`);
+    }
     for (const id of nodeIds || []) {
       if (Object.prototype.hasOwnProperty.call(overrides, id)) continue;
       const s = f.stages ? f.stages[id] : undefined;
@@ -1480,12 +1505,17 @@ function stageRank(stage) {
 /**
  * Every node the survey touches -- named in `nodes` (a judged node's reading),
  * named by a `frontier` finding (findings only, at any stage), named by a
- * `probes` entry (any node, judged or not, the same as a finding), or any
- * combination of the three -- keyed by id, in the order first encountered. A
+ * `probes` entry (any node, judged or not, the same as a finding), listed in
+ * `readIds` (a node the survey merely read, by what it answers), or any
+ * combination of the four -- keyed by id, in the order first encountered. A
  * finding's proposed options are collected onto the node each goes on, which
  * the checks above have already required the finding to name.
+ *
+ * `readIds` alone never assigns a stage, adds an option, or raises a probe:
+ * `ensure` only guarantees the id has an entry, so `planTouchedNode` reaches
+ * it and can merge a read pin, and nothing else about the node moves.
  */
-function collectTouched({ nodes, frontier, probes }) {
+function collectTouched({ nodes, frontier, probes, readIds }) {
   const touched = new Map();
   const ensure = (id) => {
     if (!touched.has(id)) touched.set(id, { nodeEntry: null, findings: [], options: [], probes: [] });
@@ -1493,6 +1523,9 @@ function collectTouched({ nodes, frontier, probes }) {
   };
   for (const entry of nodes || []) {
     ensure(entry.id).nodeEntry = entry;
+  }
+  for (const id of readIds || []) {
+    ensure(id);
   }
   for (const f of frontier || []) {
     const options = Array.isArray(f.options) ? f.options : [];
@@ -1510,6 +1543,10 @@ function collectTouched({ nodes, frontier, probes }) {
         // conservative default where a reading names neither.
         supports: Array.isArray(f.supports) ? f.supports : null,
         discharges: isNonEmptyString(f.discharges) ? f.discharges : null,
+        // Carried only to change this run's summary line for the node
+        // (`the freeze failed on <pair>`, not `Frontier finding`); the
+        // written subsection and register entry are the same either way.
+        probe: f.probe === true,
       });
     }
     for (const a of options) {
@@ -1617,7 +1654,13 @@ async function planTouchedNode(id, t, ctx) {
     finalStage = stageForOpenProbe(currentStage, finalStage === "periagogic");
   }
 
-  if (!stageTouched && currentStage === null) {
+  // A node this survey merely read -- no nodeEntry, no finding, no proposed
+  // option, no probe -- opens no dialogue and is never asked to carry a
+  // stage on that account; it is here only so a read pin can be merged onto
+  // it below, and an unstaged settled node (most of what a survey reads by
+  // what it answers) is the ordinary case, not a problem.
+  const pureRead = !t.nodeEntry && t.findings.length === 0 && t.options.length === 0 && t.probes.length === 0;
+  if (!stageTouched && currentStage === null && !pureRead) {
     return {
       id,
       problems: [`${id}: carries no stage, and nothing in this survey names one for it; a finding recorded on a node opens its dialogue, so name its stage in the finding's 'stages' (or in --overrides)`],
@@ -1676,6 +1719,31 @@ async function planTouchedNode(id, t, ctx) {
     if (ctx.pairsOf(id).length === 0 && ctx.pairsKnown === false) {
       notes.push(`${id}: the survey's selection sidecar (${SELECTION_BASENAME}) was not beside its pins, so no pairs are recorded on this node; the next survey's cut falls back to the survey date, which freezes more than it should`);
     }
+  } else {
+    // A node this survey read but did not judge (`ctx.readTextOf`, from the
+    // pins sidecar's 'read' list) is pinned on the hash of the text it read,
+    // whether or not this run otherwise touches it: a read pin never carries
+    // `of`, so it never satisfies the survey a review- or ruling-stage node's
+    // own ruling owes, but it freezes the node so the next delta can tell it
+    // apart from one that moved (`the-whole-reading-is-a-backfill-and-the-
+    // delta-is-the-norm`). Any `of`, `findings` or `pairs` the node's block
+    // already carries -- a judged pin from an earlier survey -- is kept
+    // exactly as it stands beside the refreshed `date`, `commit` and `text`:
+    // this never turns a judged pin into a read pin, and never invents a
+    // register or a pair list the node was not actually judged to have.
+    const readText = ctx.readTextOf(id);
+    if (readText !== null) {
+      const existing = parsedBefore.review?.survey ?? null;
+      surveyPin = surveyBlock({
+        date: ctx.date,
+        of: existing?.of ?? null,
+        commit: ctx.surveyCommit,
+        text: readText,
+        findings: existing?.findings ?? null,
+        pairs: existing?.pairs ?? null,
+      });
+      labels.push(existing?.of ? "read pin (judged pin kept)" : "read pin");
+    }
   }
 
   for (const f of t.findings) {
@@ -1688,7 +1756,12 @@ async function planTouchedNode(id, t, ctx) {
       options: f.options,
       id,
     }));
-    labels.push("Frontier finding");
+    // A finding the drift probe drew (survey-selection: "a finding anywhere
+    // in the sample ... reported as the freeze's failure") is applied like
+    // any other finding above; only this run's own summary names it apart,
+    // as the freeze's failure on the pair rather than a plain frontier
+    // finding, and nothing here forces a whole survey or writes a flag.
+    labels.push(f.probe ? `the freeze failed on ${[id, ...f.otherIds].join(" / ")}` : "Frontier finding");
   }
   if (newOptions.length > 0) {
     labels.push(`option${newOptions.length > 1 ? "s" : ""} ${newOptions.map((a) => `'${a.name}'`).join(", ")}`);
@@ -1737,7 +1810,10 @@ async function planTouchedNode(id, t, ctx) {
   if (parsedAfter.standingHash !== parsedBefore.standingHash) {
     return { id, problems: [`${id}: internal error -- the standing hash changed by the edit (${parsedBefore.standingHash} -> ${parsedAfter.standingHash}); this script writes dialogue state and the account only`] };
   }
-  if (surveyPin !== null && parsedAfter.recommendationHash !== surveyPin.of) {
+  // A read pin (`surveyPin.of` null) pins no recommendation and has none to
+  // check here; only a judged pin's `of` is checked against the freshly
+  // parsed recommendation hash.
+  if (surveyPin !== null && surveyPin.of !== null && surveyPin.of !== undefined && parsedAfter.recommendationHash !== surveyPin.of) {
     if (newOptions.length > 0) {
       notes.push(`${id}: recording option${newOptions.length > 1 ? "s" : ""} ${newOptions.map((a) => `'${a.name}'`).join(", ")} moved the recommendation hash (${surveyPin.of} -> ${parsedAfter.recommendationHash}), because the content encoding hashes every option; the node stands as moved past its survey pin and is judged again by the next survey`);
     } else {
@@ -1927,12 +2003,40 @@ async function applySurvey({ rootDir, manifest, input, pins, selection = null, r
   }
   const pairsOf = (id) => pairsByNode.get(id) || [];
 
+  // The pins sidecar's 'read' list (brief.mjs's surveyPins): every node this
+  // survey carried by what it answers, with the five section hashes as read.
+  // A node whose current section hashes no longer match what was read is
+  // moved, exactly as a judged node's recommendation hash moving discards
+  // its entry above -- reported and left unpinned, read again by the next
+  // survey. Absent 'read' (the sidecar before brief.mjs's own migration)
+  // pins nothing here, same as an empty list.
+  const readEntries = Array.isArray(pins.read) ? pins.read : [];
+  const readTextById = new Map();
+  for (const entry of readEntries) {
+    const node = nodesById.get(entry.id);
+    if (node === undefined) {
+      movedReport.push(`${entry.id}: read pin skipped — not a node of this graph`);
+      continue;
+    }
+    const now = sectionHashes(node, graph.words);
+    const movedKeys = movedSections(entry.text || {}, now);
+    if (movedKeys.length > 0) {
+      movedReport.push(`${entry.id}: moved since the survey read it (${movedKeys.join(", ")} changed); not pinned, read again by the next survey`);
+      continue;
+    }
+    readTextById.set(entry.id, entry.text);
+  }
+  const readTextOf = (id) => readTextById.get(id) ?? null;
+
   const ctx = {
     rootDir, manifest, replies, overrides, date: effectiveDate, pinOf,
-    surveyCommit, textOf, pairsOf, pairsKnown,
+    surveyCommit, textOf, pairsOf, pairsKnown, readTextOf,
   };
 
-  const touched = collectTouched({ nodes: keptNodes, frontier: keptFrontier, probes: keptProbes });
+  const touched = collectTouched({
+    nodes: keptNodes, frontier: keptFrontier, probes: keptProbes,
+    readIds: [...readTextById.keys()],
+  });
   const plans = [];
   const planProblems = [];
   for (const [id, t] of touched) {

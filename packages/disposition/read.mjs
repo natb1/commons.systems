@@ -150,18 +150,33 @@ export const REVIEW_STRENGTHS = ['strong', 'moderate', 'weak', 'none'];
 export const REVIEW_DRAFT_KEYS = ['verdict', 'strength', 'date', 'of', 'against', 'commit'];
 export const REVIEW_DRAFT_REQUIRED_KEYS = ['verdict', 'strength', 'date', 'of'];
 // `survey`'s own six keys, per apply.mjs's `surveyBlock`/`renderSurveyLines`
-// (commons.systems/disposition-graph/survey-selection): `date` and `of` are
-// required, as they always were; `commit`, the graph commit the survey
-// read; `text`, the hashes of the five sections its validations judged,
-// keyed by `question`, `answer`, `options`, `rivals`, `words`; `findings`,
-// the register of what the survey left open on the node; and `pairs`, the
-// candidate pairs it actually read that touch this node, are optional and
-// were added on top of the two the survey has always carried, so an older
-// pin with only `date` and `of` still reads. `REVIEW_SURVEY_KEYS` is the
-// whole vocabulary a survey block may use; an unknown key still fails the
-// same way a bad `date` or `of` does.
+// (commons.systems/disposition-graph/survey-selection): `date`, the graph
+// commit the survey read (`commit`), the hashes of the five sections its
+// validations read (`text`, keyed by `question`, `answer`, `options`,
+// `rivals`, `words`), the register of what the survey left open on the node
+// (`findings`), and the candidate pairs it actually read that touch this
+// node (`pairs`). `REVIEW_SURVEY_KEYS` is the whole vocabulary a survey
+// block may use; an unknown key still fails the same way a bad `date` or
+// `of` does.
+//
+// The block is one of two pins. A **judged pin** carries `of`, the
+// recommendation hash the survey judged the node against, and is what a
+// review- or ruling-stage node needs to stand surveyed
+// (`the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`: "a pin on a
+// node the survey read by what it answers is a pin on a reading that judged
+// the node against nothing, and the answer has to say... that such a pin
+// freezes without satisfying the survey a ruling owes"). A **read pin**
+// carries no `of`: it is written on any node the survey merely read --
+// whatever stage it stands at -- so that node's text is frozen against a
+// later delta without the node being counted as judged. `date` and `text`
+// are required on a read pin; `date` and `of` are required on a judged one,
+// and carrying `findings` or `pairs` (which name what a judgment left open)
+// makes a block a judged one and requires `of` beside them. `REVIEW_SURVEY_
+// REQUIRED_KEYS` is only what every survey block owes regardless of which
+// pin it is; `surveyOk`, below, is where the two shapes are actually told
+// apart.
 export const REVIEW_SURVEY_KEYS = ['date', 'of', 'commit', 'text', 'findings', 'pairs'];
-export const REVIEW_SURVEY_REQUIRED_KEYS = ['date', 'of'];
+export const REVIEW_SURVEY_REQUIRED_KEYS = ['date'];
 // The two stages the survey judges: a node is ruled from the ruling stage,
 // and reaches it from the review stage, so those are where the frontier's
 // consistency with itself is what the author is about to rule on.
@@ -1650,15 +1665,25 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     const drafted = REVIEW_DRAFT_REQUIRED_KEYS.some(has);
     const surveyed = has('survey');
     const hasSurvey = (s, k) => isPlainObject(s) && Object.prototype.hasOwnProperty.call(s, k) && !isAbsent(s[k]);
-    const surveyOk = (s) => isPlainObject(s)
-      && Object.keys(s).every((k) => REVIEW_SURVEY_KEY_SET.has(k))
-      && REVIEW_SURVEY_REQUIRED_KEYS.every((k) => Object.prototype.hasOwnProperty.call(s, k))
-      && typeof s.date === 'string' && isValidDate(s.date)
-      && typeof s.of === 'string' && HASH_RE.test(s.of)
-      && (!hasSurvey(s, 'commit') || (typeof s.commit === 'string' && HASH_RE.test(s.commit)))
-      && (!hasSurvey(s, 'text') || surveyTextOk(s.text))
-      && (!hasSurvey(s, 'findings') || (Array.isArray(s.findings) && s.findings.every(surveyFindingOk)))
-      && (!hasSurvey(s, 'pairs') || (Array.isArray(s.pairs) && s.pairs.every(surveyPairOk)));
+    // A survey block is a judged pin wherever it carries `of`, or carries
+    // `findings` or `pairs` -- the register and the pair list are what a
+    // judgment leaves open, so either one without `of` names a judgment the
+    // block does not have. A judged pin requires `of`; a read pin, the
+    // remaining shape, requires `text` and carries none of the three.
+    const surveyOk = (s) => {
+      if (!isPlainObject(s)) return false;
+      const bearsJudgment = hasSurvey(s, 'of') || hasSurvey(s, 'findings') || hasSurvey(s, 'pairs');
+      return Object.keys(s).every((k) => REVIEW_SURVEY_KEY_SET.has(k))
+        && REVIEW_SURVEY_REQUIRED_KEYS.every((k) => Object.prototype.hasOwnProperty.call(s, k))
+        && typeof s.date === 'string' && isValidDate(s.date)
+        && (bearsJudgment
+          ? (typeof s.of === 'string' && HASH_RE.test(s.of))
+          : (hasSurvey(s, 'text') && surveyTextOk(s.text)))
+        && (!hasSurvey(s, 'commit') || (typeof s.commit === 'string' && HASH_RE.test(s.commit)))
+        && (!hasSurvey(s, 'text') || surveyTextOk(s.text))
+        && (!hasSurvey(s, 'findings') || (Array.isArray(s.findings) && s.findings.every(surveyFindingOk)))
+        && (!hasSurvey(s, 'pairs') || (Array.isArray(s.pairs) && s.pairs.every(surveyPairOk)));
+    };
     const ok = isPlainObject(r)
       && Object.keys(r).every((k) => REVIEW_KEY_SET.has(k))
       && (drafted || surveyed)
@@ -1680,11 +1705,12 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
       problems.push(
         `'review' must be {verdict: ${REVIEW_VERDICTS.join('|')}, strength: ${REVIEW_STRENGTHS.join('|')}, date: YYYY-MM-DD, of: <sha1>}`
         + ', with an optional against: <non-empty string> and an optional commit: <sha1> beside them'
-        + ', and an optional survey: {date: YYYY-MM-DD, of: <sha1>}, with an optional commit: <sha1>, '
-        + 'text: {question|answer|options|rivals|words: <sha256>, ...}, '
-        + `findings: [{finding, kind, status: ${SURVEY_FINDING_STATUSES.join('|')}, since: YYYY-MM-DD, `
-        + 'supports: [question|answer|options|rivals|words, ...], discharge, nodes: [<id>, ...]}], '
-        + 'and pairs: [{with: <id>, keys: [<string>, ...]}] beside it;'
+        + ', and an optional survey, one of two shapes: a judged pin, '
+        + '{date: YYYY-MM-DD, of: <sha1>}, or a read pin, {date: YYYY-MM-DD, text: {...}} with no `of`; '
+        + 'either may carry an optional commit: <sha1> and text: {question|answer|options|rivals|words: <sha256>, ...}, '
+        + `and a judged pin alone may carry findings: [{finding, kind, status: ${SURVEY_FINDING_STATUSES.join('|')}, since: YYYY-MM-DD, `
+        + 'supports: [question|answer|options|rivals|words, ...], discharge, nodes: [<id>, ...]}] '
+        + 'and pairs: [{with: <id>, keys: [<string>, ...]}] beside it, either of which requires `of`;'
         + ' the four draft-review keys are given together or not at all, and the survey may stand alone',
       );
     } else {

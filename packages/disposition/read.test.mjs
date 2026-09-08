@@ -946,7 +946,7 @@ describe("parseNode: review.survey's optional keys", () => {
 
   test('a malformed commit is refused, naming commit in the schema it violates', () => {
     const lines = fullSurveyLines.map((l) => (l.startsWith('    commit:') ? '    commit: not-a-sha1' : l));
-    assert.throws(() => parseNode(withSurvey(lines), loc), /survey: \{date: YYYY-MM-DD, of: <sha1>\}, with an optional commit: <sha1>/);
+    assert.throws(() => parseNode(withSurvey(lines), loc), /a judged pin, \{date: YYYY-MM-DD, of: <sha1>\}, or a read pin/);
   });
 
   test('an unknown key on the survey block is refused, like any other malformed shape', () => {
@@ -967,6 +967,114 @@ describe("parseNode: review.survey's optional keys", () => {
   test('a pair with an unknown key is refused', () => {
     const lines = [...fullSurveyLines, '        note: nope'];
     assert.throws(() => parseNode(withSurvey(lines), loc), /pairs: \[\{with: <id>, keys: \[<string>, \.\.\.\]\}\]/);
+  });
+
+  // -------------------------------------------------------------------------
+  // the read pin: `date` and `text`, no `of`, `findings` or `pairs`
+  // (survey-selection, `the-whole-reading-is-a-backfill-and-the-delta-is-the-
+  // norm`: a node the survey merely read is frozen on the hash of the text it
+  // read, whether or not the node was judged).
+  // -------------------------------------------------------------------------
+
+  function withSurveyAtStage(stage, surveyLines) {
+    return [
+      '---', 'question: What?', `stage: ${stage}`,
+      'review:', '  survey:', ...surveyLines,
+      '---', '', '## Disposition', '', 'Open.', '',
+    ].join('\n');
+  }
+
+  const readPinLines = [
+    '    date: 2026-09-07',
+    `    commit: ${COMMIT}`,
+    '    text:',
+    `      question: ${SHA256('a')}`,
+    `      answer: ${SHA256('b')}`,
+    `      options: ${SHA256('c')}`,
+    `      rivals: ${SHA256('d')}`,
+    `      words: ${SHA256('e')}`,
+  ];
+
+  test('a read pin (date, commit, text, no of) at the maieutic stage reads without a problem', () => {
+    const n = parseNode(withSurveyAtStage('maieutic', readPinLines), loc);
+    assert.deepEqual(n.review.survey, {
+      date: '2026-09-07',
+      commit: COMMIT,
+      text: {
+        question: SHA256('a'), answer: SHA256('b'), options: SHA256('c'),
+        rivals: SHA256('d'), words: SHA256('e'),
+      },
+    });
+    assert.equal(Object.prototype.hasOwnProperty.call(n.review.survey, 'of'), false);
+    // A read pin judges nothing, so it does not confuse `surveyOwed`, which
+    // only ever asks about the review and ruling stages.
+    assert.equal(n.surveyOwed, false);
+  });
+
+  test('a review-stage node carrying only a read pin still owes the survey', () => {
+    // A review-stage node needs a fact to be staged at all, so this fixture
+    // carries the minimal one -- 'authority', which is not per-node and asks
+    // nothing of the body -- rather than reusing withSurveyAtStage's bare
+    // '## Disposition' shape, which only a stage below review accepts.
+    const text = [
+      '---', 'question: What?',
+      'facts:',
+      '  - name: authority',
+      '    options:',
+      '      - name: ratified',
+      '      - name: delegated',
+      '    recommends: ratified',
+      '    boldness: low',
+      'stage: review',
+      'review:', '  survey:', ...readPinLines,
+      '---', '', '## Account', '', 'Open.', '',
+    ].join('\n');
+    const n = parseNode(text, loc);
+    assert.equal(n.review.survey.of, undefined);
+    // A read pin never satisfies an owed survey: the node stands judged by
+    // nothing, whatever text it was carried by.
+    assert.equal(n.surveyOwed, true);
+  });
+
+  test('a block with findings but no of is rejected', () => {
+    const lines = [
+      '    date: 2026-09-07',
+      '    findings:',
+      '      - finding: The answer overlaps a sibling.',
+      '        kind: coverage',
+      '        status: new',
+      '        since: 2026-09-04',
+      '        supports:',
+      '          - answer',
+      '        discharge: when the option this finding proposes is ruled.',
+      '        nodes:',
+      '          - example.test/main/other',
+    ];
+    assert.throws(
+      () => parseNode(withSurveyAtStage('review', lines), loc),
+      /a judged pin, \{date: YYYY-MM-DD, of: <sha1>\}, or a read pin/,
+    );
+  });
+
+  test('a block with pairs but no of is rejected', () => {
+    const lines = [
+      '    date: 2026-09-07',
+      '    pairs:',
+      '      - with: example.test/main/other',
+      '        keys:',
+      '          - parent:x',
+    ];
+    assert.throws(
+      () => parseNode(withSurveyAtStage('review', lines), loc),
+      /a judged pin, \{date: YYYY-MM-DD, of: <sha1>\}, or a read pin/,
+    );
+  });
+
+  test('a read pin with no text is rejected -- text is what a read pin owes', () => {
+    assert.throws(
+      () => parseNode(withSurveyAtStage('maieutic', ['    date: 2026-09-07']), loc),
+      /a judged pin, \{date: YYYY-MM-DD, of: <sha1>\}, or a read pin/,
+    );
   });
 });
 
@@ -1471,9 +1579,9 @@ describe('readGraph: invalid fixtures', () => {
     // the survey's pin: its two keys, both required, both typed, and the
     // four draft-review keys given together or not at all. Every one of
     // these is the same combined message the review's shape has always had.
-    ['invalid-review-survey-missing-of', /an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
-    ['invalid-review-survey-unknown-key', /an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
-    ['invalid-review-survey-type', /an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
+    ['invalid-review-survey-missing-of', /a judged pin, \{date: YYYY-MM-DD, of: <sha1>\}, or a read pin/],
+    ['invalid-review-survey-unknown-key', /a judged pin, \{date: YYYY-MM-DD, of: <sha1>\}, or a read pin/],
+    ['invalid-review-survey-type', /a judged pin, \{date: YYYY-MM-DD, of: <sha1>\}, or a read pin/],
     ['invalid-review-partial', /the four draft-review keys are given together or not at all, and the survey may stand alone/],
     // '## Facts' and its subsections
     ['invalid-facts-section-without-list', /'## Facts' requires a non-empty 'facts' list/],

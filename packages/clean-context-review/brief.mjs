@@ -22,19 +22,27 @@
 //                the launch.
 //
 //   --survey     the survey of the frontier. Its object is the frontier's
-//                consistency with itself: the whole graph in one context,
-//                judging every node at the review or ruling stage whose
-//                recommendation has moved since the survey last pinned it
-//                (`surveyJudges`), in the ruling order. Validations 7 to 15.
+//                consistency with itself, and it grows with what moved and
+//                its partners and never with the graph: it judges every
+//                node at the review or ruling stage whose recommendation
+//                has moved since the survey last pinned it
+//                (`surveyJudges`), in the ruling order, carries their
+//                neighbourhood by what it answers, and freezes on one line
+//                every node whose pin still matches the text it holds.
+//                Validations 7 to 15. The whole reading, in which nothing
+//                is frozen, is the backfill and not the norm: --whole or
+//                --validations-changed, and no cadence.
 //                No '## Account' goes into this brief -- the accounts are the
 //                dialogue's history and not its text. Writes
 //                tmp/review/survey.brief.md, names tmp/review/survey.json,
 //                and writes tmp/review/survey.pins.json, the sidecar the
-//                apply step compares against: the graph commit read and the
+//                apply step compares against: the graph commit read, the
 //                recommendation hash of every node of the graph, judged and
 //                context alike, so that a finding whose subject has moved
 //                since is discarded rather than applied to text no reading
-//                attests to.
+//                attests to, and the `read` list of every node the brief
+//                carried by what it answers, which the apply step pins so
+//                the next delta can freeze it.
 //
 // Nothing is locked (clean-context-review: "a lock at launch, which is
 // advisory, per checkout, and unneeded once the pin serializes"). Reviews of
@@ -145,10 +153,13 @@ export function parseArgs(argv) {
       // the draft brief rather than failing on an unknown flag.
       opts.draft = true;
     } else if (a === "--whole") {
-      // The whole survey, in which nothing is frozen (`survey-selection`:
-      // "A whole survey, in which nothing is frozen, runs after every fourth
-      // delta survey, at least once in any thirty days, and unconditionally
-      // after any amendment to the validations").
+      // The whole reading, in which nothing is frozen: a backfill, run on
+      // the author's word and on no cadence (`survey-selection`,
+      // `the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`: "The
+      // whole survey, in which nothing is frozen, is a backfill and never
+      // the norm: it runs on the author's word, and after any amendment to
+      // the validations ... and it runs on no cadence and after no count of
+      // deltas").
       opts.whole = true;
     } else if (a === "--force-tier") {
       // For diagnosis only: the tier gates the launch, and a brief written
@@ -1485,9 +1496,9 @@ export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry
 //
 // Everything below is `survey-selection`'s answer, made mechanical: the
 // judged node carried once, the tier that gates the launch, the cuts that
-// leave the frozen set behind with the evidence of what they cost, the two
-// backstops, and the candidate pairs each handed to the reader with the key
-// that nominated it.
+// leave the frozen set behind with the evidence of what they cost, the
+// whole reading held to the author's word, and the candidate pairs each
+// handed to the reader with the key that nominated it.
 
 /** The sidecar naming the cuts: what was frozen, what the probe drew, and
  * on what seed. `survey.pins.json` stays what the apply step compares
@@ -1495,21 +1506,28 @@ export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry
  * since "what was not read is a fact of the run and not an inference from
  * the generator". */
 const SURVEY_SELECTION_FILE = "tmp/review/survey.selection.json";
-/** The record of which surveys ran whole and which ran as deltas. The two
- * backstops are counted over surveys and not over nodes, and no node
- * carries the count, so the generator keeps it itself. It lives under
- * `tmp/` with the briefs, so a lost history is read as "unknown", which
- * demands a whole survey rather than certifying a delta on no evidence. */
+/** The log of the runs: which surveys ran whole and which as deltas, and
+ * what each cost. Nothing reads it to demand a run
+ * (`the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`: the whole
+ * reading "runs on no cadence and after no count of deltas"); it is kept
+ * because the account cites it and because a later reader measures the
+ * bound against it. It lives under `tmp/` with the briefs, and a lost
+ * history costs a delta nothing. */
 const SURVEY_HISTORY_FILE = "tmp/review/survey.history.json";
 
 const ANSWER_FACT = "answer";
-/** The backstops, in the answer's own numbers: a whole survey "runs after
- * every fourth delta survey, at least once in any thirty days", and the
- * probe is "one in twenty of the frozen pairs and never fewer than ten". */
-const WHOLE_AFTER_DELTAS = 4;
-const WHOLE_AFTER_DAYS = 30;
+/** The probe is "one in twenty of the frozen pairs and never fewer than
+ * ten". There is no cadence beside it: the drift probe is the delta's only
+ * standing check. */
 const PROBE_DENOMINATOR = 20;
 const PROBE_FLOOR = 10;
+/** "a defined term outside the record's commonest ... where a term used by
+ * more than a tenth of the record's nodes nominates nothing, since a key
+ * that pairs a hub with everything orders nothing and grows with the
+ * graph". Measured at graph commit 11191654 the two commonest terms,
+ * `readings` and `growth`, were used by 153 and 140 of 154 nodes and
+ * nominated the whole graph. */
+const TERM_KEY_MAX_SHARE = 0.10;
 /** "near-duplicate resemblance, a Jaccard similarity over word shingles of
  * a half or more". The shingle length is not fixed by the answer; three
  * words is the usual choice and is stated here rather than buried. */
@@ -1649,6 +1667,70 @@ export function movedSections(pinned, now) {
 }
 
 /**
+ * Whether a node carries a survey pin at all, of either kind.
+ *
+ * There are two kinds, and the difference is one key.
+ *
+ * A **judged pin** carries `of`, the recommendation hash the survey read,
+ * and is what a survey leaves on a node it judged: it is the reading the
+ * node's own ruling is owed (`readyToRule`, `surveyOwed`).
+ *
+ * A **read pin** carries no `of`, and is what the apply step leaves on
+ * every node the survey read as neighbourhood
+ * (`the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`: "the survey
+ * therefore pins every node it read with the hash of the text it read, and
+ * a pin on a node that was not judged freezes it and detects its movement
+ * without standing as the survey the node's own ruling owes"). It freezes
+ * and it never satisfies.
+ */
+export function surveyPinOf(node) {
+  return node?.review?.survey ?? null;
+}
+
+/** Whether the pin on a node is a judged pin: one that names the
+ * recommendation the survey read. A read pin names no recommendation. */
+export function isJudgedPin(pin) {
+  return typeof pin?.of === "string" && pin.of.length > 0;
+}
+
+/**
+ * Whether a node is frozen: it carries a pin of either kind, and all five
+ * of the sections that pin recorded hash to what they hash now.
+ *
+ * This is the freeze the answer states -- "a reached node is frozen on the
+ * hash the survey's pins hold for it, whether or not the node was judged"
+ * -- and it is why the delta is bounded: keyed on the judged nodes' pins
+ * alone it would leave every settled node unfrozen and read the whole graph
+ * forever.
+ *
+ * All five keys must be present and equal. A pin carrying fewer than five
+ * is a pin from before the text hashes were recorded, and it says nothing
+ * about the sections it does not name, so it freezes nothing.
+ */
+export function frozenOnPin(node, words = null) {
+  const pinned = surveyPinOf(node)?.text ?? null;
+  if (pinned === null || typeof pinned !== "object") return false;
+  const now = sectionHashes(node, words);
+  return SECTION_HASH_KEYS.every((k) => typeof pinned[k] === "string" && pinned[k] === now[k]);
+}
+
+/**
+ * The frozen set over nodes: every node not judged this round whose five
+ * hashes match the pin it carries, of either kind.
+ *
+ * @returns {Set<string>}
+ */
+export function frozenNodeIds(graph, judgedIds = new Set()) {
+  const words = graph?.words ?? null;
+  const out = new Set();
+  for (const node of graph?.nodes ?? []) {
+    if (judgedIds.has(node.id)) continue;
+    if (frozenOnPin(node, words)) out.add(node.id);
+  }
+  return out;
+}
+
+/**
  * The judged set: "every node at the review or the ruling stage whose
  * recommendation has moved past its survey pin or that no survey has read"
  * -- which is `surveyJudges`, unchanged -- "together with every node whose
@@ -1656,9 +1738,18 @@ export function movedSections(pinned, now) {
  *
  * The second limb carries no stage: a node the survey read and whose text
  * has since moved is judged again wherever it stands, because the silence
- * of the earlier reading was about text that is no longer there. It can
- * only fire on a node carrying the five hashes, so it is inert until the
- * survey block records them.
+ * of the earlier reading was about text that is no longer there. It fires
+ * on a **judged** pin alone. A read pin whose text moved does not make its
+ * node judged -- nothing was judged there for a move to overtake -- it only
+ * unfreezes it, so the node is carried by what it answers where the judged
+ * set reaches it. Judging on a read pin's movement would put every node the
+ * last survey merely read back into the judged set the moment it was
+ * amended, which is the whole graph again by another road.
+ *
+ * `surveyJudges` needs no change for the read pin: `surveyOwed` reads
+ * `survey.of` against the recommendation hash, and a read pin carries none,
+ * so a node at the review or ruling stage with a read pin alone is owed a
+ * survey and is judged here.
  *
  * @returns {{judged: object[], reasons: Map<string, string>}}
  */
@@ -1668,15 +1759,18 @@ export function judgedSet(graph) {
   const judged = [];
   const reasons = new Map();
   for (const node of graph?.nodes ?? []) {
+    const pin = surveyPinOf(node);
     if (owed.has(node.id)) {
-      const pinned = node?.review?.survey ?? null;
-      reasons.set(node.id, pinned === null
+      reasons.set(node.id, pin === null
         ? "no survey has read it"
-        : "its recommendation has moved past its survey pin");
+        : (isJudgedPin(pin)
+          ? "its recommendation has moved past its survey pin"
+          : "the only pin on it is a read pin: a survey has read it, and none has judged it"));
       judged.push(node);
       continue;
     }
-    const pinned = node?.review?.survey?.text ?? null;
+    if (!isJudgedPin(pin)) continue;
+    const pinned = pin?.text ?? null;
     if (pinned === null || pinned === undefined) continue;
     const moved = movedSections(pinned, sectionHashes(node, words));
     if (moved.length === 0) continue;
@@ -1757,10 +1851,23 @@ export function candidatePairs(graph, { concordance: conc = null } = {}) {
   // is a path from a user to the definer, not between users), so that is
   // the only edge nominated here, and the pair's key names the term and the
   // node that defines it.
+  //
+  // And outside the record's commonest: a term used by more than a tenth of
+  // the nodes nominates nothing at all. The definer-user edge cut the
+  // user-user explosion but left the hub, which is the part that grows with
+  // the graph: `readings` and `growth` were used by 153 and 140 of the
+  // record's 154 nodes at 11191654, so those two keys alone paired their
+  // definers with almost every node there is, and the pair list they made
+  // ordered nothing. The bound is the option's own
+  // (`the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`), and it is
+  // a share and not a count so that it holds at any size of record.
   const terms = (conc ?? concordance(graph)).terms;
+  const hubCeiling = nodes.length * TERM_KEY_MAX_SHARE;
   for (const entry of terms) {
-    for (const user of entry.users) {
-      addPair(map, entry.defines, user.node, `term:${entry.term} (defines: ${entry.defines})`);
+    const users = new Set(entry.users.map((u) => u.node));
+    if (users.size > hubCeiling) continue;
+    for (const user of users) {
+      addPair(map, entry.defines, user, `term:${entry.term} (defines: ${entry.defines})`);
     }
   }
 
@@ -1841,15 +1948,24 @@ export function readTogether(a, b) {
  * The cut: "a pair both of whose members are unchanged since a survey read
  * them together is not compared. The frozen set is everything so struck."
  * `whole` freezes nothing, which is what a whole survey is.
+ *
+ * Unchanged is `frozenNodeIds`: a node carrying a pin of either kind whose
+ * five hashes still match it. It is not "not judged": a node no survey has
+ * ever read is not judged either, and it has no earlier reading whose
+ * silence could stand in for this one.
+ *
+ * @param {Array<{a: string, b: string, keys: string[]}>} pairs
+ * @param {{byId: Map<string, object>, frozenIds: Set<string>,
+ *   whole?: boolean}} options
  */
-export function cutPairs(pairs, { byId, judgedIds, whole = false }) {
+export function cutPairs(pairs, { byId, frozenIds, whole = false }) {
   if (whole) return { live: pairs, frozen: [] };
   const live = [];
   const frozen = [];
   for (const pair of pairs) {
     const a = byId.get(pair.a);
     const b = byId.get(pair.b);
-    const unchanged = a && b && !judgedIds.has(pair.a) && !judgedIds.has(pair.b);
+    const unchanged = a && b && frozenIds.has(pair.a) && frozenIds.has(pair.b);
     if (unchanged && readTogether(a, b)) frozen.push(pair);
     else live.push(pair);
   }
@@ -1899,24 +2015,28 @@ export function drawProbe(frozen, seed) {
   return out;
 }
 
-// ------------------------------------------------------- the two backstops
-
-function daysBetween(fromIso, toIso) {
-  const from = Date.parse(`${fromIso}T00:00:00Z`);
-  const to = Date.parse(`${toIso}T00:00:00Z`);
-  if (Number.isNaN(from) || Number.isNaN(to)) return Infinity;
-  return Math.round((to - from) / 86400000);
-}
+// -------------------------------------------- when the whole reading runs
 
 /**
- * Whether this survey must run whole, and why.
+ * Whether this survey runs whole, and why.
  *
- * Three conditions, all of them the answer's: a whole survey "runs after
- * every fourth delta survey, at least once in any thirty days, and
- * unconditionally after any amendment to the validations, to what a reading
- * is given, or to the tier".
+ * Two conditions, and no cadence
+ * (`the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`: "The whole
+ * survey, in which nothing is frozen, is a backfill and never the norm: it
+ * runs on the author's word, and after any amendment to the validations, to
+ * what a reading is given, or to the tier ... and it runs on no cadence and
+ * after no count of deltas").
  *
- * The third is a flag and not a derivation, and deliberately: the record
+ * `--whole` is the author's word, said by the session that carries it.
+ * `--validations-changed` is the amendment. Nothing else: the fourth-delta
+ * count and the thirty-day clock are struck, because a reading priced at
+ * the graph's size on a timer is a process that grows with the record,
+ * which is the bound the author gave (words/2026-09-07/23: "no process can
+ * grow in complexity/context size with graph size unbounded"). The history
+ * is still written and is still passed here, so that a reader can see what
+ * it did not decide; this function does not read it.
+ *
+ * The second is a flag and not a derivation, and deliberately: the record
  * cannot detect a validations amendment mechanically. The validations are
  * prose in `frontier-consistency`'s answer, what a reading is given is
  * prose in `review-cost`'s, and the tier is code in this repository and a
@@ -1929,12 +2049,15 @@ function daysBetween(fromIso, toIso) {
  * recorded in the brief and in the history, where a later reader can check
  * it against the amendment.
  *
- * A history the generator cannot read is unknown and not clean: with no
- * record of when the last whole survey ran, neither backstop can be
- * certified, so the survey runs whole.
+ * A record in which no node carries a pin is not a special case: it is a
+ * delta in which nothing is frozen, which is exactly what the first delta
+ * after a backfill would be if the backfill had never run. The remedy is
+ * the backfill, run once on the author's word, and not a rule that makes
+ * every survey whole until one has.
+ *
+ * @param {object|null} history - written by every run, read by none.
  */
-export function wholeDemand(history, { date, validationsChanged = false, forced = false }) {
-  const surveys = Array.isArray(history?.surveys) ? history.surveys : null;
+export function wholeDemand(history, { date, validationsChanged = false, whole = false }) {
   if (validationsChanged) {
     return {
       whole: true,
@@ -1942,49 +2065,23 @@ export function wholeDemand(history, { date, validationsChanged = false, forced 
       why: "the caller passed --validations-changed: an amendment to the validations, to what a reading is given, or to the tier invalidates every earlier reading's silence",
     };
   }
-  if (surveys === null) {
+  if (whole) {
     return {
       whole: true,
-      demanded: true,
-      why: `no survey history at ${SURVEY_HISTORY_FILE}: neither backstop can be certified, so nothing is frozen`,
-    };
-  }
-  const lastWhole = [...surveys].reverse().find((s) => s && s.whole === true) ?? null;
-  if (lastWhole === null) {
-    return {
-      whole: true,
-      demanded: true,
-      why: "no whole survey in the history: the thirty-day backstop has never been met",
-    };
-  }
-  const age = daysBetween(lastWhole.date, date);
-  if (age > WHOLE_AFTER_DAYS) {
-    return {
-      whole: true,
-      demanded: true,
-      why: `the last whole survey was ${lastWhole.date}, ${age} days ago: a whole survey runs at least once in any thirty days`,
-    };
-  }
-  const sinceWhole = surveys.slice(surveys.lastIndexOf(lastWhole) + 1).filter((s) => s && s.whole !== true);
-  if (sinceWhole.length >= WHOLE_AFTER_DELTAS) {
-    return {
-      whole: true,
-      demanded: true,
-      why: `${sinceWhole.length} delta survey(s) have run since the last whole one on ${lastWhole.date}: a whole survey runs after every fourth`,
+      demanded: false,
+      why: "the caller passed --whole: this reading is a backfill, and nothing is frozen",
     };
   }
   return {
-    whole: forced,
+    whole: false,
     demanded: false,
-    why: forced
-      ? "the caller passed --whole: nothing is frozen"
-      : `the last whole survey was ${lastWhole.date} (${age} day(s) ago) with ${sinceWhole.length} delta(s) since: both backstops are met, so this survey is a delta`,
+    why: "the delta is the survey's only recurring form: the whole reading is a backfill and runs on the author's word (--whole) or after an amendment to the validations (--validations-changed), on no cadence and after no count of deltas",
   };
 }
 
 /** The history, or null where there is none to read. A malformed file is
- * unknown for the same reason a missing one is, and demands a whole survey
- * rather than being repaired in silence. */
+ * unknown, and a run reads nothing from it, so an unreadable history costs
+ * this run nothing and is replaced by what this run appends. */
 export async function readSurveyHistory(historyPath) {
   try {
     const parsed = JSON.parse(await readFile(historyPath, "utf8"));
@@ -2495,10 +2592,23 @@ export function groupedPairLines(live, judged, probeIds = new Set()) {
  * attests to the text it read"). The apply step compares against this file
  * and never against a hash the reviewer copied.
  *
+ * Beside `judged` it names `read`: every node the brief carried by what it
+ * answers, with the five hashes as read. That list is what the apply step
+ * pins as a read pin, and it is what makes the next delta bounded
+ * (`the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`: "That holds
+ * only if every node the survey read carries the survey's pin, judged or
+ * not, since a freeze keyed on the judged nodes' pins alone leaves every
+ * settled node unfrozen and reads the whole graph forever"). The nodes the
+ * brief carried on one line are not in it: they were already frozen on a
+ * pin, so their pin stands as it is and the survey adds nothing to it.
+ *
+ * @param {object[]} read - the neighbourhood: the nodes carried by what
+ *   they answer, which is what the survey actually read of them.
  * @returns {{commit: string|null, dirty: boolean, date: string,
- *   judged: string[], pins: Record<string, string>}}
+ *   judged: string[], read: Array<{id: string, text: object}>,
+ *   pins: Record<string, string>, text: Record<string, object>}}
  */
-export function surveyPins({ graph, judged, date, commit, dirty }) {
+export function surveyPins({ graph, judged, read = [], date, commit, dirty }) {
   const pins = {};
   const text = {};
   for (const n of graph.nodes) {
@@ -2510,7 +2620,15 @@ export function surveyPins({ graph, judged, date, commit, dirty }) {
     // read"). The next survey's delta is taken over these.
     text[n.id] = sectionHashes(n, graph.words);
   }
-  return { commit, dirty, date, judged: judged.map((n) => n.id), pins, text };
+  return {
+    commit,
+    dirty,
+    date,
+    judged: judged.map((n) => n.id),
+    read: read.map((n) => ({ id: n.id, text: text[n.id] ?? sectionHashes(n, graph.words) })),
+    pins,
+    text,
+  };
 }
 
 /**
@@ -2532,10 +2650,10 @@ export function surveyPins({ graph, judged, date, commit, dirty }) {
  *
  * Three things happen before any of that, and they are the answer's order:
  * the mechanical tier runs over the whole graph and refuses the launch on a
- * finding (`forceTier` bypasses it and stamps the brief); the two backstops
- * are checked and may demand a whole survey; and the candidate pairs are
- * nominated and cut, leaving the frozen set and the drift probe drawn from
- * it on the recorded seed.
+ * finding (`forceTier` bypasses it and stamps the brief); the run is whole
+ * or a delta, the whole reading being a backfill the caller asks for; and
+ * the candidate pairs are nominated and cut, leaving the frozen set and the
+ * drift probe drawn from it on the recorded seed.
  *
  * @returns {Promise<object>} the counts the CLI prints, the selection it
  *   took, and the paths it wrote.
@@ -2579,13 +2697,14 @@ export async function writeSurveyBrief({
     throw err;
   }
 
-  // The two backstops. `--whole` forces a whole survey; the history may
-  // demand one whether the caller asked or not, and the demand is recorded
-  // with its reason so the run says why nothing was frozen.
-  const historyPath = path.join(sidecarBase, "survey.history.json");
+  // Whole or delta. The delta is the norm and the whole reading is the
+  // backfill: `--whole` is the author's word and `--validations-changed`
+  // the amendment, and nothing else makes a run whole. The history is read
+  // so that this run can append to it, and decides nothing.
+  const historyPath = path.join(sidecarBase, path.basename(SURVEY_HISTORY_FILE));
   const history = await readSurveyHistory(historyPath);
   const demand = wholeDemand(history, {
-    date: effectiveDate, validationsChanged, forced: whole,
+    date: effectiveDate, validationsChanged, whole,
   });
   const isWhole = demand.whole;
 
@@ -2597,22 +2716,27 @@ export async function writeSurveyBrief({
   const judgedIds = new Set(judged.map((n) => n.id));
   const neighbourIds = surveyNeighbourhoodIds(graph, judged);
 
-  // "a node the judged set reaches but whose read text has not changed since
-  // that survey is carried on one line rather than by what it answers": a
-  // neighbour a survey has already read and that is not judged this round.
-  // A whole survey freezes nothing and carries every neighbour by what it
-  // answers.
+  // The freeze: "a node the judged set reaches but whose read text has not
+  // changed since a survey read it, judged or reached, is carried on one
+  // line rather than by what it answers ... what unchanged means is the pin
+  // the survey writes on every node it read, holding the hash of the text
+  // it read, and never the pin of the judged nodes alone."
+  //
+  // So it is the five hashes against the node's own pin, of either kind,
+  // and not the mere presence of a pin: a pin whose text has moved is a pin
+  // on text that is no longer there, and the node it names is carried by
+  // what it answers. A whole survey freezes nothing and carries every
+  // neighbour by what it answers.
+  const frozenIds = isWhole ? new Set() : frozenNodeIds(graph, judgedIds);
   const reached = ordered.filter((n) => neighbourIds.has(n.id));
-  const unchangedReached = isWhole
-    ? []
-    : reached.filter((n) => (n.review?.survey ?? null) !== null);
+  const unchangedReached = reached.filter((n) => frozenIds.has(n.id));
   const unchangedIds = new Set(unchangedReached.map((n) => n.id));
   const neighbourNodes = reached.filter((n) => !unchangedIds.has(n.id));
   const contextNodes = ordered.filter((n) => !judgedIds.has(n.id) && !neighbourIds.has(n.id));
 
   // The pairs, and the cut that leaves the frozen set behind.
   const pairs = candidatePairs(graph, { concordance: conc });
-  const { live, frozen } = cutPairs(pairs, { byId, judgedIds, whole: isWhole });
+  const { live, frozen } = cutPairs(pairs, { byId, frozenIds, whole: isWhole });
   const seed = probeSeed(effectiveDate, commit);
   const probe = isWhole ? [] : drawProbe(frozen, seed);
   const probeIds = new Set(probe.map((p) => `${p.a}\t${p.b}`));
@@ -2640,15 +2764,15 @@ export async function writeSurveyBrief({
   const selectionSummary = [
     "### The selection this survey took, and what it cost",
     "",
-    `- **This survey is ${isWhole ? "whole" : "a delta"}.** ${demand.why}`,
+    `- **This survey is ${isWhole ? "whole (a backfill)" : "a delta"}.** ${demand.why}`,
     `- The judged set is ${judged.length} node(s); the neighbourhood carried by what it answers is ${neighbourNodes.length}; `
       + `${unchangedReached.length} node(s) the judged set reaches are carried on one line, their read text unchanged since a survey read them; `
-      + `${contextNodes.length} node(s) are context.`,
+      + `${contextNodes.length} node(s) are context. ${frozenIds.size} node(s) of the graph are frozen on the pin they carry.`,
     `- The keys nominated ${pairs.length} candidate pair(s): ${live.length} are live and listed below, `
       + `${frozen.length} are frozen (both members unchanged since a survey read them together) and named in \`${SURVEY_SELECTION_FILE}\`.`,
     isWhole
       ? "- Nothing is frozen and there is no drift probe: this survey is whole."
-      : `- The drift probe draws ${probe.length} of the ${frozen.length} frozen pair(s), one in ${20} and never fewer than ${10}, on seed \`${seed}\` (mulberry32, seeded from the date and the graph commit). A finding anywhere in the probe forces a whole survey next time: say so in your report.`,
+      : `- The drift probe draws ${probe.length} of the ${frozen.length} frozen pair(s), one in ${PROBE_DENOMINATOR} and never fewer than ${PROBE_FLOOR}, on seed \`${seed}\` (mulberry32, seeded from the date and the graph commit). A finding anywhere in the probe is a finding on the freeze: record it on the nodes it names like any other finding, and report it as the freeze's failure. It puts a backfill in front of the author and does not launch one.`,
     "",
     "The frozen set is named so that what was not read is a fact of this run and not an inference from the generator. A finding on a pair no key nominated is a finding like any other, and is the one worth most: it measures what the keys miss.",
   ].join("\n");
@@ -2682,7 +2806,7 @@ export async function writeSurveyBrief({
     ? [
       `### The drift probe (${probe.length} frozen pair(s), drawn on seed \`${seed}\`; read them like any other pair)`,
       "",
-      "Neither member of a frozen pair is judged — that is what froze it — so the probe is listed here rather than under a judged node's heading.",
+      "Neither member of a frozen pair moved since a survey read them together — that is what froze it — so the probe is listed here rather than under a judged node's heading. A finding here is a finding on the freeze itself: write it on the nodes it names like any other finding, and say in your report that the probe found one, which is what puts a backfill before the author.",
       "",
       probe.map(probePairLine).join("\n"),
     ].join("\n")
@@ -2736,6 +2860,14 @@ export async function writeSurveyBrief({
     seed,
     tier: { checks: TIER_CHECKS, findings: tierFindings, notes, forced: forceTier && tierFindings.length > 0 },
     judged: judged.map((n) => ({ node: n.id, why: reasons.get(n.id) ?? null })),
+    // The three node lists the selection is made of, each by id: what the
+    // brief carried by what it answers, what the pins froze, and which of
+    // the frozen the judged set reached and so carried on one line. The
+    // apply step pins the first (`read` in the pins sidecar); the other two
+    // are what a later reader audits the freeze by, since "what was not
+    // read is a fact of the run and not an inference from the generator".
+    neighbourhood: neighbourNodes.map((n) => n.id),
+    frozen: [...frozenIds],
     unchangedReached: unchangedReached.map((n) => n.id),
     pairs: {
       nominated: pairs.length,
@@ -2755,6 +2887,7 @@ export async function writeSurveyBrief({
     neighbourhoodCount: neighbourNodes.length,
     contextCount: contextNodes.length,
     unchangedReachedCount: unchangedReached.length,
+    frozenNodeCount: frozenIds.size,
     pairCount: pairs.length,
     livePairCount: live.length,
     frozenPairCount: frozen.length,
@@ -2779,7 +2912,7 @@ export async function writeSurveyBrief({
   await writeFile(briefPath, filled);
   await writeFile(
     pinsPath,
-    `${JSON.stringify(surveyPins({ graph, judged, date: effectiveDate, commit, dirty }), null, 2)}\n`,
+    `${JSON.stringify(surveyPins({ graph, judged, read: neighbourNodes, date: effectiveDate, commit, dirty }), null, 2)}\n`,
   );
   await writeFile(selectionPath, `${JSON.stringify(selection, null, 2)}\n`);
   await appendSurveyHistory(historyPath, history, {
@@ -2787,9 +2920,13 @@ export async function writeSurveyBrief({
     whole: isWhole,
     commit,
     judged: judged.length,
+    neighbourhood: neighbourNodes.length,
+    frozenNodes: frozenIds.size,
     frozen: frozen.length,
     probe: probe.length,
     seed,
+    bytes,
+    lines,
     validationsChanged,
   });
   return result;
@@ -2850,6 +2987,9 @@ if (isMain) {
         console.log(`survey: ${r.batchCount} node(s) judged; neighbourhood ${r.neighbourhoodCount} node(s); reached but unchanged, one line each: ${r.unchangedReachedCount}; context: ${r.contextCount} node(s); ${r.bytes} bytes over ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);
         console.log(`tier: ${r.tierFindingCount} finding(s) over ${TIER_CHECKS.length} checks, ${r.tierNoteCount} note(s)${r.tierForced ? " -- LAUNCHED OVER A FAILING TIER (--force-tier)" : ""}`);
         console.log(`survey: ${r.whole ? "whole" : "delta"}${r.wholeDemanded ? " (demanded)" : ""}: ${r.wholeWhy}`);
+        // What the reading cost, in the terms the bound is stated in: what
+        // moved, what its partners are, and what the pins froze.
+        console.log(`freeze: ${r.frozenNodeCount} node(s) frozen on their pins; ${r.neighbourhoodCount} carried by what they answer; ${r.batchCount} judged and carried whole; ${r.bytes} bytes`);
         console.log(`pairs: ${r.pairCount} nominated; ${r.livePairCount} live, ${r.frozenPairCount} frozen, ${r.probeCount} drawn as the drift probe on seed ${r.seed}`);
         console.log(opts.dry ? `the pins sidecar: ${r.pinsPath} (dry run: nothing written)` : `the pins sidecar: ${r.pinsPath}`);
         console.log(opts.dry ? `the selection sidecar: ${r.selectionPath} (dry run: nothing written)` : `the selection sidecar: ${r.selectionPath}`);

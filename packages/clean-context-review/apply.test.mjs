@@ -17,6 +17,7 @@ import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { applyReviews, renderSurveyLines, surveyBlock, surveyRegister } from "./apply.mjs";
+import { sectionHashes } from "./brief.mjs";
 import { parseNode, readGraph, surveyJudges, REVIEW_SURVEY_KEYS } from "@commons.systems/disposition/read.mjs";
 import { deriveClass, deriveRecommendationHash } from "@commons.systems/disposition/derive.mjs";
 
@@ -1495,6 +1496,93 @@ describe("apply.mjs: survey", () => {
     const pins2 = await pinsFor(rootDir2);
     await applyReviews({ rootDir: rootDir2, pins: pins2, input: surveyInput({ date: "2020-01-01" }), replies: {}, date: "2021-06-06" });
     assert.ok((await readFile(nodePath(rootDir2, "review-a"), "utf8")).includes("### Frontier survey, 2021-06-06"));
+  });
+});
+
+// --------------------------------------------------------------------------
+// The pins sidecar's 'read' list (brief.mjs's surveyPins): every node the
+// survey carried by what it answers, not by judging it, each with the five
+// section hashes as read (the-whole-reading-is-a-backfill-and-the-delta-is-
+// the-norm). Applied here it writes a read pin -- 'date', 'commit', 'text',
+// and no 'of' -- merged onto whatever review block the node already carries,
+// so a node's own judged pin from an earlier survey survives untouched.
+// --------------------------------------------------------------------------
+
+describe("apply.mjs: survey, read pins", () => {
+  test("pins a node the survey merely read, and preserves an already-judged node's 'of' beside the refreshed read", async () => {
+    const rootDir = await freshFrontierFixture("survey-read-");
+    const graph = await readGraph(rootDir);
+    // maieutic-node: a node the survey merely read, carrying a stage already
+    // (a node with no stage cannot carry a `review:` block at all, so a read
+    // pin on one is only ever written where the node already stands staged).
+    const maieutic = graph.nodes.find((n) => n.id === MAIEUTIC_NODE);
+    const pinned = graph.nodes.find((n) => n.id === SURVEY_PINNED);
+    const maieuticText = sectionHashes(maieutic, graph.words);
+    const pinnedText = sectionHashes(pinned, graph.words);
+    const pinnedBefore = await parseAt(rootDir, "survey-pinned", SURVEY_PINNED);
+    assert.equal(pinnedBefore.review.survey.of, "556a7fe535f582386cc3cdaacaad2c7f0b507539", "fixture precondition: already carries a judged pin");
+
+    const pins = await pinsFor(rootDir);
+    pins.read = [
+      { id: MAIEUTIC_NODE, text: maieuticText },
+      { id: SURVEY_PINNED, text: pinnedText },
+    ];
+
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.equal(result.moved.length, 0, "neither read entry moved");
+
+    const maieuticAfter = await parseAt(rootDir, "maieutic-node", MAIEUTIC_NODE);
+    assert.deepEqual(maieuticAfter.review.survey, { date: SURVEY_DATE, commit: COMMIT, text: maieuticText });
+    assert.equal(maieuticAfter.review.survey.of, undefined, "a read pin never carries 'of'");
+    assert.equal(maieuticAfter.stage, "maieutic", "a pure read pin never moves the stage");
+    assert.ok(
+      result.report.some((l) => l.startsWith(`${MAIEUTIC_NODE}: read pin,`)),
+      `report should label the pure read: ${result.report.join(" | ")}`,
+    );
+
+    const pinnedAfter = await parseAt(rootDir, "survey-pinned", SURVEY_PINNED);
+    assert.equal(pinnedAfter.review.survey.of, "556a7fe535f582386cc3cdaacaad2c7f0b507539", "the existing judged pin's 'of' survives the merge");
+    assert.equal(pinnedAfter.review.survey.date, SURVEY_DATE, "the read pin's date refreshes the block");
+    assert.equal(pinnedAfter.review.survey.commit, COMMIT);
+    assert.deepEqual(pinnedAfter.review.survey.text, pinnedText);
+    assert.ok(
+      result.report.some((l) => l.startsWith(`${SURVEY_PINNED}: read pin (judged pin kept),`)),
+      `report should note the judged pin was kept: ${result.report.join(" | ")}`,
+    );
+  });
+
+  test("a read entry whose section hashes have moved is skipped and named in the report, and the node is left untouched", async () => {
+    const rootDir = await freshFrontierFixture("survey-read-moved-");
+    const before = await readFile(nodePath(rootDir, "answered-ratified"), "utf8");
+    const pins = await pinsFor(rootDir);
+    pins.read = [
+      { id: ANSWERED_NODE, text: { question: "0".repeat(64), answer: "1".repeat(64), options: "2".repeat(64), rivals: "3".repeat(64), words: "4".repeat(64) } },
+    ];
+
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.equal(await readFile(nodePath(rootDir, "answered-ratified"), "utf8"), before, "the moved read entry writes nothing");
+    assert.equal(result.moved.length, 1);
+    assert.match(
+      result.moved[0],
+      new RegExp(`^${escapeRe(ANSWERED_NODE)}: moved since the survey read it \\(.+ changed\\); not pinned, read again by the next survey$`),
+    );
+    assert.ok(result.report.includes(result.moved[0]));
+  });
+
+  test("a sidecar with no 'read' list applies exactly as before: nothing merely read is pinned", async () => {
+    const rootDir = await freshFrontierFixture("survey-read-absent-");
+    const before = await readFile(nodePath(rootDir, "answered-ratified"), "utf8");
+    const pins = await pinsFor(rootDir);
+    assert.equal(pins.read, undefined, "fixture precondition: pinsFor builds no 'read' list on its own");
+
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.equal(await readFile(nodePath(rootDir, "answered-ratified"), "utf8"), before, "untouched: no read pin, same as before this change");
+
+    const reviewA = await parseAt(rootDir, "review-a", REVIEW_A);
+    assert.deepEqual(reviewA.review.survey, plainSurveyPin(pins.pins[REVIEW_A]), "judged nodes still apply exactly as before");
   });
 });
 

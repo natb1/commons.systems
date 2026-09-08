@@ -243,7 +243,12 @@ export function checkTier(graph, { words = null, foldable = null, concordance: c
         add('recommendation-past-its-pin', node.id, `the draft review of ${review.date} pins ${review.of}, the recommendation now stands at ${node.recommendationHash}, and at stage ${stage ?? 'none'} no re-reading is owed`);
       }
       const survey = review.survey ?? null;
-      if (survey !== null && survey.of !== node.recommendationHash) {
+      // A read pin (no `of`) judged nothing, so it has no recommendation to
+      // stand past: it is written at any stage, including off review and
+      // ruling, precisely to freeze a node's text without counting it as
+      // judged (commons.systems/disposition-graph/survey-selection,
+      // `the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`).
+      if (survey !== null && survey.of !== null && survey.of !== undefined && survey.of !== node.recommendationHash) {
         add('recommendation-past-its-pin', node.id, `the survey of ${survey.date} pins ${survey.of}, the recommendation now stands at ${node.recommendationHash}, and at stage ${stage ?? 'none'} no survey will judge it again`);
       }
     }

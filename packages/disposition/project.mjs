@@ -866,6 +866,13 @@ function factLine(node, fact) {
 function surveyLine(node) {
   const survey = node.review ? node.review.survey : null;
   if (!survey) return node.surveyOwed ? "survey: owed" : null;
+  // A read pin (no `of`) judged nothing: it is read text, not a survey the
+  // node stands surveyed by, so it never suppresses `surveyOwed` and is
+  // worded apart from a judged pin's line.
+  if (survey.of === null || survey.of === undefined) {
+    const owed = node.surveyOwed ? "; survey owed" : "";
+    return `survey: read by the survey of ${survey.date}${owed}`;
+  }
   const stale = node.surveyStale ? ", changed since its survey" : "";
   const owed = node.surveyOwed ? "; survey owed" : "";
   return `survey: surveyed ${survey.date}${stale}${owed}`;
@@ -1485,10 +1492,17 @@ function renderReadiness(n) {
       + (n.reviewStale ? '<span class="pill rev-stale">moved since its review</span>' : "")
     : '<span class="pill rev-none">this draft: not yet reviewed</span>';
 
-  pills += survey
+  // A read pin (`survey.of` absent) is text the survey read without judging
+  // the node against it, so it is worded apart from a judged pin and never
+  // shown with the "moved since its survey" pill `surveyStale` implies for
+  // a judgment.
+  const surveyJudged = survey && (survey.of !== null && survey.of !== undefined);
+  pills += surveyJudged
     ? `<span class="pill rev-date">the frontier: surveyed ${alignEsc(survey.date)}</span>`
       + (n.surveyStale ? '<span class="pill rev-stale">moved since its survey</span>' : "")
-    : '<span class="pill rev-none">the frontier: not yet surveyed</span>';
+    : survey
+      ? `<span class="pill rev-date">the frontier: read ${alignEsc(survey.date)}</span>`
+      : '<span class="pill rev-none">the frontier: not yet surveyed</span>';
 
   const reviewOwed = JUDGED_STAGES.has(n.stage) && (!drafted || n.reviewStale);
   if (n.readyToRule) {

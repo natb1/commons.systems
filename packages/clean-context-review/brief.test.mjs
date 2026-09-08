@@ -20,7 +20,7 @@ import {
   lastAccountSectionOnly, renderNeighbourNode, surveyNeighbourhoodIds,
   frontierFindingSectionsSince,
   sectionHashes, movedSections, SECTION_HASH_KEYS, judgedSet, candidatePairs,
-  cutPairs, probeSeed, drawProbe, wholeDemand,
+  cutPairs, probeSeed, drawProbe, wholeDemand, frozenOnPin, frozenNodeIds,
   renderJudgedNode, groupedPairLines, shortId, shortKey, probePairLine,
 } from "./brief.mjs";
 import { readGraph, surveyJudges } from "@commons.systems/disposition/read.mjs";
@@ -830,7 +830,7 @@ describe("writeSurveyBrief", () => {
     assert.equal(result.pinsPath, path.join(reviewDir, "survey.pins.json"));
     const pins = JSON.parse(await readFile(result.pinsPath, "utf8"));
 
-    assert.deepEqual(Object.keys(pins).sort(), ["commit", "date", "dirty", "judged", "pins", "text"]);
+    assert.deepEqual(Object.keys(pins).sort(), ["commit", "date", "dirty", "judged", "pins", "read", "text"]);
     assert.equal(pins.date, "2026-09-04");
     // the fixture copy is not a git checkout, so there is no commit to name
     assert.equal(pins.commit, null);
@@ -864,7 +864,8 @@ describe("writeSurveyBrief", () => {
     assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
     assert.match(dry, /survey: 6 node\(s\) judged; neighbourhood 5 node\(s\); reached but unchanged, one line each: \d+; context: 3 node\(s\); \d+ bytes over \d+ lines; graph commit \(unknown/);
     assert.match(dry, /tier: 0 finding\(s\) over 8 checks, 0 note\(s\)/, "the run always says which tier ran and what it found");
-    assert.match(dry, /survey: whole \(demanded\): no survey history/, "with no history neither backstop can be certified, so the survey runs whole");
+    assert.match(dry, /survey: delta: the delta is the survey's only recurring form/, "no history and no --whole: the delta is the norm, and a graph with no pins is a delta that freezes nothing");
+    assert.match(dry, /freeze: \d+ node\(s\) frozen on their pins; \d+ carried by what they answer; 6 judged and carried whole; \d+ bytes/);
     assert.match(dry, /pairs: \d+ nominated; \d+ live, 0 frozen, 0 drawn as the drift probe on seed \d+/);
     assert.match(dry, /the selection sidecar: .*survey\.selection\.json \(dry run: nothing written\)/);
     assert.match(dry, /the pins sidecar: .*survey\.pins\.json \(dry run: nothing written\)/);
@@ -1627,6 +1628,161 @@ describe("judgedSet", () => {
   });
 });
 
+// The freeze, which is what makes the delta bounded
+// (`the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`): a pin on
+// every node the survey read, judged or not, and the freeze taken over the
+// five hashes it holds rather than over the pin's mere presence.
+
+/** Splice a survey pin into a node file's frontmatter, replacing whatever
+ * review block it carried. A read pin is `date` and `text` and no `of`. */
+function pinnedFile(text, { date, hashes, of = null }) {
+  const m = /^---\n([\s\S]*?)\n---\n/.exec(text);
+  assert.ok(m, "the node file has frontmatter");
+  const kept = [];
+  const lines = m[1].split("\n");
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i] === "review:") {
+      i += 1;
+      while (i < lines.length && /^\s/.test(lines[i])) i += 1;
+      i -= 1;
+      continue;
+    }
+    kept.push(lines[i]);
+  }
+  const block = [
+    "review:",
+    "  survey:",
+    `    date: ${date}`,
+    ...(of === null ? [] : [`    of: ${of}`]),
+    "    text:",
+    ...SECTION_HASH_KEYS.map((k) => `      ${k}: ${hashes[k]}`),
+  ];
+  return `---\n${[...kept, ...block].join("\n")}\n---\n${text.slice(m[0].length)}`;
+}
+
+/** Write a read pin onto one node of a fixture, on the hashes it stands on. */
+async function writeReadPin(rootDir, graph, id, date = "2026-09-01") {
+  const node = graph.nodes.find((n) => n.id === id);
+  assert.ok(node, `${id} is in the fixture`);
+  const file = path.join(rootDir, "main", `${id.split("/").pop()}.md`);
+  const hashes = sectionHashes(node, graph.words);
+  await writeFile(file, pinnedFile(await readFile(file, "utf8"), { date, hashes }));
+  return hashes;
+}
+
+describe("the freeze: a pin on every node the survey read, judged or not", () => {
+  const readPin = (node, words, over = {}) => {
+    node.review = {
+      ...(node.review ?? {}),
+      survey: { date: "2026-09-01", text: { ...sectionHashes(node, words), ...over } },
+    };
+    return node;
+  };
+
+  test("a node carrying a read pin whose five hashes match is frozen, though no survey judged it", async () => {
+    const graph = await readGraph(await freshFrontierFixture("freeze-read-pin-"));
+    const node = graph.nodes.find((n) => n.id === SIBLING);
+    assert.equal(frozenOnPin(node, graph.words), false, "with no pin at all, nothing is frozen");
+    readPin(node, graph.words);
+    assert.equal(node.review.survey.of, undefined, "a read pin names no recommendation");
+    assert.equal(frozenOnPin(node, graph.words), true);
+    assert.ok(frozenNodeIds(graph).has(node.id));
+    // and the pair it belongs to freezes with it
+    const other = readPin(graph.nodes.find((n) => n.id === ANSWERED), graph.words);
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    const pairs = [{ a: node.id, b: other.id, keys: ["parent:x"] }];
+    const { frozen } = cutPairs(pairs, { byId, frozenIds: frozenNodeIds(graph) });
+    assert.equal(frozen.length, 1, "both members frozen and pinned by the same survey: the pair is frozen");
+  });
+
+  test("one moved hash unfreezes the node, and a read pin's movement never judges it", async () => {
+    const graph = await readGraph(await freshFrontierFixture("freeze-moved-"));
+    const node = graph.nodes.find((n) => n.id === SIBLING);
+    readPin(node, graph.words, { answer: "0".repeat(64) });
+    assert.equal(frozenOnPin(node, graph.words), false, "the text it pinned is not the text there now");
+    assert.equal(frozenNodeIds(graph).has(node.id), false);
+    const { judged } = judgedSet(graph);
+    assert.equal(judged.some((n) => n.id === node.id), false,
+      "a read pin whose text moved carries the node back into the neighbourhood, not into the judged set");
+  });
+
+  test("a review-stage node carrying a read pin alone is still owed a survey, and is judged", async () => {
+    const graph = await readGraph(await freshFrontierFixture("freeze-owed-"));
+    const node = graph.nodes.find((n) => n.id === SURVEY_PINNED);
+    assert.equal(node.stage, "review");
+    assert.equal(judgedSet(graph).judged.some((n) => n.id === node.id), false,
+      "as the fixture stands it carries a judged pin on the recommendation it stands on");
+    readPin(node, graph.words); // replaces the judged pin with a read pin
+    assert.equal(frozenOnPin(node, graph.words), true, "the read pin would freeze it");
+    assert.ok(surveyJudges(graph).some((n) => n.id === node.id), "and it is owed a survey all the same");
+    const { judged, reasons } = judgedSet(graph);
+    assert.ok(judged.some((n) => n.id === node.id), "so it is judged, and the freeze never reaches it");
+    assert.match(reasons.get(node.id), /read pin/);
+    assert.equal(frozenNodeIds(graph, new Set(judged.map((n) => n.id))).has(node.id), false);
+  });
+
+  test("a pin naming fewer than five sections freezes nothing: it is silent about the rest", async () => {
+    const graph = await readGraph(await freshFrontierFixture("freeze-partial-"));
+    const node = graph.nodes.find((n) => n.id === SIBLING);
+    const full = sectionHashes(node, graph.words);
+    node.review = { survey: { date: "2026-09-01", text: { question: full.question, answer: full.answer } } };
+    assert.equal(frozenOnPin(node, graph.words), false);
+  });
+
+  test("the pins sidecar names every node the brief carried by what it answers, with the hashes as read", async () => {
+    const rootDir = await freshFrontierFixture("pins-read-");
+    const reviewDir = path.join(rootDir, "out");
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
+    const pins = JSON.parse(await readFile(path.join(reviewDir, "survey.pins.json"), "utf8"));
+    const selection = JSON.parse(await readFile(path.join(reviewDir, "survey.selection.json"), "utf8"));
+    const graph = await readGraph(rootDir);
+
+    assert.equal(pins.read.length, result.neighbourhoodCount);
+    assert.deepEqual(pins.read.map((r) => r.id), selection.neighbourhood);
+    assert.ok(pins.read.length > 0, "the fixture's judged set reaches something");
+    for (const entry of pins.read) {
+      assert.deepEqual(Object.keys(entry.text), SECTION_HASH_KEYS, entry.id);
+      const node = graph.nodes.find((n) => n.id === entry.id);
+      assert.deepEqual(entry.text, sectionHashes(node, graph.words), `${entry.id} is pinned on the text as read`);
+      assert.equal(pins.judged.includes(entry.id), false, "the judged set and the read set are disjoint");
+    }
+    // and the selection names the other two lists the freeze is made of
+    assert.deepEqual(selection.frozen, result.whole ? [] : selection.frozen);
+    assert.ok(Array.isArray(selection.frozen));
+    assert.deepEqual(selection.unchangedReached.filter((id) => !selection.frozen.includes(id)), []);
+  });
+
+  test("pinning what the survey read makes the next delta carry it on one line, and the brief shrinks", async () => {
+    const rootDir = await freshFrontierFixture("freeze-bound-");
+    const reviewDir = path.join(rootDir, "out");
+    const before = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
+    assert.equal(before.whole, false, "the delta is the norm");
+    assert.equal(before.unchangedReachedCount, 0, "nothing is pinned yet, so nothing is frozen");
+    const read = JSON.parse(await readFile(path.join(reviewDir, "survey.pins.json"), "utf8")).read;
+    assert.ok(read.length > 0);
+
+    // What the apply step does: a read pin on every node the brief carried
+    // by what it answers. A `review` block requires a stage (read.mjs: "'review',
+    // 'depends', 'probes', and '## Account' are parts of the dialogue and
+    // require stage"), and this fixture carries three stageless nodes on
+    // purpose; every node of the live graph carries a stage, so the live
+    // backfill pins all of them.
+    const graph = await readGraph(rootDir);
+    const pinnable = read.filter((entry) => graph.nodes.find((n) => n.id === entry.id)?.stage);
+    assert.ok(pinnable.length > 0 && pinnable.length < read.length, "the fixture holds both kinds");
+    for (const entry of pinnable) await writeReadPin(rootDir, graph, entry.id);
+
+    const after = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-08" });
+    assert.equal(after.batchCount, before.batchCount, "the judged set is unmoved: a read pin judges nothing");
+    assert.equal(after.neighbourhoodCount, read.length - pinnable.length,
+      "every neighbour that could be pinned is frozen on its read pin");
+    assert.equal(after.unchangedReachedCount, pinnable.length, "and carried on one line");
+    assert.ok(after.bytes < before.bytes, `the brief shrinks: ${after.bytes} < ${before.bytes}`);
+    const brief = await readFile(after.briefPath, "utf8");
+    assert.match(brief, /#### Reached but unchanged \(\d+ node\(s\), one line each/);
+  });
+});
+
 describe("candidatePairs: the five keys, each nominating on its own", () => {
   const bare = (id, extra = {}) => ({
     id, question: `What is ${id}?`, under: [], depends: [], cites: [], bears: [],
@@ -1634,12 +1790,21 @@ describe("candidatePairs: the five keys, each nominating on its own", () => {
     recommendationHash: "a".repeat(40), ...extra,
   });
   const keysOf = (pairs, a, b) => (pairs.find((p) => p.a === a && p.b === b) ?? { keys: [] }).keys;
+  /** Filler: a term nominates nothing where more than a tenth of the record
+   * uses it, so a fixture testing the term key needs a record big enough for
+   * one or two users to be under a tenth of it. These carry no term, no
+   * parent, no citation and no resemblance, so they nominate nothing
+   * themselves and only set the size. */
+  const filler = (n) => Array.from({ length: n }, (_, i) => bare(`g/filler-${i}`, {
+    answer: `Filler ${i}: a sentence with no defined term in it, distinct from every sibling of it by more than a shingle, numbered ${i} throughout.`,
+  }));
 
   test("a term pairs the definer with a user, and records the term and the definer", () => {
     const pairs = candidatePairs({ nodes: [
       bare("g/def", { defines: ["judged set"] }),
       bare("g/x", { answer: "The judged set is read." }),
       bare("g/y", { answer: "A judged set again." }),
+      ...filler(37), // two users of forty nodes: a twentieth, under the tenth
     ] });
     const defXKeys = keysOf(pairs, "g/def", "g/x");
     assert.ok(defXKeys.some((k) => k.startsWith("term:judged set")), "the definer and a user are paired, with the term named");
@@ -1652,8 +1817,37 @@ describe("candidatePairs: the five keys, each nominating on its own", () => {
       bare("g/def", { defines: ["judged set"] }),
       bare("g/x", { answer: "The judged set is read." }),
       bare("g/y", { answer: "A judged set again." }),
+      ...filler(37),
     ] });
     assert.deepEqual(keysOf(pairs, "g/x", "g/y"), [], "two users of one term are never paired with each other on `term`");
+  });
+
+  test("a term more than a tenth of the record uses nominates nothing, and one fewer nodes use nominates", () => {
+    // Twenty nodes. `hub` is used by three of them, over the tenth; `rare`
+    // by two, at the tenth exactly and so still nominating. The key that
+    // pairs a hub with everything orders nothing and grows with the graph,
+    // which is what the bound is for.
+    const nodes = [
+      bare("g/hub-def", { defines: ["hub term"] }),
+      bare("g/rare-def", { defines: ["rare term"] }),
+      bare("g/u1", { answer: "The hub term is everywhere." }),
+      bare("g/u2", { answer: "Another use of the hub term here." }),
+      bare("g/u3", { answer: "A third node saying hub term once." }),
+      bare("g/r1", { answer: "The rare term, said once." }),
+      bare("g/r2", { answer: "The rare term, said a second time." }),
+      ...filler(13),
+    ];
+    assert.equal(nodes.length, 20);
+    const pairs = candidatePairs({ nodes });
+    const termKeys = pairs.flatMap((p) => p.keys).filter((k) => k.startsWith("term:"));
+    assert.equal(termKeys.some((k) => k.startsWith("term:hub term")), false,
+      "three of twenty is more than a tenth: the hub term nominates nothing");
+    for (const id of ["g/u1", "g/u2", "g/u3"]) {
+      assert.deepEqual(keysOf(pairs, "g/hub-def", id), [], `${id} is not paired with the hub's definer`);
+    }
+    assert.ok(keysOf(pairs, "g/r1", "g/rare-def").some((k) => k.startsWith("term:rare term")),
+      "two of twenty is not more than a tenth: the rare term still nominates");
+    assert.ok(keysOf(pairs, "g/r2", "g/rare-def").some((k) => k.startsWith("term:rare term")));
   });
 
   test("a shared entry of the author's words", () => {
@@ -1698,6 +1892,7 @@ describe("candidatePairs: the five keys, each nominating on its own", () => {
       bare("g/p"),
       bare("g/a", { under: ["g/p"], defines: ["judged set"] }),
       bare("g/b", { under: ["g/p"], answer: "The judged set." }),
+      ...filler(17), // one user of twenty nodes: under the tenth
     ] });
     const keys = keysOf(pairs, "g/a", "g/b");
     assert.ok(keys.includes("parent:g/p"));
@@ -1710,6 +1905,7 @@ describe("cutPairs, probeSeed and drawProbe", () => {
   const pinned = (id, date) => ({
     id, review: { survey: { date, of: "a".repeat(40) } },
   });
+  const allFrozen = (...ids) => new Set(ids);
 
   test("a pair both of whose members are unchanged since a survey read them together is frozen", () => {
     const a = pinned("g/a", "2026-09-01");
@@ -1717,19 +1913,22 @@ describe("cutPairs, probeSeed and drawProbe", () => {
     const c = pinned("g/c", "2026-09-02");
     const byId = new Map([a, b, c].map((n) => [n.id, n]));
     const pairs = [{ a: "g/a", b: "g/b", keys: ["parent:x"] }, { a: "g/a", b: "g/c", keys: ["parent:x"] }];
-    const { live, frozen } = cutPairs(pairs, { byId, judgedIds: new Set() });
+    const { live, frozen } = cutPairs(pairs, { byId, frozenIds: allFrozen("g/a", "g/b", "g/c") });
     assert.deepEqual(frozen.map((p) => p.b), ["g/b"]);
     assert.deepEqual(live.map((p) => p.b), ["g/c"], "read by no one survey together: live");
   });
 
-  test("a judged member thaws the pair, and a whole survey freezes nothing", () => {
+  test("a member that is not frozen thaws the pair, and a whole survey freezes nothing", () => {
     const a = pinned("g/a", "2026-09-01");
     const b = pinned("g/b", "2026-09-01");
     const byId = new Map([a, b].map((n) => [n.id, n]));
     const pairs = [{ a: "g/a", b: "g/b", keys: ["parent:x"] }];
-    assert.equal(cutPairs(pairs, { byId, judgedIds: new Set(["g/a"]) }).frozen.length, 0);
-    assert.equal(cutPairs(pairs, { byId, judgedIds: new Set(), whole: true }).frozen.length, 0);
-    assert.equal(cutPairs(pairs, { byId, judgedIds: new Set(), whole: true }).live.length, 1);
+    assert.equal(cutPairs(pairs, { byId, frozenIds: allFrozen("g/b") }).frozen.length, 0,
+      "g/a moved or carries no pin: the pair is live");
+    assert.equal(cutPairs(pairs, { byId, frozenIds: allFrozen() }).frozen.length, 0,
+      "a record with no pins at all freezes nothing, and is a delta all the same");
+    assert.equal(cutPairs(pairs, { byId, frozenIds: allFrozen("g/a", "g/b"), whole: true }).frozen.length, 0);
+    assert.equal(cutPairs(pairs, { byId, frozenIds: allFrozen("g/a", "g/b"), whole: true }).live.length, 1);
   });
 
   test("the pairs a survey recorded on a node decide, where it recorded any", () => {
@@ -1738,7 +1937,7 @@ describe("cutPairs, probeSeed and drawProbe", () => {
     const c = { id: "g/c", review: { survey: { date: "2026-09-01", pairs: [] } } };
     const byId = new Map([a, b, c].map((n) => [n.id, n]));
     const pairs = [{ a: "g/a", b: "g/b", keys: ["k"] }, { a: "g/a", b: "g/c", keys: ["k"] }];
-    const { frozen } = cutPairs(pairs, { byId, judgedIds: new Set() });
+    const { frozen } = cutPairs(pairs, { byId, frozenIds: allFrozen("g/a", "g/b", "g/c") });
     assert.deepEqual(frozen.map((p) => p.b), ["g/b"], "a recorded pair freezes; a shared date does not, once pairs are recorded");
   });
 
@@ -1764,44 +1963,54 @@ describe("cutPairs, probeSeed and drawProbe", () => {
   });
 });
 
-describe("wholeDemand: the two backstops and the two overrides", () => {
+describe("wholeDemand: the whole reading is a backfill and runs on the two flags alone", () => {
   const s = (date, whole) => ({ date, whole });
 
-  test("no history at all demands a whole survey", () => {
+  test("no history at all is a delta: the record with no pins is a delta that freezes nothing", () => {
     const d = wholeDemand(null, { date: "2026-09-07" });
-    assert.equal(d.whole, true);
-    assert.equal(d.demanded, true);
-    assert.match(d.why, /no survey history/);
+    assert.equal(d.whole, false);
+    assert.equal(d.demanded, false);
+    assert.match(d.why, /the delta is the survey's only recurring form/);
   });
 
-  test("four deltas since the last whole survey demand one", () => {
-    const history = { surveys: [s("2026-09-01", true), s("2026-09-02"), s("2026-09-03"), s("2026-09-04")] };
-    assert.equal(wholeDemand(history, { date: "2026-09-05" }).whole, false, "three deltas is not yet four");
-    history.surveys.push(s("2026-09-05"));
-    const d = wholeDemand(history, { date: "2026-09-06" });
-    assert.equal(d.whole, true);
-    assert.match(d.why, /4 delta survey\(s\) have run/);
+  test("no count of deltas demands a whole reading", () => {
+    const history = { surveys: [s("2026-09-01", true), s("2026-09-02"), s("2026-09-03"), s("2026-09-04"), s("2026-09-05")] };
+    assert.equal(wholeDemand(history, { date: "2026-09-06" }).whole, false,
+      "five deltas since the last whole reading demand nothing: there is no cadence");
   });
 
-  test("a whole survey older than thirty days demands one", () => {
-    const history = { surveys: [s("2026-08-01", true)] };
+  test("no age of the last whole reading demands one: five deltas and forty days is still a delta", () => {
+    const history = { surveys: [
+      s("2026-07-29", true), s("2026-07-30"), s("2026-07-31"), s("2026-08-01"), s("2026-08-02"), s("2026-08-03"),
+    ] };
     const d = wholeDemand(history, { date: "2026-09-07" });
-    assert.equal(d.whole, true);
-    assert.match(d.why, /at least once in any thirty days/);
-    assert.equal(wholeDemand({ surveys: [s("2026-09-01", true)] }, { date: "2026-09-07" }).whole, false);
+    assert.equal(d.whole, false);
+    assert.equal(d.demanded, false);
+    assert.match(d.why, /on no cadence and after no count of deltas/);
   });
 
   test("--validations-changed demands one whatever the history says", () => {
     const d = wholeDemand({ surveys: [s("2026-09-06", true)] }, { date: "2026-09-07", validationsChanged: true });
     assert.equal(d.whole, true);
+    assert.equal(d.demanded, true);
     assert.match(d.why, /--validations-changed/);
   });
 
-  test("--whole takes one without demanding it: the caller asked, no backstop fired", () => {
-    const d = wholeDemand({ surveys: [s("2026-09-06", true)] }, { date: "2026-09-07", forced: true });
+  test("--whole takes one without demanding it: the author asked for the backfill", () => {
+    const d = wholeDemand({ surveys: [s("2026-09-06", true)] }, { date: "2026-09-07", whole: true });
     assert.equal(d.whole, true);
     assert.equal(d.demanded, false);
     assert.match(d.why, /--whole/);
+    assert.match(d.why, /backfill/);
+  });
+
+  test("the history decides nothing: the same flags on any history give the same answer", () => {
+    const histories = [null, { surveys: [] }, { surveys: [s("2026-01-01", true), s("2026-01-02")] }, { nonsense: true }];
+    for (const h of histories) {
+      assert.equal(wholeDemand(h, { date: "2026-09-07" }).whole, false);
+      assert.equal(wholeDemand(h, { date: "2026-09-07", whole: true }).whole, true);
+      assert.equal(wholeDemand(h, { date: "2026-09-07", validationsChanged: true }).whole, true);
+    }
   });
 });
 
@@ -1892,18 +2101,20 @@ describe("writeSurveyBrief: the selection, the sidecars and --out", () => {
     for (const entry of selection.judged) assert.ok(entry.why, `${entry.node} carries the reason it was judged`);
   });
 
-  test("the history sidecar is appended, and a second run reads what the first wrote", async () => {
+  test("the history sidecar is a log of the runs and decides none of them", async () => {
     const rootDir = await freshFrontierFixture("history-");
     const reviewDir = path.join(rootDir, "out");
     const first = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
-    assert.equal(first.whole, true, "no history: the backstop demands a whole survey");
+    assert.equal(first.whole, false, "no history and no flag: the delta is the norm");
     const history = JSON.parse(await readFile(path.join(reviewDir, "survey.history.json"), "utf8"));
     assert.equal(history.surveys.length, 1);
-    assert.equal(history.surveys[0].whole, true);
+    assert.equal(history.surveys[0].whole, false);
+    assert.equal(history.surveys[0].bytes, first.bytes, "the log records what the run cost");
+    assert.equal(history.surveys[0].judged, first.batchCount);
 
     const second = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-08" });
-    assert.equal(second.whole, false, "a whole survey ran yesterday: this one is a delta");
-    assert.match(second.wholeWhy, /both backstops are met/);
+    assert.equal(second.whole, false, "and the second is a delta too: nothing in the history demands otherwise");
+    assert.match(second.wholeWhy, /the delta is the survey's only recurring form/);
     const after2 = JSON.parse(await readFile(path.join(reviewDir, "survey.history.json"), "utf8"));
     assert.equal(after2.surveys.length, 2);
   });
