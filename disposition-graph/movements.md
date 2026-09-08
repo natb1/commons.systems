@@ -22,6 +22,145 @@ probes:
       It does not move the answer's first three paragraphs.
     source: ai
     raised: 2026-09-08
+  - id: does-expert-dialogue-carry-the-verdict
+    asks: >-
+      When the author, the AI and the convened experts hold common ground, what
+      has ended the round, and may the AI end it by persuading?
+    fact: answer
+    why: >-
+      Under the clean-context review the round ends with a verdict from a party
+      that did not draft, and the drafter cannot obtain a forward by argument:
+      `plato-elenchus` locates that authority in "the reviewer not being the
+      drafter, and not from what it finds". A dialogue that ends when the
+      parties hold common ground is reachable three ways, by being right, by
+      being persuasive, and by reframing the question until the disagreement no
+      longer applies, so the right to end the round moves from the checking
+      party to the checked one. Two tradition surveys of 2026-09-08 found this
+      independently from different families, and neither found an instrument in
+      the family that terminates on agreement: adversarial collaboration ends
+      on a test both parties pre-committed to (Mellers, Hertwig and Kahneman,
+      Psychological Science 12, 2001), a Registered Report on a binding Stage 1
+      acceptance (Chambers, Cortex 49, 2013), the Theaetetus on the midwife's
+      judgment of the wind egg, and Delphi's own reviewers name termination on
+      convergence as the method's identified failure mode, since the feedback
+      produces convergence whether or not it produces accuracy (Rowe and
+      Wright, International Journal of Forecasting 15, 1999; Bolger and Wright,
+      TFSC 78, 2011).
+    discharges: >-
+      Whether the expert paradigm needs a terminator that is not the parties'
+      agreement, and therefore whether it replaces the review or precedes it.
+      It does not move the four clauses the author gave on the two movements.
+    source: ai
+    raised: 2026-09-08
+  - id: who-convenes-the-experts
+    asks: >-
+      Who chooses which tradition families are convened and writes their
+      briefs, and may that be the AI whose recommendation they exist to test?
+    fact: answer
+    why: >-
+      `clean-context-review` carries `sibling-set-named-by-the-session` as
+      passed, on the recorded reason that an input set chosen by the party
+      under review "leaves no trace of the omission", and `review-model`
+      refused `conditional-by-boldness` because under it "the drafter selected
+      the strength of its own reviewer". Both rulings are about the review's
+      inputs, and nothing carries the rule to a panel's membership. Under the
+      paradigm as put, the AI selects the families, writes the briefs, reads
+      the returns and holds the record, and each of the two surveys of
+      2026-09-08 named itself as the instance. Knight and Leveson 1986, already
+      a reading here as `n-version-programming`, is the general result:
+      independence must be demonstrated and is never inferred from separate
+      construction, so a panel briefed by one party on one model lineage is
+      correlated by construction while looking more independent for having more
+      voices. The 1976 Team B panel is the measured instance of a panel
+      constituted by the party holding the conclusion.
+    discharges: >-
+      Whether the roster is derived from the record, as the review's sibling
+      set already is, or named per sitting by the AI, and whether a tradition
+      family the AI did not convene is itself recordable.
+    source: ai
+    raised: 2026-09-08
+  - id: who-writes-the-against-after-the-encoding
+    asks: >-
+      After the grounding is common and the AI writes the recommendation onto
+      the facts, does a party that did not draft it read what was written, and
+      who writes the `against` on the option row?
+    fact: answer
+    why: >-
+      `anchoring-and-adjustment` names exactly three guards against the AI's
+      recommendation anchoring the author, and the second is "the clean-context
+      review, whose counter-argument replaces the AI's own on the row and is
+      written by a reader that did not draft it". Under the paradigm the probes
+      return before the option rows exist; the AI then writes the row, and
+      `against` reverts to being the drafter's own. So the paradigm strengthens
+      the third guard, the periagogic movement where the author's account is
+      taken before options are drafted, and deletes the second. The same gap
+      shows from the other side: `plato-elenchus` names a third function of
+      refutation, "the function no party can discharge on itself", and locates
+      it in the review of the artifact, and under the paradigm the encoded
+      artifact is read by nobody but its writer. The tradition that made this
+      exact reform kept the objection inside the artifact rather than deleting
+      it: `promotor-fidei` already records that what replaced the office "puts
+      the case together with its difficulties in one document and has a college
+      judge it".
+    discharges: >-
+      Whether the expert paradigm keeps a small instrument at the encoding, a
+      non-drafting party that writes the `against` on the row, or whether the
+      AI's own case against is sufficient once the probes are answered.
+    source: ai
+    raised: 2026-09-08
+  - id: is-a-drained-probe-an-answered-probe
+    asks: >-
+      When a probe is not resolved, is it recorded on the node as an objection
+      with the answer beside it, or is it enough that the round ends when the
+      parties agree?
+    fact: answer
+    why: >-
+      The author's words of 2026-09-08 say the orchestration generates and
+      drains the probes, and draining and answering are different operations. A
+      kick-back is durable: it lands in the account and the session answers it
+      on the record. A probe set aside inside a dialogue leaves no residue, and
+      `session-state` holds that the sitting's store dies with the sitting. The
+      traditions that made this move built the residue into the form rather
+      than trusting the parties with it: the promotor's animadversiones were
+      answered by the postulator's responsiones and both travelled with the
+      cause; a non-concurrence under the NRC's MD 10.158 is attached to the
+      document and must be answered in writing; and CPR r 35.12(3) requires the
+      experts' joint statement to record the issues they disagree on with their
+      reasons, while r 35.12(5) denies their agreement any binding force, both
+      clauses written by a tradition that had watched consensus swallow the
+      disagreement. This record already spends the same machinery on options,
+      where a passed option carries the reason it was passed, and has no rule
+      for a passed probe.
+    discharges: >-
+      Whether a probe raised and not met blocks a ruling, whether it is
+      recorded with its reason the way a passed option is, and who writes that.
+    source: ai
+    raised: 2026-09-08
+  - id: is-the-dialogue-before-the-review-or-instead-of-it
+    asks: >-
+      Does expert dialogue replace the clean-context review, or precede it?
+    fact: answer
+    why: >-
+      The refinement of 2026-09-08 puts the two paradigms in the alternative.
+      The institutions that faced the same choice arrived at sequence rather
+      than substitution: TIBER-EU (ECB, 2018) and CBEST (Bank of England, 2014)
+      mandate an external red team against a blind defender and place the joint
+      expert exchange in a named closure phase after it; a Registered Report
+      moves review to the question and keeps a Stage 2 adherence check on the
+      draft; and the 1983 abolition of the promotor kept the difficulties
+      inside the positio the deciders read and kept the relator who prepares it
+      separate from the college that judges it. `plato-elenchus` already holds
+      that the Sophist puts purgation before instruction, which is the case for
+      the dialogue being early, and nothing in the record says that competes
+      with a reading of the artifact at the end. The alternative framing
+      forecloses the arrangement the traditions reached, and whether the record
+      will pay for both is the author's to say and not the AI's.
+    discharges: >-
+      Whether `clean-context-review` is superseded, narrowed to the encoding,
+      or kept whole with the dialogue placed before it, and therefore what
+      `review-cost`'s lever is.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:

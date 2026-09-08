@@ -27,6 +27,30 @@ probes:
       says this node's answer forbids. The recommendation stands either way.
     source: ai
     raised: 2026-09-08
+  - id: what-does-cost-name-here
+    asks: >-
+      Does the cost this node bounds mean the tokens a reading is handed, or
+      the author's own endurance for the sitting?
+    fact: answer
+    why: >-
+      The node prices a reading in what its reader is given and bounds it by
+      the neighbourhood. Schweiger, Sandberg and Ragan (Academy of Management
+      Journal 29, 1986) ran the head-to-head of the two paradigms this record
+      is now choosing between and measured a tradeoff on two axes at once:
+      structured conflict won on the quality of recommendations and on the
+      quality of the assumptions surfaced, and consensus won on satisfaction,
+      on acceptance of the decision, and on the desire to keep working in the
+      process. This record has a term for the first axis and none for the
+      second, so the tradeoff the author named on 2026-09-08 cannot presently
+      be evaluated here, one side of it being unnamed. The asymmetry bites
+      twice: a stopping rule the AI can satisfy by argument is cheaper on every
+      axis this node measures, and that saving is indistinguishable from a
+      saving that comes from removing waste.
+    discharges: >-
+      Whether this node's bound acquires a second term, and whether the change
+      of paradigm is being made for the reason the evidence supports.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:

@@ -24,6 +24,124 @@ probes:
       gains a fourth term or keeps its three.
     source: ai
     raised: 2026-09-08
+  - id: what-does-a-dead-sitting-owe-the-next
+    asks: >-
+      When a sitting dies without stopping, compacted, killed, or ended by an
+      error, what does the next sitting owe what the dead one left in the store?
+    fact: answer
+    why: >-
+      The answer says the store does not outlive the sitting and names no
+      reader, no scan, no staleness test and no sweeper, and the author's
+      refinement of 2026-09-08 attaches the standard report to the moment the
+      sitting stops. Crash-only software (Candea and Fox, HotOS IX, 2003) holds
+      that correctness lives on the recovery path and that a path taken only on
+      an orderly exit is wrong when it is finally needed; the failures this
+      store exists for are exactly the ones that never reach a stop. The same
+      tradition's instruments read at open rather than sweep at close, as
+      LevelDB reconciles its manifest against the directory at open and an XA
+      participant enumerates its own in-doubt branches on restart. The record
+      cannot choose between a report obligated at the stop and one obligated at
+      the start, and only the second survives the failure the store is for.
+    discharges: >-
+      Whether the store is a recovery log or a diary, and with it whether the
+      standard report is printed when a sitting stops, when a sitting starts, or
+      both; and whether the store needs a sitting identity, a liveness test and
+      a sweeper.
+    source: ai
+    raised: 2026-09-08
+  - id: is-the-ledger-rule-admission-or-citation
+    asks: >-
+      Is the ledger's rule about what may be admitted to the record, or about
+      what may be cited from it?
+    fact: answer
+    why: >-
+      The whole concession rests on reading it as admission: because the ledger
+      takes only a quotation that bears on a disposition fact, an unclassified
+      word cannot go on the ref and must wait in a store off it. Git's object
+      store makes the other reading available and the record has never been
+      asked for it: `git add` writes the blob to `.git/objects` before the index
+      records anything, so content is durable while unreferenced, and is reaped
+      only by a later collection. On that reading the author's words reach the
+      ref the turn they are said, uncited and prunable, the store holds only the
+      open classification, and the concession this node apologises for does not
+      exist. The record passed `no-store-and-the-ledger-takes-everything`, and
+      the reason it passed answers a ledger that takes everything as entries; it
+      does not answer a ref that holds bytes nothing cites, which is what
+      `commons.systems/disposition-graph/evaluation` requires be struck before
+      the position is re-raised.
+    discharges: >-
+      Which option the answer fact recommends, and whether the one-checkpoint
+      window in which the record does not hold the author's words exists at all.
+    source: ai
+    raised: 2026-09-08
+  - id: where-does-an-unpaid-residual-go
+    asks: >-
+      When the sitting that owed it is gone, who is a reconciliation residual
+      owed to?
+    fact: answer
+    why: >-
+      Three positions stand and the record has no arbiter among them. The
+      author's refinement of 2026-09-08 puts residuals in the store; this
+      answer says the store dies with the sitting; and the parent,
+      `commons.systems/disposition-graph/transience`, forbids by name any
+      artifact recording a unit of work, a plan, a task, or a step list, and
+      authority narrows on the way down. Two traditions say the same thing about
+      the shape: Robert's Rules carries what a body did not finish as Unfinished
+      Business on the parent's agenda, by rule and not by anyone's memory, and
+      Dynamo's hinted handoff makes owed work a durable object held by a third
+      party with a discharge and a sweeper, the one thing it may never be being
+      scoped to the life of the party that owes it.
+    discharges: >-
+      Whether residuals belong in this node at all, or are a frontier the
+      reconciliation instrument derives, which is `work-loop`'s second direction
+      and is held back by that node's declared shim.
+    source: ai
+    raised: 2026-09-08
+  - id: what-shows-that-a-classification-happened
+    asks: >-
+      When a sitting judges that something you said was direction to it and not
+      disposition, what should the record show about that having happened?
+    fact: answer
+    why: >-
+      The answer says the record keeps nothing, which speaks to content and is
+      silent about existence, so a classification never made and a
+      classification made wrongly leave identical evidence. The file-drawer
+      problem (Rosenthal, Psychological Bulletin 86:638, 1979) is the finding
+      that selection by an interested party distorts a corpus even where every
+      individual decision is honest, and its remedy is registration before the
+      outcome is known, as ICMJE has required of trials since 2005. Here the
+      party that classifies the author's words is the party the classification
+      benefits, it classifies on its own judgment with no schedule, immediately,
+      and with no hold by which a contested classification could suspend the
+      destruction. The write-through discipline this answer offers bounds the
+      latency of entry and does not touch the selection.
+    discharges: >-
+      Whether a struck word leaves a stub, a count, or a dated null entry, and
+      whether the standard report must list what the sitting did not enter.
+    source: ai
+    raised: 2026-09-08
+  - id: may-the-store-direct-what-it-may-not-authorize
+    asks: >-
+      What may a sitting do on the strength of the store alone?
+    fact: answer
+    why: >-
+      This answer says nothing in the store has any authority; the author's
+      refinement of 2026-09-08 puts the sitting's sequencing there precisely in
+      order to direct the alignment dialogue. Both cannot be read flatly, and
+      the distinction the record lacks is one the transcript tradition already
+      has: an uncertified realtime rough may not be cited and nonetheless
+      properly governs the conduct of the proceeding, having no authority in the
+      record and full authority over the proceeding. Against that stands the
+      record's own adopted reading in
+      `commons.systems/disposition-graph/event-sourcing-derived-view`, that a
+      view is never stored because a second implementation of the fold is a
+      second truth, and `--frontier` already derives stage and rank order.
+    discharges: >-
+      Whether the no-authority sentence divides in two, and how much of the
+      sequencing is stored at all rather than derived, the residue being which
+      nodes this sitting touched and which probes are not yet on their nodes.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:

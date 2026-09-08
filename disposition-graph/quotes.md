@@ -250,6 +250,28 @@ probes:
       half of the question.
     source: ai
     raised: 2026-09-08
+  - id: may-a-withdrawn-entry-be-deleted
+    asks: >-
+      When the author names a ledger entry as one that does not belong there,
+      is it deleted, struck in place, or left standing with the classification
+      recorded beside it?
+    fact: answer
+    why: >-
+      The recommended option admits a quotation where it bears on a disposition
+      fact and not otherwise. words/2026-09-08/17 is the author's own example
+      of an entry that does not qualify, a direction to the sitting rather than
+      an articulation of disposition, and it is in the ledger. But the ledger's
+      rule is that entries are appended and never inserted, reordered or
+      renumbered, and every reference is pinned to an entry's own sha, so
+      deleting one either leaves a gap in the ordinals the parser rejects or
+      renumbers the entries after it and moves their pins. The record has no
+      third state between admitted and absent.
+    discharges: >-
+      Whether the ledger carries a withdrawal marker, whether the parser
+      tolerates a gap, and what a reference to a withdrawn entry resolves to.
+      The recommendation on the admission clause stands either way.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:
