@@ -1091,3 +1091,44 @@ above: `dialogue`, whose enumeration of the dialogue's parts carries the removal
 the probe list at the recording and whose part-requires-a-stage rule now carries the
 exception, and `recording`, whose answer quotes the struck clause. Both are owed as
 options on those nodes' facts.
+
+### All four amendments are located, 2026-09-08
+
+The answer names four amendments it requires elsewhere, "named here so that they
+are ruled and not discovered". All four are now recorded on the nodes they amend,
+and this section says where, so that a reader of this node can reach each of them
+without a search and a later sitting does not re-derive the list.
+
+The fifteenth frontier validation gains its clause on `frontier-consistency`, as
+the option `probe-is-not-a-mintable-question`, recorded 2026-09-05. The citation from
+`growth` is present, recorded the same day, and gives every node using the word a
+path to the node defining it; its `cites[].hash` is stale, which is a defect of the
+record's only `cites` entry and not of this amendment, and it was stale before this
+sitting began: the pin names the blob `e2791b5e` and the blob before it was
+`44b518da`, so it already named neither this node's current text nor the text the
+reading of 2026-09-05 read. No current value is written down here, because
+appending this very section changes it again, which is the whole of the question.
+Nothing validates that hash and nothing in the record says
+whether it tracks the cited text or freezes the version cited, which is the
+question the reading of 2026-09-05 raised and which is unanswered still.
+
+The other two were recorded today, and each is a named change against the option it
+amends rather than a rewritten fence. `dialogue` carries
+`probes-are-a-part-that-outlives-the-dialogue`, landed at `fd357f52`, which adds
+`probes` to the enumeration and gives the validator's stage rule its matching
+exception; the 2026-09-05 stub `probes-in-the-enumeration` is passed over there
+rather than dropped, with the reason recorded, because it asked for the enumeration
+change and for the opposite of the validator change, having been drafted before the
+author's words struck the clause. `recording` carries `probes-survive-the-recording`,
+landed at `79df6da9`, where the borrowed citation that attributed the deletion to
+this node's own answer is struck and the removal set gains its second exception.
+
+What the four have in common is why they were recorded on those nodes at all rather
+than read off this one at ruling time: authority narrows on the way down, and a rule
+is met by its own node's ruler. Ruling here alone would have left the operative
+sentence on `recording` unruled and the reader's stage rule unamended, which is the
+defect the passed-over `dialogue` option was minted to fix from the other side. All
+four are unruled recommendations, and the instrument has not moved with them:
+`read.mjs` still refuses a node carrying `probes` without a `stage`, so the rule
+these four state is not executable today, and that is recorded in each option's
+divergence rather than treated as a defect of any one of them.
