@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, describe, test } from 'node:test';
@@ -2948,3 +2948,45 @@ describe('the content encoding: what the validator refuses', () => {
 });
 
 const loc2 = { id: 'm/g/s', graph: 'g', slug: 's', path: 'g/s.md' };
+
+describe('a ledger that does not parse reports itself and not every reference', () => {
+  // The failure this guards is diagnosability, not correctness. When the
+  // ledger throws, `readWords` yields nothing, so without the guard every
+  // `supports:`/`diverges:` reference in the graph reports as unresolved and
+  // the one message that says why is buried under the rest. This bit the
+  // alignment sitting of 2026-09-08, where a hand-wrapped context surfaced
+  // as roughly 360 unrelated unresolved-reference errors.
+  async function corruptedLedgerGraph() {
+    const dir = await freshTmpDir('read-bad-ledger-');
+    const root = path.join(dir, 'graph');
+    await cp(CONTENT_DIR, root, { recursive: true });
+    const ledger = path.join(root, 'words', '2026-09-07.md');
+    const text = await readFile(ledger, 'utf8');
+    // An ordinal gap: the ledger throws before any entry is returned.
+    await writeFile(ledger, text.replace(/^## 1$/m, '## 4'), 'utf8');
+    return root;
+  }
+
+  test('readGraph throws naming the ledger, and names no reference', async () => {
+    const root = await corruptedLedgerGraph();
+    await assert.rejects(
+      () => readGraph(root),
+      (err) => {
+        assert.match(err.message, /^words\/: /m, 'the ledger reports its own failure');
+        assert.match(err.message, /no reference in this graph could be checked/);
+        assert.ok(
+          !/unresolved words reference/.test(err.message),
+          `no reference is reported unresolved, got:\n${err.message}`,
+        );
+        return true;
+      },
+    );
+  });
+
+  test('the ledger failure is the only problem reported', async () => {
+    const root = await corruptedLedgerGraph();
+    const err = await readGraph(root).then(() => null, (e) => e);
+    assert.ok(err, 'readGraph rejects');
+    assert.equal(err.message.split('\n').length, 1, `one problem, got:\n${err.message}`);
+  });
+});

@@ -35,8 +35,20 @@ function entrySha(sourceLines) {
  *
  * The file may open with nothing or a comment line starting `<!--`; that
  * line carries no entry and is skipped by virtue of never matching
- * `## <n>`. Each entry is a `## <n>` heading, a context line, and a
- * blockquote, in that order, separated from its neighbours by blank lines.
+ * `## <n>`. Each entry is a `## <n>` heading, a context, and a blockquote,
+ * in that order, separated from its neighbours by blank lines.
+ *
+ * The context is every consecutive non-blank line before the blockquote,
+ * joined with a single space. It reads as one sentence and is rendered
+ * inline everywhere the record shows it, so a context hand-wrapped to the
+ * prose width is the same context as one written on a single line -- the
+ * wrapping is an artifact of writing the file and carries no meaning. The
+ * entry's `sha` is still taken over the source bytes as they stand, so
+ * rewrapping a landed context is an edit that moves the pin, which is the
+ * rule this module already states for a correction. `formatEntry` writes a
+ * context back on one line, so re-formatting a hand-wrapped entry is such
+ * an edit and not a round trip; nothing in the record re-formats a landed
+ * entry, and the round trip holds for every entry `formatEntry` produced.
  *
  * Throws on an ordinal gap (`n` must run 1, 2, 3, ... in file order with no
  * gaps or repeats), a missing context line, a missing blockquote, or a
@@ -69,11 +81,12 @@ export function parseWordsFile(text, date) {
 
     let i = headingIndex + 1;
     while (i < sectionEnd && lines[i].trim() === '') i += 1;
-    if (i >= sectionEnd || lines[i].startsWith('>')) {
+    const contextStart = i;
+    while (i < sectionEnd && lines[i].trim() !== '' && !lines[i].startsWith('>')) i += 1;
+    if (i === contextStart) {
       throw new Error(`words/${date}: '## ${n}' is missing its context line`);
     }
-    const context = lines[i].trim();
-    i += 1;
+    const context = lines.slice(contextStart, i).map((l) => l.trim()).join(' ');
     while (i < sectionEnd && lines[i].trim() === '') i += 1;
 
     const quoteStart = i;

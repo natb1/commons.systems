@@ -73,6 +73,33 @@ describe('parseWordsFile', () => {
     assert.throws(() => parseWordsFile('## 1\n\nc\n\n> q\n', '2026-9-1'), /date/);
   });
 
+  test('joins a context hand-wrapped over several lines with single spaces', () => {
+    const text = '## 1\n\nThe author, 2026-09-08, on a question long enough\n'
+      + 'that the sentence describing it wraps to the prose width\n'
+      + 'of the rest of the record.\n\n> a quotation\n';
+    const [entry] = parseWordsFile(text, '2026-09-01');
+    assert.equal(
+      entry.context,
+      'The author, 2026-09-08, on a question long enough that the sentence '
+        + 'describing it wraps to the prose width of the rest of the record.',
+    );
+    assert.equal(entry.text, 'a quotation');
+  });
+
+  test('does not report a wrapped context as a missing blockquote', () => {
+    const text = '## 1\n\ncontext line one\ncontext line two\n\n> a quotation\n';
+    assert.doesNotThrow(() => parseWordsFile(text, '2026-09-01'));
+  });
+
+  test('a wrapped entry keeps its own sha over the bytes as they stand', () => {
+    const wrapped = '## 1\n\ncontext line one\ncontext line two\n\n> a quotation\n';
+    const flat = '## 1\n\ncontext line one context line two\n\n> a quotation\n';
+    const [a] = parseWordsFile(wrapped, '2026-09-01');
+    const [b] = parseWordsFile(flat, '2026-09-01');
+    assert.equal(a.context, b.context);
+    assert.notEqual(a.sha, b.sha);
+  });
+
   test('tolerates a leading comment line', () => {
     const text = '<!-- fixture -->\n## 1\n\ncontext\n\n> quote\n';
     const entries = parseWordsFile(text, '2026-09-01');

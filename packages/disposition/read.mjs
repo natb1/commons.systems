@@ -2751,14 +2751,24 @@ export async function readGraph(rootDir) {
   // diverges from (commons.systems/disposition-graph/quotes). A graph whose
   // options reference no entry needs no ledger; one whose options do
   // reference entries needs every reference to resolve.
+  // A ledger that does not parse leaves no entries at all, so every
+  // reference in the graph would fail to resolve and the one message that
+  // says why would be buried under hundreds that do not. The ledger's own
+  // failure is reported alone and the per-reference check is skipped, since
+  // a reference cannot be judged against a ledger that was never read.
   let words = new Map();
+  let ledgerFailed = false;
   const ledgerDir = path.join(rootDir, 'words');
   const hasLedger = await pathIsDirectory(ledgerDir);
   if (hasLedger) {
     try {
       words = await readWords(rootDir);
     } catch (err) {
-      problems.push(`words/: ${err.message}`);
+      ledgerFailed = true;
+      problems.push(
+        `words/: ${err.message}; the ledger did not parse, so no reference in `
+        + 'this graph could be checked against it',
+      );
     }
   }
   const referenced = new Set();
@@ -2768,6 +2778,7 @@ export async function readGraph(rootDir) {
         for (const key of OPTION_WORDS_KEYS) {
           for (const ref of option[key]) {
             referenced.add(ref);
+            if (ledgerFailed) continue;
             if (!hasLedger) {
               problems.push(
                 `${node.path}: fact '${fact.name}' option '${option.name}' ${key} names ${ref}, `
