@@ -29,6 +29,20 @@ probes:
       check after the fact.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      The author's words of 2026-09-08 at words/2026-09-08/34 name the judge and
+      name themselves: "At some point the author will decide that they have enough
+      common grounding to confirm the disposition." The answer therefore appoints
+      no third party and does not deliberately have none: the judgment is the
+      author's, asserted by the party the dialogue exists to serve, and the AI's
+      part is to put the ground in front of them and to keep asking. What the same
+      words also settle is the second limb, whether the round's end is checkable
+      afterwards: there is no end to check, since probes go on being exchanged
+      after the confirmation, so a ground later found not to be common shows up as
+      a probe that moves the recommendation on a confirmed fact rather than as a
+      round that was wrongly closed. The cost of appointing no one is not thereby
+      paid; it is moved onto the recommendation's own divergence, where it stands.
   - id: where-does-reframing-the-question-fall
     asks: >-
       The answer types persuasion. Reframing a question until the disagreement
@@ -51,10 +65,14 @@ probes:
       author's own and the discharge reports it faithfully; what is missing is
       that the clause covers one route and the record runs on two.
     discharges: >-
-      Whether the typing is by mode of persuasion or by mode of ending a round,
-      and therefore whether a reframing that dissolves a disagreement is an
-      admissible move, an inadmissible one, or a third thing the record names
-      and permits under conditions.
+      Whether a reframing that dissolves a disagreement is an admissible move, an
+      inadmissible one, or a third thing the record names and permits under
+      conditions. The probe's first limb is closed by the author's words of
+      2026-09-08 at words/2026-09-08/34: the typing cannot be by mode of ending a
+      round, because no move ends one. The author answered the limb by saying they
+      did not follow the distinction and pointing at those words, which is the
+      resolvent rather than a deferral, and the remaining limb is asked of the
+      typing alone.
     source: ai
     raised: 2026-09-08
   - id: what-would-show-the-ground-was-not-common
@@ -85,6 +103,30 @@ probes:
       condition or describes a feeling.
     source: ai
     raised: 2026-09-08
+  - id: is-the-terminal-state-acquiescence
+    asks: >-
+      Is the terminal state this answer keeps acquiescence in Rescher's sense,
+      or something stronger?
+    fact: answer
+    why: >-
+      Rescher, Pluralism: Against the Demand for Consensus (Clarendon, 1993),
+      p. 172, of the state itself: "acquiescence is indeed a co-ordination of
+      sorts -- it puts the parties into an alignment. But it does not involve
+      their agreeing to anything ... Acquiescence and 'going along' is not
+      tantamount to consensus." The reading found this answer restates
+      Rescher's position rather than resembling it, so his name for the state
+      is available; what the record has not said is whether it means that state
+      or a stronger one, in which each party holds the other's position
+      reasonable. The two come apart in what they license afterwards. Under
+      acquiescence a party has merely stopped pressing, so re-opening the
+      question in a later sitting costs nothing and is expected; under the
+      stronger state re-opening is thrashing in the sense evaluation names.
+    discharges: >-
+      Whether the terminal state is acquiescence, mutual recognition of
+      reasonableness, or a third thing the record names; and what a party may
+      do afterwards with a divergence the record keeps.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:
@@ -104,6 +146,11 @@ facts:
       - name: grounding-certified-by-a-third-party
         source: ai
         ref: "2026-09-08"
+      - name: no-terminator-the-author-confirms
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/34
     recommends: shared-grounding-with-typed-persuasion
     boldness: low
     against: "The answer states a condition the record cannot check and gives the judgment that it is met to the two parties whose dialogue it ends, which is the one structural feature every instrument in its family avoids. Stalnaker's defective context is the failure mode with no signature: both parties can believe the ground is common when it is not, and nothing in the answer produces a trace by which that would later be told from a round that ended well. Rittel's Property 2 predicts the other failure, that the operative stop is external and the stated condition supplies the justification afterwards, and the record's own paradigm is an instance, since the Theaetetus is broken off because Socrates has a court appointment. And the typing is one route short: it admits and excludes modes of persuasion and says nothing about restructuring the question so the disagreement no longer arises, which is the move the record's machinery makes routine and which the discharge that produced this node is itself an instance of."
@@ -413,6 +460,42 @@ because the ground was held can afterwards be told from one which ended because 
 party believed it was.
 ```
 
+#### no-terminator-the-author-confirms
+
+The author's own refinement of their own words, and a change of shape rather than
+of substance: a round is not a thing that ends. Probes are traded between the
+author and the convened experts without limit; at some point the author judges
+that the common grounding is enough and confirms the disposition; probes
+outstanding at that moment go on being exchanged afterwards, and an answer to one
+may move the AI's recommendation on a fact already confirmed. Shared grounding is
+still what the confirmation rests on and divergence surviving it is still a
+terminal state the record keeps, so this option keeps the whole of the
+recommendation's substance. What it drops is the terminator: nothing is asked of
+the record at a moment of ending, because there is no such moment, and the
+question this node asks is answered by denying that a round has the shape the
+question gives it.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is
+owed.
+
+**Content.**
+
+```markdown
+---
+question: What ends a round, and what may a party do to end it?
+form: rule
+under:
+  - commons.systems/disposition-graph/movements
+---
+
+## Answer
+
+The content of this option is owed: it is the recommended answer with the
+terminator replaced by the author's confirmation, and the probes surviving it.
+```
+
 ### authority
 
 Ratified, at low boldness. The terminator says when the one dialogue that checks
@@ -450,10 +533,10 @@ here, because it is the author's to settle and not the AI's to conclude.
 
 ### The three probes are the reading's, and four more are held, 2026-09-08
 
-The reading generated nine probes and this node carries three, which is
-`dialogue`'s cap. The three chosen are the ones that bear on what this answer
-means and that only the author can settle. The others are held with their homes
-rather than dropped: whether a recorded divergence should say which kind it is,
+The reading generated nine probes and this node was given three, which was
+`dialogue`'s cap. The three chosen were the ones that bear on what this answer
+means and that only the author can settle; the others were held in prose with
+their homes named: whether a recorded divergence should say which kind it is,
 factual-interpretive or evaluative, which is Aumann's diagnostic made into a
 field and belongs with the fold on `unconfirmed-accumulation`; what makes the
 recorded answer the author's when a node's answer is single-valued and the
@@ -462,8 +545,16 @@ position is giving a reading or playing a role, which is Nemeth's finding made
 into a question and belongs with the expert paradigm and with
 `expert-instructions` when it is minted; and whether the terminal state the
 record holds is acquiescence in Rescher's sense or something stronger, which is
-this node's and is held only because three is the cap. The parent stands at four
-open probes against the same cap, which is recorded there.
+this node's and was held only because three was the cap.
+
+The author struck the cap on 2026-09-08 at `words/2026-09-08/32`, on the ground
+that a cutoff which routes content into prose creates variance in encoding, and
+the four are now in the `probes` fields of their homes: the divergence-kind
+probe on `unconfirmed-accumulation`, the single-valued-answer probe on
+`authority`, the reading-or-role probe on `movements`, which is the expert
+paradigm's only home until `expert-instructions` is minted, and the acquiescence
+probe on this node, which now stands at four. The paragraph is kept as the
+record of the reading's yield and of why the four sat in prose for a day.
 
 ### What this node does not do, 2026-09-08
 
@@ -476,3 +567,49 @@ probe by refusing its premise, which is the third of the three routes that probe
 itself named, and the answer types only the second; that the record has no rule
 for the move is recorded on the parent and asked here, and it is asked rather
 than answered because the move in question was the author's.
+
+### The round does not end, 2026-09-08
+
+The author answered the probe `where-does-reframing-the-question-fall` at
+`words/2026-09-08/34`, and the answer went past the probe. Asked whether the typing
+of persuasion types modes of persuading or modes of ending a round, they replied
+that they did not fully follow the distinction and pointed at their own words of
+the same day at `words/2026-09-08/32`: "Probes may be traded between the author and
+the experts indefinitely. At some point the author will decide that they have
+enough common grounding to confirm the disposition. Outstanding probes can continue
+to be exchanged after confirmation."
+
+That is not a deferral. It removes the category the probe's first limb was asking
+about. If no move ends a round, then there are no modes of ending one to type, and
+the typing is by mode of persuasion by elimination. The remaining limb, whether a
+reframing that dissolves a disagreement is admissible, survives whole and is
+narrowed to it; Riker's heresthetic is still the move the record's machinery makes
+routine and rewarded, and the AI is still the party that raises the probes, writes
+their terms, splits the nodes and writes the discharge.
+
+The same words discharge `who-judges-that-the-ground-is-held`, which the reading
+had raised as the strongest thing tradition had against this node: every
+instrument in the family gives a third party the judgment that the grounding
+condition is met, and this answer appointed no one. The author names the judge, and
+names themselves. So the record now says it deliberately has none in the third-party
+sense, with the judgment held by the party the whole dialogue exists to serve, and
+the cost that the survey found is not thereby paid: it moves onto the answer's
+recorded divergence, which is where an unpaid cost belongs.
+
+`what-would-show-the-ground-was-not-common` is left open and is changed by the
+words rather than closed by them. Stalnaker's defective context was a problem for a
+terminator: both parties can believe the ground is common when it is not, and a
+round closed on that belief has no signature. Under the author's words there is no
+closing, so a defect shows up the ordinary way, as a probe answered after the
+confirmation that moves the recommendation on a confirmed fact. What the probe now
+asks is whether that is enough, or whether the record should keep something at the
+confirmation by which the two failures could later be told apart. Rittel's Property
+2 is untouched: a sitting that runs out of time still confirms, and the words give
+no account of the difference between confirming because the ground is held and
+confirming because the sitting is over.
+
+Recorded as the option `no-terminator-the-author-confirms`, with its content owed,
+and the recommendation not moved: the content is the amendment and a stub
+recommended here would replace this node's answer with its own placeholder. The
+option is the author's refinement of the author's words and is expected to carry
+the recommendation once written.

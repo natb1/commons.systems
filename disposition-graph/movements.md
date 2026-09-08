@@ -167,6 +167,21 @@ probes:
       recorded with its reason the way a passed option is, and who writes that.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      The author's words of 2026-09-08 at words/2026-09-08/32 answer the first
+      limb outright: a probe raised and not met blocks nothing, because "A
+      disposition can be confirmed at any point after options are recorded for
+      each fact. Confirmation is not blocked on draining all probes." The
+      second and third limbs are answered by the same words read with
+      words/2026-09-08/34. A probe is not passed the way an option is passed,
+      because it is never set aside: it persists past the confirmation and the
+      author may go on answering it, and an answer may move the AI's
+      recommendation on a fact already confirmed. So the residue the traditions
+      built into the form is here the probe itself, which stays in the field
+      rather than being closed with a reason, and the operation the probe called
+      draining does not exist. Recorded as the option
+      no-cap-and-probes-do-not-block on author-questions.
   - id: is-the-dialogue-before-the-review-or-instead-of-it
     asks: >-
       Does expert dialogue replace the clean-context review, or precede it?
@@ -190,6 +205,30 @@ probes:
       Whether `clean-context-review` is superseded, narrowed to the encoding,
       or kept whole with the dialogue placed before it, and therefore what
       `review-cost`'s lever is.
+    source: ai
+    raised: 2026-09-08
+  - id: is-a-convened-position-a-reading-or-a-role
+    asks: >-
+      When the AI argues a position because a convened tradition requires it,
+      is that giving a reading or playing a role?
+    fact: answer
+    why: >-
+      Nemeth, Brown and Rogers, Devil's advocate versus authentic dissent,
+      European Journal of Social Psychology 31 (2001), found authentic dissent
+      outperformed the role-played devil's advocate and closed on the point
+      that matters here, "underscoring the value and importance of authenticity
+      and difficulty in cloning such role-playing techniques". The expert
+      paradigm this node's answer turns on convenes the AI to argue from a
+      tradition it does not itself hold, which is the condition that
+      underperformed. If a convened position is role-play, the dialectic the
+      record buys with it is weaker than the record assumes, and the weakness
+      is invisible from inside the sitting, since a role-played argument reads
+      exactly like a held one.
+    discharges: >-
+      Whether the record types a convened position at all, and whether the
+      expert paradigm needs a mechanism that supplies what authenticity
+      supplied in the finding, or whether the asymmetry between an AI and a
+      human confederate defeats the transfer.
     source: ai
     raised: 2026-09-08
 facts:
@@ -591,11 +630,22 @@ arguing a position it does not hold because a convened tradition requires it is
 role-played dissent, which is the condition that underperformed, and that bears
 on the expert paradigm and on `expert-instructions` when it is minted.
 
-**The probes the reading generated, and why none of them is on this node.** This
-node stands at four open probes against `dialogue`'s cap of three, so the cap is
-already breached and adding to it would deepen the breach rather than record
-anything; the breach is named here so that a reading finds it stated rather than
-having to count. The probes are held with their homes: what plays the part every
+**The probes the reading generated, and where they went.** The reading generated
+nine. Three went onto `round-termination` when it was minted, and the rest were
+held here in prose, with their homes named, because `dialogue`'s cap of three
+open probes stood and this node was already over it. The author struck the cap
+on 2026-09-08 at `words/2026-09-08/32`, and the defect they named is the one
+this paragraph was: "there must be no arbitrary cutoff for resolving probes
+especially if it creates variance in encoding." The same content stood in two
+encodings and the count decided which. The held probes are now in the `probes`
+fields of the nodes they belong to, where the reader and the frontier count
+them: `does-a-recorded-divergence-say-which-kind-it-is` on
+`unconfirmed-accumulation`, `what-makes-a-single-valued-answer-the-authors` on
+`authority`, `is-a-convened-position-a-reading-or-a-role` on this node, and
+`is-the-terminal-state-acquiescence` on `round-termination`, which also took
+the two on the terminator and the one on reframing when it was minted. The
+paragraph is kept, with the count struck, as the record of where each came
+from. The probes as the reading first put them: what plays the part every
 instrument in the family gives a third party, and what would show that the
 understanding was not in fact common, both of which belong with the terminator
 wherever it is given a node; where reframing a question until the disagreement no

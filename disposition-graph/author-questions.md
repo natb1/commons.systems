@@ -77,6 +77,12 @@ facts:
       - name: promoted-question-placed-by-its-own-question
         source: review
         ref: "2026-09-07"
+      - name: no-cap-and-probes-do-not-block
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/32
+          - words/2026-09-08/34
     recommends: probes-on-the-node
     boldness: moderate
     against: "The record already carries every function of this field in the accounts, the parent node's own answer names what is open for the author as their home, and a clean-context review of 2026-09-03 ruled that an open question carried as prose is minted as a node or folded into a fact's options; so this answer spends a frontmatter key, a term, a change to what the pin strips, a branch in the applying script and an amendment to the fifteenth frontier validation to buy a structure whose content the drafting session still writes alone, and whose worst failure, the probe a session did not raise because it liked its recommendation, is exactly as invisible in the new field as it was in the prose."
@@ -686,6 +692,47 @@ recommends, whose own clause repeated it. Raised by the clean-context reading of
 2026-09-07 on that node.
 ```
 
+#### no-cap-and-probes-do-not-block
+
+Everything the recommendation says, with three clauses struck and one put in
+their place. The cap of three open probes goes, and with it the movement's
+obligation to discharge or withdraw one before raising a fourth: the admission
+test bounds the list and no number does. The kick-back goes: a probe recorded at
+the review or the ruling stage no longer returns the node to the maieutic stage,
+because confirmation needs only that options are recorded on each fact and is
+never blocked on draining the probes. The death at the recording goes: probes
+survive the confirmation, the author may go on answering them, and an answer may
+move the AI's recommendation on a fact already confirmed, which returns the node
+to the frontier as a proposal by the machinery `authority` already has. What
+replaces the cap is the remedy the cap was standing in for: a node accumulating
+probes is a disposition to refine until it can be confirmed, its questions moving
+to children where they are questions of the record, and the AI never stops asking
+in order to stay under a number.
+
+**AI support.** The record wrote no case for this option; its support is owed.
+
+**AI divergence.** The record wrote no case against this option; its divergence is
+owed.
+
+**Content.**
+
+```markdown
+---
+question: What probes for the author does a node carry, and where are they asked?
+form: rule
+under:
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - probe
+---
+
+## Answer
+
+The content of this option is owed: it is the recommended answer with the cap,
+the kick-back and the death at the recording struck, and the refinement remedy
+put in their place.
+```
+
 ### authority
 
 Ratified, at low boldness. The record escalates toward ratified where being wrong is expensive, irreversible or capture-shaped, and this node is capture-shaped on its face: it settles what the AI may put to the author, how much of the author's attention the record may spend, and what is kept off the author's ruling screen. A delegation covering the class of decision below this node would cover raising the cap, widening the admission test and moving the line on what the page shows, which is the AI writing its own licence to ask, and the authority node's rule that a class the AI writes for itself is not a grant is the same failure one step removed. Deferred is on the fact because the record's classes are three; it is not recommended because the author has already granted this reconciliation, so the recommendation acts under the grant whichever way the fact is ruled, and what the ruling settles is whether the instrument is doctrine.
@@ -858,3 +905,67 @@ Also named: commons.systems/disposition-graph/review-cost, commons.systems/dispo
 Proposed: recording's term survives for the agent: reviewer, or the reading where the act is meant; reader is kept for the parser, which is what read.mjs is. review-cost, what-an-option-row-carries and clean-context-review substitute; author-questions strikes the sentence that leaves the finding to the survey.
 
 Recorded as an option on commons.systems/disposition-graph/review-cost's answer fact: `reader-is-the-parser-and-reviewer-is-the-reading` (source review, 2026-09-07).
+
+### The cap is struck by the author's words, 2026-09-08
+
+The author's words of 2026-09-08 at `words/2026-09-08/32` correct this answer on
+three clauses, and correct the sitting that was applying them. Quoted back to the
+AI was its own sentence, that `movements` "already stands over `dialogue`'s cap of
+three open probes, so the reading goes into the account rather than minting more".
+The finding: "This sounds like a hack ... there must be no arbitrary cutoff for
+resolving probes especially if it creates variance in encoding."
+
+The variance is the sharpest part of the finding, and it is a defect this answer's
+own text predicts without naming. The cap binds the movement and is checked by the
+readings and never by the reader, so a movement that would raise a fourth probe
+does not fail; it writes the probe somewhere else. On 2026-09-08 that somewhere
+else was prose. Nine probes came out of one reading; three went into
+`round-termination`'s `probes` field and four into that node's account, and the two
+sets differ in nothing but the count that preceded them. The same content stood in
+two encodings and which encoding it got was decided by an arbitrary number. A rule
+enforced by nobody and routed around by the party it binds is not a bound on the
+author's attention; it is a bound on where the AI files what it found, which is
+worse than no rule, because the field is what the reader and the frontier count and
+the account is not.
+
+The author's reason for holding no cap answers this answer's economics directly:
+"Probes do not recurse infinitely because they block on the author." This node
+argued that asking is free while answering is scarce, so the ratio must be capped.
+The counter is that the ratio is self-limiting, because nothing proceeds on a probe
+until the author answers it, so an unanswered list costs them nothing they have not
+chosen to spend. What a long list means is that the disposition is under-refined,
+and the remedy named is refinement: "Instead, refine the disposition for
+confirmation."
+
+And confirmation is unblocked. "A disposition can be confirmed at any point after
+options are recorded for each fact. Confirmation is not blocked on draining all
+probes. Probes persist after confirmation and author may continue to answer which
+may result in a change of AI recommendation on confirmed disposition fact." That
+strikes the kick-back, strikes the sentence that "under the rule above no node with
+an open probe reaches the ruling stage at all", and strikes the sentence that the
+list "dies with the stage, the review, the dependencies and the account at the
+recording". It also answers the first limb of `movements`' open probe
+`is-a-drained-probe-an-answered-probe`, which asked whether a probe raised and not
+met blocks a ruling: it does not.
+
+The author's words of the same day at `words/2026-09-08/34` say the same thing from
+the other end, in a response to a probe on `round-termination`: "Probes may be
+traded between the author and the experts indefinitely. At some point the author
+will decide that they have enough common grounding to confirm the disposition.
+Outstanding probes can continue to be exchanged after confirmation." The two
+entries are one disposition seen from the two nodes it binds. Here it fixes what
+the probe list is; there it fixes what confirmation is, and neither is a terminator
+on the other.
+
+Recorded as the option `no-cap-and-probes-do-not-block`, with its content owed. The
+recommendation is not moved in this checkpoint, because on this node the content is
+the amendment and the amendment is drafted rather than transcribed; a stub
+recommended here would replace the answer with its own placeholder. The sitting
+does not apply the cap meanwhile, and the probes it had parked in prose were moved
+to their homes in the same sitting. The amendment reaches two further nodes and is
+owed there as options on their facts: `recording`, whose answer says what the
+recording removes, and `dialogue`, whose enumeration of the dialogue's parts
+carries the same removal. `no-stated-cap`, already on this node since 2026-09-04,
+is subsumed by the new option and not struck: it removes the number and says
+nothing about the kick-back or the persistence, so it stays as the narrower reading
+the author's words went past.

@@ -2,6 +2,31 @@
 question: What does an unconfirmed node carry between sittings, and what is left to git?
 form: rule
 stage: maieutic
+probes:
+  - id: does-a-recorded-divergence-say-which-kind-it-is
+    asks: >-
+      When the fold carries a divergence between sittings, should it say which
+      kind the divergence is, factual-interpretive or evaluative?
+    fact: answer
+    why: >-
+      Aumann, Agreeing to Disagree, Annals of Statistics 4 (1976), p. 1236,
+      proves that two Bayesians with a common prior and common knowledge of
+      their posteriors cannot disagree, which makes a surviving disagreement
+      diagnostic rather than brute: either the priors differ, and the
+      divergence is evaluative, or the conditioning does, and it is
+      factual-interpretive. The distinction has consequences the record
+      already cares about, because the second kind is closed by putting the
+      same facts in front of both parties and the first is not.
+      round-termination holds that divergence surviving shared grounding is a
+      terminal state the record keeps, and this node's fold is what carries
+      such a state between sittings; a kind that is not a field is not folded,
+      so a later sitting reads a kept divergence with no way to tell one it
+      should re-open from one it should leave.
+    discharges: >-
+      Whether a folded divergence carries a kind, what the values are, who
+      assigns it, and what a later sitting is licensed to do with each.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:
@@ -652,3 +677,13 @@ The finding is recorded so that the sitting that takes this node up finds it.
 The `contradiction` finding on the dated materialization sentences, as the survey wrote it: Three judged answers assert that nothing they name is materialized on 2026-09-07, and the brief generated on 2026-09-07 falsifies two of the assertions. `survey-selection` states "Nothing this answer names is materialized on 2026-09-07: the validator holds no tier, the projector emits no concordance, the brief generator selects on pins alone" and `review-skills` states "None of that selection is built: at implementation commit ca64407d `brief.mjs` holds no mechanical tier and no `--whole`", while the brief reports "The mechanical tier ran 8 checks (unresolved-reference, recommendation-past-its-pin, duplicate-option-name, option-content-unresolvable, term-without-a-path, unresolved-words-reference, duplicated-passage, unfolded-account-section) and reported 3351 finding(s)", "The keys nominated 4677 candidate pair(s)", and "This survey is whole." `unconfirmed-accumulation` carries the same form of sentence — "Nothing this answer names is materialized on 2026-09-07: no instrument folds, no manifest line exists, and the validator checks none" — which this survey did not test. A dated negative measurement written into an answer expires without notice and cannot be checked by any instrument the record has.
 
 Its proposal: The survivor is the practice, not one of the two sentences: a materialization claim in an answer names the implementation commit it was taken at and states what it measured, as `review-skills` half does with ca64407d, rather than dating itself to a calendar day the answer outlives. `survey-selection`'s and `review-skills`' sentences are amended to that form before either is ruled, and `unconfirmed-accumulation`'s is re-measured with them.
+
+### A probe from the terminator reading, moved here from prose, 2026-09-08
+
+Raised by the tradition reading on the terminator of 2026-09-08 and landed in
+`movements`' account at `95823023`, where it stayed because `dialogue`'s cap of
+three open probes stood and the reading had generated nine. The author struck the
+cap the same day at `words/2026-09-08/32`, naming the defect the holding had
+produced: "there must be no arbitrary cutoff for resolving probes especially if it
+creates variance in encoding." The probe is now in the field, where the reader and
+the frontier count it. Nothing else on this node moved.

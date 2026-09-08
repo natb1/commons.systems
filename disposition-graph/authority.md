@@ -1,6 +1,32 @@
 ---
 question: Who may change an answer?
 stage: review
+probes:
+  - id: what-makes-a-single-valued-answer-the-authors
+    asks: >-
+      A node's answer is single-valued. When the author and the AI diverge and
+      the record keeps the divergence, what makes the recorded answer the
+      author's rather than a compromise between them?
+    fact: answer
+    why: >-
+      round-termination holds that divergence surviving shared grounding is a
+      terminal state the record keeps, and that the parties may hold
+      alternative readings of a tradition and alternative dispositions, each
+      internally consistent. A node still carries one answer. This node says
+      what the AI does with something that would contradict doctrine, which is
+      to record it as an option that acts on nothing until the author rules; it
+      does not say what the answer is while a kept divergence stands beside it,
+      nor which party the single value belongs to. The traditions in the family
+      write that clause explicitly because they found they had to: CPR r
+      35.12(5) denies an experts' agreement any binding force so that the
+      decision stays with the court, and the joint statement under r 35.12(3)
+      records the disagreement with its reasons rather than resolving it.
+    discharges: >-
+      Whether the answer standing under a kept divergence is the author's
+      option, the AI's, or neither until ruled; and what the AI may build on
+      while one stands.
+    source: ai
+    raised: 2026-09-08
 review:
   verdict: forward
   strength: weak
@@ -1944,3 +1970,19 @@ option holds against another; the only difference between those two fences stays
 one `authority-derived` is about. The node returns to the review stage with its forward
 verdict of an earlier recommendation now stale, and this node is `tier: global`, so its
 rule projection under `.claude/rules/` is stale until it is regenerated.
+
+### A probe from the terminator reading, moved here from prose, 2026-09-08
+
+Raised by the tradition reading on the terminator of 2026-09-08 and landed in
+`movements`' account at `95823023`, held there in prose because `dialogue`'s cap
+of three open probes stood. The author struck the cap the same day at
+`words/2026-09-08/32`. The probe is now in the field.
+
+The stage is deliberately not moved. Under this node's own recommended text a
+probe recorded at the review stage would have returned the node to the maieutic
+stage, and the author's words of the same day strike that kick-back: "A
+disposition can be confirmed at any point after options are recorded for each
+fact. Confirmation is not blocked on draining all probes." So the node stands at
+review with an open probe on it, which is what the amendment recorded on
+`author-questions` as `no-cap-and-probes-do-not-block` makes ordinary. Nothing in
+the answer moved, and the rule projected from this node is unchanged.
