@@ -1,6 +1,6 @@
 ---
 question: What ends a round, and what may a party do to end it?
-stage: maieutic
+stage: review
 probes:
   - id: who-judges-that-the-ground-is-held
     asks: >-
@@ -151,8 +151,8 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/34
-    recommends: shared-grounding-with-typed-persuasion
-    boldness: low
+    recommends: no-terminator-the-author-confirms
+    boldness: moderate
     against: "The answer states a condition the record cannot check and gives the judgment that it is met to the two parties whose dialogue it ends, which is the one structural feature every instrument in its family avoids. Stalnaker's defective context is the failure mode with no signature: both parties can believe the ground is common when it is not, and nothing in the answer produces a trace by which that would later be told from a round that ended well. Rittel's Property 2 predicts the other failure, that the operative stop is external and the stated condition supplies the justification afterwards, and the record's own paradigm is an instance, since the Theaetetus is broken off because Socrates has a court appointment. And the typing is one route short: it admits and excludes modes of persuasion and says nothing about restructuring the question so the disagreement no longer arises, which is the move the record's machinery makes routine and which the discharge that produced this node is itself an instance of."
   - name: authority
     options:
@@ -175,11 +175,25 @@ defines:
 
 ### answer
 
-The recommendation is `shared-grounding-with-typed-persuasion`, at low boldness.
-Low because the answer is the author's own words of 2026-09-08 transcribed, and
-what the AI adds is the tradition the words turn out to restate, the places where
-tradition cuts against them, and the divergence that says what the answer cannot
-check.
+The recommendation is `no-terminator-the-author-confirms`, at moderate boldness.
+It moved there on 2026-09-08 from `shared-grounding-with-typed-persuasion`, whose
+whole substance it keeps and whose terminator it drops, on the author's words at
+`words/2026-09-08/34`: nothing ends a round, probes are traded without limit, and
+at some point the author judges the common grounding enough and confirms the
+disposition, outstanding probes going on being exchanged afterwards. What the AI
+adds to the words is what it added before -- the tradition they turn out to
+restate, the places where tradition cuts against them, and the divergence that
+says what the answer cannot check.
+
+Moderate and no longer low. The words are the author's and so is the change of
+shape, but what stands between the words and the answer is the AI's: three wording
+changes the terminator's removal forced rather than the author's words directed,
+the qualifier that keeps the divergence clause true once nothing closes, and the
+three costs the answer now carries in its own text rather than in an apparatus.
+And this node's `question` field, "What ends a round, and what may a party do to
+end it?", is falsified by its own answer; a fence may not repair it, because a
+fence may not mint a question, so the answer stands under a question it denies and
+that is recorded here rather than quietly fixed.
 
 The question exists because the record had a terminator for the review movement
 and none for the dialogue. `clean-context-review` ends a round with a verdict
@@ -191,12 +205,13 @@ experts hold common ground, and observed that a dialogue ending on common ground
 is reachable three ways — by being right, by being persuasive, and by reframing
 the question until the disagreement no longer applies — so that the right to end
 the round appeared to move from the checking party to the checked one. The author
-answered by refusing the premise: agreement was never the terminator, so nothing
-moves.
+answered by refusing the premise twice: first that agreement was never the
+terminator, so nothing moves; then, on the same node and the same day, that there
+is no terminator to move, because a round is not a thing that ends.
 
-What the answer fixes. A round ends on shared grounding in its inputs, a common
-understanding of tradition and of the recorded state of the graph, and not on
-agreement in the conclusion. Divergence that survives that grounding is a
+What the answer fixes. The author's confirmation rests on shared grounding in its
+inputs, a common understanding of tradition and of the recorded state of the graph,
+and not on agreement in the conclusion. Divergence that survives that grounding is a
 terminal state the record keeps rather than a failure it must resolve: the
 parties may hold alternative readings of a tradition, or alternative dispositions
 each internally consistent, as agents with different principles, and those
@@ -242,6 +257,31 @@ exposure of persisting disagreement is eristic's, whose goal is to attack an
 opponent, so this design has persuasion dialogue's initial situation with
 eristic's completion condition, a mixed type, and mixing is what their
 dialectical-shift apparatus exists to scrutinise.
+
+The strongest argument against the recommendation is the record's own measurement,
+and it is recorded in the option's divergence rather than answered. `review-cost`
+passed over an option named `unbounded-rounds` on the ground that a reader asked
+for findings returns some, so the loop ends when a reader happens to be quiet and
+not when the draft is sound, and it measured that all thirteen readings landed on
+2026-09-05 had findings accepted, so that loop has never once terminated of its own
+accord. An expert asked for probes returns probes. If that holds of convened
+experts as it held of readers, the author confirms against an open list every time
+and the stop is always patience, which is Rittel and Webber's Property 2 (Policy
+Sciences 4, 1973, p. 162) arriving by the record's own evidence and not only by
+tradition. `shared-grounding-with-typed-persuasion` had the same disease and at
+least named a condition a confirmation could fall short of; this option makes the
+stop the rule, so confirming because the ground is held and confirming because the
+sitting is over become indistinguishable by construction rather than merely
+untraceable. That the channel stays open makes a premature confirmation
+recoverable, and recoverability is not detectability: nothing requires anyone to go
+on probing a confirmed fact, and `review-cost` pushes the other way. Three further
+objections stand with it. RFC 7282 section 6 requires that all issues be addressed,
+so the instrument the previous recommendation cited for its stop now cites against
+this one. `round` is left doing two jobs, the review's ending on a verdict and
+capped at two readings while the dialogue's does not end. And this is the second
+time this node answers by refusing its question's premise, on the very node whose
+open probe asks for the rule governing that move, mitigated only by the refusal
+being the author's own.
 
 #### shared-grounding-with-typed-persuasion
 
@@ -475,10 +515,180 @@ the record at a moment of ending, because there is no such moment, and the
 question this node asks is answered by denying that a round has the shape the
 question gives it.
 
-**AI support.** The record wrote no case for this option; its support is owed.
+**AI support.** It is the author's own words refining their own words, and it is
+the second time the author has said it rather than the first. `words/2026-09-08/32`
+had already struck the cap on open probes, on the ground that an arbitrary cutoff
+creates variance in encoding, and said in terms that a disposition may be
+confirmed once options are recorded on each fact, that confirmation is not
+blocked on draining the probes, and that probes persist after it and may move the
+AI's recommendation on a confirmed fact; `words/2026-09-08/34` says the same of
+rounds and points back at those words as the resolvent. This option is what makes
+the two one disposition instead of two, and the recommendation as it stands is
+the one that has to explain why the probe list and the round are governed by
+opposite rules. It also mints nothing. Every part of the machinery it needs is
+already recorded: the probes `dialogue` keeps on a node, the confirmation
+`recording` defines per fact after two readings, and the state `authority` calls a
+proposal, in which a confirmed choice keeps its full authority while the moved
+recommendation returns the node to the author. The recommended option needs a
+terminator the record would have had to define and then could never check; this
+one needs no new concept at all, and under `evaluation`'s lens that is a merit of
+the design and not a migration argument, since the point is what the design
+requires and not what changing it would cost.
 
-**AI divergence.** The record wrote no case against this option; its divergence is
-owed.
+The exchange it makes is worth stating exactly, because it is the answer to the
+charge that nothing has improved. The recommended option has the record assert a
+condition — that the parties hold shared grounding — which nothing can check and
+therefore nothing can violate. This option has the record assert no condition at
+all. What it records instead is an act: the author confirmed, on a date, on a
+fact, with a probe list standing beside it. The judgment behind the act is no
+more checkable than it was, and the divergence below says so; but what the record
+claims is now something that happened rather than something that was the case,
+and a false claim about an act is a different kind of thing from an unfalsifiable
+claim about a state. It also discharges the strongest finding tradition had
+against this node. The reading raised `who-judges-that-the-ground-is-held` as the
+one place where every instrument in the family differs from this answer, and the
+author answered it by naming themselves; the option is that answer written down
+rather than left in a discharge reason.
+
+Tradition supports the shape at three readings the record already holds.
+`dissent-and-reconsideration` is the closest: the motion to Reconsider makes a
+decided question available to be taken up again, hedged about with restrictions
+on who may move it and when, so that reopening is available without the decision
+being merely provisional — which is exactly what this option asks of a
+confirmation made with probes outstanding, and exactly what a terminator would
+have made awkward. `peirce-paper-doubt` gives the stop its warrant: inquiry ends
+when belief is settled and begins again from a real and living doubt, so the stop
+is a state of the inquirer rather than a condition outside them, and a doubt
+adopted as a method is not a doubt at all, which answers the demand that the
+author keep probing past the point of being satisfied. And
+`level-triggered-reconciliation` gives the shape its name: a loop that acts on
+the state it observes rather than on the events that produced it has no terminal
+event, and the record's own
+frontier is already built that way, so this option makes the dialogue the same
+shape as the machinery that carries it. What the answer took from the wider
+family it keeps whole, because none of it turned on the moment of ending: CPR
+35.12(3) still has the experts set out what they disagree on "with a summary of
+their reasons for disagreeing" and (5) still makes agreement not the point, and
+RFC 7282 §3's rough consensus is still issues addressed and not accommodated.
+That last one supports the substance and cuts against the stop, and the
+divergence records it rather than the support hiding it.
+
+The classical locus is stronger for this option than for the one it would
+replace, and the reading of 2026-09-08 established it while looking for the
+opposite. Aristotle's Topics VIII is the book on conducting dialectical
+exchanges, all fourteen chapters were scanned, and it states no termination
+condition at all; VIII.2 rebukes a questioner for failing to break off with an
+unresponsive answerer, which presupposes that breaking off is available and
+states no condition for a properly finished exchange. The reading's instruction
+was that no one should manufacture a termination rule out of Topics VIII, and the
+recommended option is the one that needed such a rule. VIII.5 then names the
+position this option puts the author in: where the thesis is the answerer's own
+and neither generally accepted nor rejected, "the standard whereby the latter
+must judge what is generally accepted or not ... is himself" — which is the
+classical answer to the objection that no third party judges, since the author's
+implied disposition is the thesis and the author is its standard. And the
+record's own paradigm has this shape rather than the other. The Theaetetus does
+not end on the midwife's judgment; individual offspring are judged that way while
+the dialogue ends in aporia and is broken off externally at 210d, because
+Socrates must answer Meletus's indictment, and the text presents the aporia as a
+gain at 210b–c, Theaetetus being pregnant with better thoughts by reason of the
+present search. A dialogue that stops without concluding and whose own text says
+the stopping was no failure is what this option describes and what the
+recommended option had to explain away.
+
+And it weakens Stalnaker without dissolving him, which is worth saying at exactly
+its own size. A defective context can still go unnoticed; the belief the author
+confirms on can be wrong, and can be wrong with no one aware of it, precisely as
+before. What changes is the other half of p. 719, that not every defective
+context is easily corrected: under this option the channel of correction is not
+shut at the confirmation and is never shut, so a ground later found not to have
+been common arrives as an ordinary probe answered after the confirmation rather
+than as a round that was wrongly closed. The error is not prevented. It is made
+correctable, and the option claims no more than that.
+
+**AI divergence.** Four things. The record's own measurement predicts that the
+exchange will never quiet of itself. `review-cost` passed over
+`unbounded-rounds` on the ground that "a reader asked for findings returns some,
+so the loop ends when a reader happens to be quiet and not when the draft is
+sound", and recorded that all thirteen readings landed on 2026-09-05 had
+findings accepted, so the loop as run has never once terminated of its own
+accord. An expert asked for probes returns probes. If that holds of the convened
+experts as it held of the readers, then the author will always confirm against
+an open list, and what ends the exchange is always the author's patience — which
+is Rittel and Webber's Property 2 reaching the record by its own evidence rather
+than only by tradition, and the Theaetetus is its founding instance in the
+record's own paradigm, since Socrates stops at 210d because he is due at the
+King's Porch and the text supplies the justification for stopping afterwards.
+The support above reads that same passage the other way, and both readings are
+true of it, which is the measure of how little tradition settles here. The
+recommended option had the same disease and at least stated a condition the stop
+could fall short of; this one makes the stop the rule, so there is nothing left
+for a confirmation to fall short of, and confirming because the ground is held
+and confirming because the sitting is over become indistinguishable by
+construction rather than merely untraceable. That the channel stays open makes a
+premature confirmation recoverable, and recoverability is not detectability:
+nothing in the record requires anyone to go on probing a confirmed fact, no
+instrument prompts it, and `review-cost` is pushing the other way.
+
+Second, the answer departs from the member of its family it most resembles, and
+on the very point it changes. RFC 7282 §3 has rough consensus "when all issues
+are addressed, but not necessarily accommodated", and §6 makes "the existence of
+the unaddressed open issue, not the number of people" determinative. This answer
+confirms over probes that are neither addressed nor accommodated, which is the
+one thing that rule forbids; that the probes stay answerable afterwards is closer
+to addressing them late than to dismissing them, but the confirmation is made
+before. So the instrument the recommendation cited for its stop now cites against
+it, and only the divergence-keeping half of the citation survives.
+
+Third, the cost of appointing no third party is not paid by removing the
+terminator; it is moved and left standing. Every instrument in this family gives
+the judgment that the grounding condition is met to a third party — the court
+under CPR 35.12, the chair "in their technical judgement" under RFC 7282 §3, the
+arbiter both sides trusted in the 2001 adversarial collaboration — and this
+answer gives it to one of the two parties, which is the shape the record refuses
+three times over on its own review inputs, in `clean-context-review`,
+`review-model` and `segregation-of-duties`. The claim wants its own limit
+stated, since the record states it in one place and not the other: the survey of
+the wider family found that who adjudicates takes four values, no one, a
+counting rule, a named third party who certifies only that disagreement was
+documented, and the parties themselves, so the option is unprecedented in the
+close family and not in the wide one, and what the survey found nowhere is an
+instrument that bounds the record's growth, keeps the reasons, and appoints no
+one, which is all three of the things this answer wants. The confirmation is
+still a discrete, dated act, so the narrow certifier of
+`grounding-certified-by-a-third-party` would attach there exactly as it would
+have attached at an end; that option is therefore neither answered nor
+foreclosed by this one, and stays live on the fact with its whole force. The
+cost now sits at the confirmation and on this answer's recorded divergence,
+which is where an unpaid cost belongs and is not where it is discharged.
+
+Fourth, the answer falsifies its own node's question and does not amend it. The
+question reads "What ends a round, and what may a party do to end it?" and the
+first sentence of the answer denies that a round has that shape; the fence
+carries the question unchanged, so the node asks one thing and answers another,
+which the survey's placement and vocabulary validations exist to catch and which
+`graph-topology` makes a fact the AI may recommend on. The same move leaves
+`round` doing two jobs in the record: the review's round ends on a verdict from a
+party that did not draft, and `review-cost` caps it at two readings with "a
+kickback being a new answer and not a third round", while the dialogue's round
+now does not end at all. The distinction is defensible and this node already
+draws it, in the divergence on `a-verdict-from-a-party-that-did-not-draft` — a
+round about a draft is not a round about a disposition — but the record has the
+distinction and not the word, and one word with a bounded sense and an unbounded
+one is a vocabulary defect whoever can explain it.
+
+Two residues, smaller but real. This option answers its node's question by
+refusing the premise, which is the third of the three routes the probe behind
+this node named and the one the typing does not cover; it is a second instance of
+that move on the node whose open probe asks for the rule governing it. The
+refusal is the author's own, in the author's own words, so the AI is transcribing
+and not executing the move — which is what makes it defensible and not what makes
+it covered. And the option tilts `is-the-terminal-state-acquiescence` without
+answering it: making post-confirmation movement routine is what acquiescence
+licenses and what the stronger state would call thrashing, and `evaluation`'s
+anti-thrashing clause asks a recommendation that returns to a left position to
+name what entered the record since. An answered probe is what entered, so the
+clause is satisfiable, but the answer does not say so and the probe stays open.
 
 **Content.**
 
@@ -488,12 +698,76 @@ question: What ends a round, and what may a party do to end it?
 form: rule
 under:
   - commons.systems/disposition-graph/movements
+defines:
+  - term: shared grounding
+    gloss: "The state in which the parties to a round hold a common understanding of the traditions in play and of the recorded state of the graph. It is what the author's confirmation rests on and not the terminator of a round, since nothing terminates a round, and it is not agreement in the conclusion."
+  - term: recorded divergence
+    gloss: "A disagreement that survives shared grounding and is kept by the record as a terminal state rather than resolved, the parties being free to hold alternative readings of a tradition or alternative dispositions each internally consistent."
 ---
 
 ## Answer
 
-The content of this option is owed: it is the recommended answer with the
-terminator replaced by the author's confirmation, and the probes surviving it.
+Nothing ends a round. Probes are traded between the author and the convened
+experts without limit, and at some point the author judges that the common
+grounding is enough and confirms the disposition. That judgment is the author's
+alone and is asserted by them: it is not a condition the record computes, and no
+third party certifies it. What it rests on is shared grounding in the round's
+inputs, the parties holding a common understanding of the traditions in play and
+of the recorded state of the graph. Agreement in the conclusion is not what it
+rests on and never was. Holding common ground does not mean the author's
+disposition matches the AI's recommendation, and a confirmation made with the two
+apart is properly made.
+
+Probes outstanding at the confirmation go on being exchanged after it, and the
+confirmation is not blocked on draining them. An answer to one may move the AI's
+recommendation on a fact already confirmed, which returns the node to the author
+by machinery `authority` already carries and mints nothing new: the confirmed
+choice keeps its full authority, and on a ratified fact the state the node is
+then in is what that node calls a proposal. Because there is no moment of ending,
+a ground later found not to have been common is not a round that was wrongly
+closed; it is an ordinary probe answered after the confirmation, taking the route
+every other late answer takes.
+
+Divergence that survives shared grounding is a terminal state the record keeps,
+not a failure it resolves — terminal in that the record owes it no resolution,
+and not in that anything closed. The parties may hold alternative readings of a
+tradition, or alternative dispositions each of which keeps its own side
+internally consistent, as agents with different principles; those principles are
+ideally recorded for the author, and may be opaque to the AI. What the record
+keeps of such a divergence is its reasons on both sides, which is what
+`unconfirmed-accumulation` folds and what the option list on a fact already
+holds.
+
+Persuasion is typed rather than forbidden, and it is typed by kind and not by
+strength. Presenting a tradition the author was not aware of, or demonstrating an
+internal contradiction between the author's implied disposition and the recorded
+graph, is admissible and is what the author expects of periagogic dialogue.
+Persuasion by emotional manipulation is not admissible. The typing governs moves
+made toward the author; it does not license the AI to end a round by argument,
+because no round ends by argument or by anything else, and the confirmation is
+the author's own act rather than a thing an argument reaches.
+
+What this answer does not settle, and what it does not pay for. It appoints no
+third party to judge that the ground is held and gives that judgment to one of
+the two parties whose dialogue it governs, where every instrument in this family
+gives it to a third party: the court under CPR 35.12, the chair in their
+technical judgement under RFC 7282 §3, the arbiter both sides trusted in the
+2001 adversarial collaboration. Removing the terminator does not pay that cost,
+it moves it — the confirmation is still a discrete act, and it is there rather
+than at an end of a round that a certifier would attach — so the cost sits at
+the confirmation and on this answer's recorded divergence, unpaid. Rittel and
+Webber, Policy Sciences 4, 1973, Property 2, p. 162, is untouched, and the
+record states it rather than leaving a reader to find it: the planner stops for
+considerations external to the problem, time or money or patience, and under
+this answer the author confirms, with nothing to distinguish a confirmation made
+because the ground is held from one made because the sitting is over; whether
+the record should keep something at the confirmation by which the two could
+later be told apart is carried as a probe and not assumed. Stalnaker's defective
+context is weakened and not dissolved: the belief the confirmation rests on can
+still be wrong and can still go unnoticed by every party, and what changes is
+only that the error is correctable through a channel that stays open. And where
+a reframing that dissolves a disagreement falls is open still, since the typing
+covers persuasion alone.
 ```
 
 ### authority
@@ -575,9 +849,10 @@ The author answered the probe `where-does-reframing-the-question-fall` at
 `words/2026-09-08/34`, and the answer went past the probe. Asked whether the typing
 of persuasion types modes of persuading or modes of ending a round, they replied
 that they did not fully follow the distinction and pointed at their own words of
-the same day at `words/2026-09-08/32`: "Probes may be traded between the author and
-the experts indefinitely. At some point the author will decide that they have
-enough common grounding to confirm the disposition. Outstanding probes can continue
+the same day striking the cap on open probes, at `words/2026-09-08/32`; and in the
+same entry said what those words mean here: "Probes may be traded between the
+author and the experts indefinitely. At some point the author will decide that
+they have enough common grounding to confirm the disposition. Outstanding probes can continue
 to be exchanged after confirmation."
 
 That is not a deferral. It removes the category the probe's first limb was asking
@@ -614,3 +889,52 @@ and the recommendation not moved: the content is the amendment and a stub
 recommended here would replace this node's answer with its own placeholder. The
 option is the author's refinement of the author's words and is expected to carry
 the recommendation once written.
+
+### The amendment is drafted and the recommendation moves, 2026-09-08
+
+The content owed at the previous checkpoint is written and the recommendation moves
+to `no-terminator-the-author-confirms`, which that section said it expected. The
+node returns to the review stage, a recommendation moved in substance owing a
+reading.
+
+The amendment was drawn from the recommended fence by exact-span replacement. Four
+of its fourteen sentences are byte-identical, the persuasion paragraph is unchanged
+but for its tail clause, and `question`, `form`, `under` and the `recorded
+divergence` gloss are byte-identical. What changed: the answer opens by denying its
+own question; a new paragraph carries the post-confirmation regime, routing a late
+answer through machinery `authority` already has and minting none; the closing
+paragraph, which had carried three unsettled things as probes, now states three
+unpaid costs; and the `shared grounding` gloss says it is what the confirmation
+rests on and not a terminator. Three further wording changes were forced rather
+than chosen, each traceable to the terminator's removal, and the divergence clause
+gained one qualifier -- terminal in that the record owes it no resolution, and not
+in that anything closed -- so that it reads correctly against the unchanged
+`recorded divergence` gloss.
+
+Two claims were corrected in the drafting, one the design brief's and one this
+record's. The brief asserted that every instrument in the family gives the judgment
+to a third party; that holds of the close family alone. The survey's wider sweep
+found "who adjudicates" taking four values -- no one, a counting rule, a named
+third party certifying only that disagreement was documented, and the parties
+themselves -- and found no instrument that bounds the record's growth, keeps the
+reasons, and appoints no one. So the option is unprecedented in the close family
+and not in the wider one; the node's own phrase is kept inside the fence, where
+this fact's `against` already uses it, and the limit is stated in the divergence
+instead. And the account section above attributed to `words/2026-09-08/32` a
+quotation that is `words/2026-09-08/34`'s own; the pointer to 32 was right, the
+author having invoked the cap's strike, and the colon was not. It is repaired in
+place, since a misquotation is not a thing the record preserves by appending to it.
+
+The Theaetetus finding cuts both ways and the record now says so. The dialogue ends
+externally at 210d because Socrates is due at the King's Porch, so the same passage
+supports the answer at 210b-c, where aporia is a gain, and cuts against it as an
+external stop. That both readings are true of it is the measure of how little
+tradition settles here.
+
+One locus is deliberately unpinned. Stalnaker's is given without a page while a
+verification of it is still running, and the claim is stated only at the width that
+verification cannot falsify: the belief the confirmation rests on can still be
+wrong and can still go unnoticed by every party, and what changes is that the error
+is correctable through a channel that stays open. Should the verification return a
+locus, it belongs on the probe `is-the-terminal-state-acquiescence`, with whatever
+the same units return on Rescher.
