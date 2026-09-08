@@ -443,6 +443,11 @@ facts:
       - name: the-relation-is-derived-through-containment
         source: review
         ref: "2026-09-07"
+      - name: the-edge-carries-a-support-and-a-divergence-string
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/37
     recommends: the-relation-is-projected-onto-the-option-as-one-of-three
     boldness: moderate
     against: "The projection is only as complete as the `bears` entries are: a tradition read under one node and bearing on an option of another reaches that option only where the reading's author remembered the cross-node entry, which no validator can check, so the traditions' accumulation the author's words require is exact where it exists and silent where it does not, and a row showing no tradition cannot be told from a row no reading reached; the per-option relation beneath it still binds a verdict to option names that move under it, and a reading per node still multiplies files."
@@ -841,6 +846,38 @@ A reading records exactly one relation per option it bears on, and where the tra
 
 A reading's relation is stored on the option the tradition was read against and derived onto every option that contains it through the ladder the record stores in `supports`, so a recommendation moved to a higher rung inherits the relation and no re-pointing is owed; on the table because every case the survey found is a recommendation moved to an option containing the one borne on, and the rung clause otherwise makes re-pointing a standing duty.
 
+#### the-edge-carries-a-support-and-a-divergence-string
+
+The relation between a tradition and an option is a many-to-many edge carrying two nullable strings, a support and a divergence, each of which explains itself; both may stand on one edge, and where the strings are physically held is delegated to the AI so long as the logical shape holds.
+
+**Author support.** The author's words of 2026-09-08, answering the probe this node's recommendation raised: "The important constraints are that logically there is a many tradition to many option edge that carries support and divergence, each a nullable string that explains support and/or divergence. I am not familiar with the bears structure or the projection. The physical implementation can be delegated if it meets the logical expectation." Two things are given and they are given with different force. The logical shape is the author's own choice, unconfirmed: many to many, two fields, each nullable, each a string that explains rather than a label that classifies. The physical form is delegated, and the delegation is explicit and reaches this node's standing recommendation, which it licenses rather than overrules, on the one condition that the logical expectation is met. So this option is not a rival to `the-relation-is-projected-onto-the-option-as-one-of-three`; it is the constraint that answer has to satisfy, and it is recorded as an option on the same fact because the record has no other place to hold a constraint the author states on an answer the author has not confirmed. Recording it as a rival would misstate the author's words in the one way that matters, by turning a delegation into a disagreement.
+
+**AI support.** The standing answer fails the logical expectation in one respect and meets it in every other, which is why this is recorded rather than passed over. It fails on exclusivity. The answer as it stands offers "adopted, where the tradition supports the option, or diverged, where the option departs from it": one relation per edge, chosen between. The author's model has two independent nullable fields, so a tradition may support an option in one respect and depart from it in another and the record holds both, which the standing form cannot express without a second reading of the same source under the same node. The exclusive form also loses the commonest honest finding a tradition survey makes, that a tradition mostly supports an option and breaks with it on one point; under the standing form that must be rounded to one label, or split into two readings which then move independently and can be re-pointed apart. It meets the expectation on cardinality without amendment: a reading's `bears` may name the options of any node and many readings may name one option, so the edge is already many to many, and the author's first constraint is satisfied by what the record does today.
+
+**AI divergence.** The delegation's condition is unchecked. The author delegates the physical form "if it meets the logical expectation", and nothing in the record tests whether it does: `read.mjs` checks that a reading's `bears` names a fact or an option that exists, and checks nothing about whether the two strings are reachable, whether both can stand at once, or whether an option a tradition speaks to carries either. A delegation that carries a condition and no instrument for the condition is one the AI grades itself against, which is the shape this record elsewhere names capture. It is recorded here rather than repaired, because the repair is an instrument and lands on the implementation ref.
+
+**Content.**
+
+From: the-relation-is-projected-onto-the-option-as-one-of-three
+
+```diff
+@@ -6,10 +6,12 @@
+ defines:
+   - reading
+   - tradition
++  - support
++  - divergence
+   - adopted
+   - diverged
+   - chosen over
+ ---
+ ## Answer
+ 
+-As readings under the node that refers, and traditions they refer to. A tradition is a mount: a philosophical tradition, a body of research, or another repository, which could be a disposition graph of its own with its own archē and its own readings, and where it lives until it is articulated, carrying the name it defines and its primary references, is the traditions-home node's question; until that is ruled a reading names its tradition in its source alone, and the tradition node is owed, and with it the tradition's page and the defined name by which prose reaches it, both of which two clauses below presume. A reading sits under one node it bears on and may bear on the options of any node, naming the node wherever it is not the parent; it names the tradition it reads, its sources and loci, and what it bears on: for each option of a fact that the tradition speaks to, adopted, where the tradition supports the option, or diverged, where the option departs from it and the reading's own answer says why. A move of a recommendation re-points the readings that bear on the option it leaves, and that a recommended option stands unread beside a rival that does not is a finding the review should make, which the frontier-consistency node's validation 4 does not yet ask for and which is recorded there as an option; until it is ruled the check is owed and no instrument performs it, and the duty to re-point is stated here and unchecked, unmet across the record at this commit as the account measures. A tradition adopted on an option not chosen is what chosen over names, and it is derived and never stored; the option's readings are the derived inverse of what the readings bear on, and that inverse is what the projections show on the option as the traditions' accumulated support and divergence, one of the three the author's words of 2026-09-07 require beside the AI's and the author's own. `bears` stays on the reading, so one reading of a shared source is stored once and refined under each node it grounds, and what reaches the option is a projection and never a second copy. A reading has a class like any node, read from the rulings on its own facts: ratified when the author has read the primary source or understands the mounted graph and confirms the relations, delegated when the AI's reading stands and the author declines to review it, deferred when the author accepts it for now and queues the primary reading. Deferred reading is recursive: one source leads to another, and a reading may sit under a reading. A reading whose verdict changes on re-reading is a re-grasp trigger for the node it grounds, not an automatic failure of it. Many questions that read one tradition are many readings naming that tradition, and the tradition's page shows every reading that cites it, as each option shows every reading that bears on it. Prose reaches a tradition through the name it defines, and the rationale of a node never repeats its readings.
++As readings under the node that refers, and traditions they refer to. A tradition is a mount: a philosophical tradition, a body of research, or another repository, which could be a disposition graph of its own with its own archē and its own readings, and where it lives until it is articulated, carrying the name it defines and its primary references, is the traditions-home node's question; until that is ruled a reading names its tradition in its source alone, and the tradition node is owed, and with it the tradition's page and the defined name by which prose reaches it, both of which two clauses below presume. A reading sits under one node it bears on and may bear on the options of any node, naming the node wherever it is not the parent; it names the tradition it reads, its sources and loci, and what it bears on: for each option of a fact that the tradition speaks to, a support and a divergence, each a string that explains itself and each of which may be absent. Support and divergence are not alternatives and the record does not make the reader choose between them: a tradition may support an option in one respect and depart from it in another, and where it does both strings stand on the one edge. Adopted names an option whose support is present and diverged one whose divergence is present, so an option may be both at once; an option a tradition speaks to and carries neither string for is a reading that has not yet said what it found, which is a gap in the reading and not a third relation. A move of a recommendation re-points the readings that bear on the option it leaves, and that a recommended option stands unread beside a rival that does not is a finding the review should make, which the frontier-consistency node's validation 4 does not yet ask for and which is recorded there as an option; until it is ruled the check is owed and no instrument performs it, and the duty to re-point is stated here and unchecked, unmet across the record at this commit as the account measures. A tradition adopted on an option not chosen is what chosen over names, and it is derived and never stored; the option's readings are the derived inverse of what the readings bear on, and that inverse is what the projections show on the option as the traditions' accumulated support and divergence, one of the three the author's words of 2026-09-07 require beside the AI's and the author's own. `bears` stays on the reading, so one reading of a shared source is stored once and refined under each node it grounds, and what reaches the option is a projection and never a second copy. What this answer fixes is the logical shape and not the storage: tradition to option is many to many, and the edge carries the two strings. Whether they are held on the option or projected onto it from the reading's `bears` is the AI's to settle, under the author's words of 2026-09-08 delegating the physical implementation to whatever meets that expectation; the projection this answer chooses is made under that delegation and is not a second constraint beside it. A reading has a class like any node, read from the rulings on its own facts: ratified when the author has read the primary source or understands the mounted graph and confirms the relations, delegated when the AI's reading stands and the author declines to review it, deferred when the author accepts it for now and queues the primary reading. Deferred reading is recursive: one source leads to another, and a reading may sit under a reading. A reading whose verdict changes on re-reading is a re-grasp trigger for the node it grounds, not an automatic failure of it. Many questions that read one tradition are many readings naming that tradition, and the tradition's page shows every reading that cites it, as each option shows every reading that bears on it. Prose reaches a tradition through the name it defines, and the rationale of a node never repeats its readings.
+```
+
+
 ### authority
 
 Ratified is recommended because the rule fixes how tradition binds the record, which is the capture-shaped case the record's escalation rule names: a divergence recorded as the author's decision cannot be overruled by the tradition, and a rule that decides what a divergence is decides that for every reading after it. Boldness moderate: the classes a reading may carry are the author's words of 2026-09-02, the rule that a reading is a node and the per-option relation's consequences are the AI's. The case against is delegated: the relations are the AI's readings, each reading node recommends its own class for itself, and the author may hold the rule as loosely as its instances.
@@ -971,3 +1008,26 @@ Also named: commons.systems/disposition-graph/review-skills, commons.systems/dis
 Proposed: readings survives. Each reading named is re-pointed under the rung clause: where the recommended option contains the one borne on, the relation moves to the containing option; where it does not, the reading records diverged on the recommended option with its reason. plato-maieutics' existing option `bears-repointed-to-the-recommended-option` is the same proposal on that node; frontier-consistency's validation 4 gains the re-pointing check readings' `re-pointing-checked` records there.
 
 Recorded as an option on this node's answer fact: `the-relation-is-derived-through-containment` (source review, 2026-09-07).
+
+### The author's constraint on the edge, 2026-09-08
+
+The probe this node's recommendation raised was put to the author in the standard
+report of 2026-09-08 and answered the same day at `words/2026-09-08/37`. The answer
+is recorded above as `the-edge-carries-a-support-and-a-divergence-string`.
+
+Two things about the recording are worth stating, because both were decisions and
+neither is visible in the option itself. The first is that no recommendation moved.
+The author's words give a constraint and delegate the form; they do not choose
+between this node's options, and the standing recommendation satisfies the
+constraint on cardinality already, so moving the mark would assert a choice the
+author did not make. The second is that the option is recorded as a constraint on
+the standing answer rather than as a rival to it. The record's option list is a list
+of rivals, and this entry is not one, which is a strain on the encoding rather than
+on the author's words; it is named here so that a later reader does not read the
+list as a disagreement the author has not had.
+
+What the sitting held back and no longer holds: this recording was the one thing
+entry 36 called for that the sitting of 2026-09-08 did not do, because entry 36's
+step 3 requires tradition's support and divergence per option and the sitting could
+not tell whether that relation was stored or projected without asking. It is
+recorded as residual R27 in the sitting's store, and this account discharges it.
