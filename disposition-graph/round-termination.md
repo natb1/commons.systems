@@ -82,7 +82,8 @@ probes:
       ground was held?
     fact: answer
     why: >-
-      Stalnaker, Common Ground, Linguistics and Philosophy 25 (2002), p. 717:
+      Stalnaker, Common Ground, Linguistics and Philosophy 25(5-6), 2002,
+      pp. 701-721, DOI 10.1023/A:1020867916902, at p. 717:
       "A defective context may go unnoticed; that is, it can happen that all
       participants believe that the context is nondefective even when it is
       defective", detection being only ever downstream and by consequence, and
@@ -931,10 +932,48 @@ supports the answer at 210b-c, where aporia is a gain, and cuts against it as an
 external stop. That both readings are true of it is the measure of how little
 tradition settles here.
 
-One locus is deliberately unpinned. Stalnaker's is given without a page while a
-verification of it is still running, and the claim is stated only at the width that
-verification cannot falsify: the belief the confirmation rests on can still be
-wrong and can still go unnoticed by every party, and what changes is that the error
-is correctable through a channel that stays open. Should the verification return a
-locus, it belongs on the probe `is-the-terminal-state-acquiescence`, with whatever
-the same units return on Rescher.
+One locus was deliberately unpinned when this section was written. Stalnaker's was
+given at the width that a running verification could not falsify: the belief the
+confirmation rests on can still be wrong and can still go unnoticed by every party,
+and what changes is that the error is correctable through a channel that stays
+open. What that verification returned, and the two corrections it forces on this
+paragraph, are in the section below.
+
+### The Stalnaker locus is verified as far as it can be, 2026-09-08
+
+The verification the section above left running has returned, and what it returned
+is a partial confirmation, which is a different state from the unpinned one that
+section recorded. Common Ground is confirmed as Linguistics and Philosophy 25(5-6),
+2002, pp. 701-721, DOI 10.1023/A:1020867916902. The two pages the probe
+`what-would-show-the-ground-was-not-common` already carries, 717 and 719, fall
+inside the article and match its subject matter, so nothing the probe asserts is
+falsified, and the citation there is amended to carry the issue, the page range and
+the DOI, which is what makes a locus checkable by someone who does not have the
+article. What the verification could not do is confirm that either quotation sits
+on the page attributed to it, the article being closed access. Those two pages are
+therefore corroborated and not verified, and a later reading must not upgrade them
+by citing this section.
+
+A second locus for the same notion was found and is weaker: Assertion (1978) as
+reprinted in Context and Content, Oxford, 1999, pp. 78-95, DOI
+10.1093/0198237073.003.0005, with the defective-context sentence at p. 85, on a
+single instrument. It is evidence of the same grade as what it would check, so it
+corroborates the notion and not the pagination, and it is recorded rather than used.
+
+None of this reaches the answer, which is why the claim was stated at the width it
+was. What the answer says of Stalnaker -- that the belief the confirmation rests on
+can still be wrong and can still go unnoticed by every party, and that what changes
+is only that the error is correctable through a channel that stays open -- is a
+claim about the notion and not about a page. No page decides it, and no amendment
+of the answer follows from this return.
+
+Two corrections to the section above, recorded here rather than made silently. Its
+pointer was wrong: it sent a returned Stalnaker locus to
+`is-the-terminal-state-acquiescence`, which is the Rescher probe, whereas the
+defective-context material is `what-would-show-the-ground-was-not-common`'s and
+already sat there. And nothing came back on Rescher at all. The same survey reports
+Dialectics (SUNY, 1977) as a bibliographic record with no full text reached and
+Dialectics: A Classical Approach to Inquiry (Ontos, 2007) with no digital text
+found, so the acquiescence probe's Pluralism p. 172 citation stands on the one
+instrument it always stood on. Those two are entries 8 and 9 of the first tracked
+set now recorded on `unreached-traditions`, which is where an unreached locus lives.

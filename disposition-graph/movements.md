@@ -569,7 +569,8 @@ justification afterwards. The Theaetetus is that prediction's founding instance
 and the record had it backwards: Socrates stops because he must be at the King's
 Porch.
 
-Sixth, Stalnaker, Common Ground, Linguistics and Philosophy 25 (2002), p. 717:
+Sixth, Stalnaker, Common Ground, Linguistics and Philosophy 25(5-6), 2002,
+pp. 701-721, DOI 10.1023/A:1020867916902, at p. 717:
 "A defective context may go unnoticed; that is, it can happen that all
 participants believe that the context is nondefective even when it is
 defective." Detection is only ever downstream and by consequence, and p. 719
@@ -696,3 +697,16 @@ locus; the nodes are owed, they are a backlog this sitting did not pay, and the
 backlog is named rather than left for a later reading to discover. A locus in
 the flagged list is not to be promoted to a verbatim citation by anything short
 of a primary text.
+
+### The Stalnaker locus is amended to a checkable form, 2026-09-08
+
+The sixth instrument's citation is amended to carry the issue, the page range and
+the DOI: Linguistics and Philosophy 25(5-6), 2002, pp. 701-721, DOI
+10.1023/A:1020867916902. Nothing this node says about the instrument changes; what
+changes is that a reader without the article can now find it. The verification that
+produced the fuller reference ran against `round-termination`, where the same
+quotation is carried on a probe, and its limit is recorded there and holds here:
+the article is confirmed and the placement of the quotation on p. 717 is not, the
+article being closed access. The citation was amended in both places at once,
+because a locus improved where it was argued and left thin where it is also used is
+the defect this record repaired on `recording` the same day.
