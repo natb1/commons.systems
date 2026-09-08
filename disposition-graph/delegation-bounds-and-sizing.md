@@ -46,6 +46,31 @@ review:
       options: "1a82a23424b033e5d271f5ec1bb03027c228769ed36eecd6646d6e2741f48ff7"
       rivals: "8e9433ea1a2efb067876327cc9f220798a3d791229f8e714c046115222c2bde7"
       words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+probes:
+  - id: model-naming-clause-bound-or-sizing
+    asks: >-
+      The clause added to `delegation` on 2026-09-08, that a brief names the
+      model as it names the effort and no subagent runs on the harness's
+      default, is the twin of a sizing clause and reads as a bound: it is one
+      of the clauses by which the main thread can check what a subagent was
+      sized to do. This node's residual rule places it with the bounds and
+      asks. Does it join the sizing with its twin, or stay with the bounds?
+    fact: answer
+    why: >-
+      The residual rule the recommended option states places a clause neither
+      enumeration reaches with the bounds, so the placement is made and the
+      probe does not hold it open; what the rule requires besides is that the
+      question be asked, and it is asked here. The clause reads both ways and
+      the record cannot settle it from the two lists as they stand: its twin,
+      "The effort is stated in the brief", is quoted in the sizing, and its
+      function, letting the main thread read off a brief whether the work was
+      sized, is the capture-shaped limb the three checking clauses were placed
+      on.
+    discharges: >-
+      Which enumeration in the recommended option's content quotes the clause,
+      if the ruling makes the move; the recommendation stands either way.
+    source: ai
+    raised: 2026-09-08
 form: rule
 tier: global
 under:
@@ -520,3 +545,7 @@ Recorded as an option on commons.systems/disposition-graph/decomposition's answe
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/delegation-bounds-and-sizing stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `sizing-moves-to-its-own-node`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The content of `ratify-the-bounds-delegate-the-sizing (at fc205d47)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `one-class-for-the-whole-rule`, `this-node-carries-the-sizing`, `granularity-rule-for-every-compound-answer`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `1edcc80b4a85234d44df9399c6acb41d5b01a03e` was already past the recommendation and is left as it stood. The survey's pin `203c23666a3bddf2cb0de26a0241cfa084586e07` is re-computed for the encoding as `ec7c782e56dadc06e9dc862732bc8d147d426077`; nothing it read changed.
+
+### A clause arrives after the enumerations, 2026-09-08
+
+`delegation`'s answer took a clause on 2026-09-08 that neither enumeration here reaches, `words/2026-09-08/17` recorded on that node: the brief names the model as it names the effort, and no subagent runs on the harness's default. The residual rule this node's answer states does the placing without a session's judgment, putting it with the bounds, and requires that the question be asked rather than answered by silence; the probe `model-naming-clause-bound-or-sizing` is that asking. The reading either way is short. It is sizing by resemblance, since its twin, "The effort is stated in the brief", is quoted in the sizing list. It is a bound by function, since it is the clause that lets the main thread read off a brief whether the work was sized at all, which is the capture-shaped limb the three checking clauses were placed on. Nothing here is amended: the enumerations quote `delegation`'s answer as it stood, and what quotes them is a ruling that has not happened.

@@ -33,6 +33,11 @@ facts:
           - words/2026-09-03/37
           - words/2026-09-04/25
           - words/2026-09-04/26
+      - name: the-model-is-named-in-every-brief
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/17
       - name: fixed-model-for-every-task
         source: ai
         ref: "6e9efb8c"
@@ -48,7 +53,7 @@ facts:
         reason: "absorbed when the amendment of 2026-09-05 gave the bound its one home on work-loop: the answer no longer enumerates the acts, so there is nothing here for a third act to lengthen"
         source: commons.systems/disposition-graph/viable-options
         ref: "2026-09-05"
-    recommends: reconciliation-session-writes-options
+    recommends: the-model-is-named-in-every-brief
     boldness: moderate
     against: "The answer generalises past the author's words: they named verbose investigation and gave its cost, and the answer makes everything but the interview and the record a contracted unit. The contract, the report, and the main thread's read of the conclusion are a fixed cost per unit, the lookup exemption is the only floor, and anything larger is a unit catches every three-line investigation."
   - name: authority
@@ -80,7 +85,7 @@ depends:
 
 ### answer
 
-`reconciliation-session-writes-options` is recommended because the author's amendment of 2026-09-04, quoted above, grants exactly this move: a reconciliation session's main thread records viable options and moves recommendations within scope, and the graph-writing bound of 2026-09-03 is by their words incomplete. Boldness moderate: the verbose-investigation clause and the amendment are the author's, while the unit contract, the model by kind of work, the main thread's model per session, and the subagent's four bounds are the AI's. The case against is that the answer generalises past the author's words: the contract, the report, and the main thread's read of the conclusion are a fixed cost per unit, the lookup exemption is the only floor, and anything larger is a unit still catches every three-line investigation.
+`the-model-is-named-in-every-brief` is recommended since 2026-09-08: it is `reconciliation-session-writes-options`, whose amendment of 2026-09-04 the author granted and which held the recommendation until now, with one clause added, that the brief names the model as it names the effort and no subagent runs on the harness's default. The author's direction of 2026-09-08, quoted above, moved it, and the recommendation moved on their words rather than on the AI's judgment of them; what remains the AI's is the form the direction takes in the answer, a clause about what a brief contains rather than a clause about which model goes where. Boldness moderate: the verbose-investigation clause, the amendment of 2026-09-04 and the direction of 2026-09-08 are the author's, while the unit contract, the model by kind of work, the main thread's model per session, and the subagent's four bounds are the AI's. The case against the answer as a whole stands unchanged, that it generalises past the author's words, the contract, the report and the main thread's read of the conclusion being a fixed cost per unit, the lookup exemption the only floor, and anything larger is a unit still catching every three-line investigation; against the new clause alone, that it converts a sizing rule into a paperwork rule and calls a correctly sized brief defective for saying so nowhere.
 
 #### never-writes-the-graph
 
@@ -145,6 +150,36 @@ defines:
 
 Every session has a main thread, the thread that holds the session's work, launches its units, and reads what they return; a subagent is a session the main thread launches for one unit or one lookup, given its brief and nothing else. The alignment session's main thread holds the interview and the record: it interviews the author, writes and amends nodes, reviews what subagents return, and lands, and it runs on the most capable model at full effort. A reconciliation session's main thread runs on the larger model until the reconciliation skill's instructions are defined well enough for the smaller one, which is the recommendation the author asked the AI to make and the skill to carry; the recommendation is stated here, and the skill encodes it, so the rule stands when the shim the skill is goes. Everything else is delegated: a lookup needs only its question and its answer, and anything larger is a unit. A unit is one deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output; a unit that needs a second contract is two units. Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys. The subagent reports a conclusion and the exact commands it ran; the main thread reads the conclusion and never the context. The model follows the kind of work: the smaller model for mechanical tooling, tests, format work, and anything whose contract determines the answer; the larger model for design and judgment, such as a layout or a survey that classifies what it reads; the smallest for lookups. The effort is stated in the brief. A subagent never runs state-changing version control, never edits a node or the record's scaffolding, writes only the files its brief names, and works only in the worktree it was given. A reconciliation session is bound toward the record as the work-loop node bounds it, and that node owns the bound; a subagent never edits a node.
 ```
+
+#### the-model-is-named-in-every-brief
+
+`reconciliation-session-writes-options` with one clause added to the sizing: the brief names the model as it names the effort, and no subagent runs on whatever model the harness would pick. Raised from the author's direction of 2026-09-08, given mid-sitting when three subagents this session had launched had taken the default.
+
+**AI support.** The author's words of 2026-09-08, quoted above, are a direction and not a ruling, and what they direct is not a new rule but the enforcement of one the answer already states: the model follows the kind of work. The clause the answer lacked was the one that makes that rule checkable at the moment it is applied. "The model follows the kind of work" is satisfied by a brief that says nothing, because the harness picks a model whether or not the brief does, and the pick is invisible in the brief and in the report; the author read the gap off three briefs of this sitting that named no model and got the default. Naming the model in the brief costs a clause and makes the sizing rule readable in the same artifact that carries the contract, the inputs, the outputs, the files the subagent may write and the effort, so that a brief either sizes its work or shows that it did not. The clause is the twin of "The effort is stated in the brief" and belongs where that clause belongs: with the sizing, on `commons.systems/disposition-graph/delegation-bounds-and-sizing`'s reading, and therefore into `unit-sizing` if that node's ruling makes the move. That node's residual rule places a clause neither list reaches with the bounds and asks the question rather than letting it join the sizing by silence, so the question is asked here and an option is recorded there.
+
+**AI divergence.** Nothing in the author's words says the model is named in the brief; they say the models are right-sized. A session could size every model correctly and write it nowhere, and the rule this option adds would still call that a defect. What the clause really buys is auditability, which is the main thread's interest and not the author's stated one, and the cost of a wrong naming is a brief that lies about what ran.
+
+```markdown
+---
+question: How is work divided between the main thread and subagents?
+form: rule
+tier: global
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - term: main thread
+    gloss: "The thread that holds the session's work, launches its units, and reads what they return."
+  - term: unit
+    gloss: "One deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output."
+  - term: subagent
+    gloss: "A session the main thread launches for one unit or one lookup, given its brief and nothing else."
+---
+
+## Answer
+
+Every session has a main thread, the thread that holds the session's work, launches its units, and reads what they return; a subagent is a session the main thread launches for one unit or one lookup, given its brief and nothing else. The alignment session's main thread holds the interview and the record: it interviews the author, writes and amends nodes, reviews what subagents return, and lands, and it runs on the most capable model at full effort. A reconciliation session's main thread runs on the larger model until the reconciliation skill's instructions are defined well enough for the smaller one, which is the recommendation the author asked the AI to make and the skill to carry; the recommendation is stated here, and the skill encodes it, so the rule stands when the shim the skill is goes. Everything else is delegated: a lookup needs only its question and its answer, and anything larger is a unit. A unit is one deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output; a unit that needs a second contract is two units. Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys. The subagent reports a conclusion and the exact commands it ran; the main thread reads the conclusion and never the context. The model follows the kind of work: the smaller model for mechanical tooling, tests, format work, and anything whose contract determines the answer; the larger model for design and judgment, such as a layout or a survey that classifies what it reads; the smallest for lookups. The effort is stated in the brief, and so is the model: a subagent is never launched on the harness's default, since a default is not a sizing and a brief that leaves the model unnamed has not sized the work. A subagent never runs state-changing version control, never edits a node or the record's scaffolding, writes only the files its brief names, and works only in the worktree it was given. A reconciliation session is bound toward the record as the work-loop node bounds it, and that node owns the bound; a subagent never edits a node.
+```
+
 
 #### fixed-model-for-every-task
 
@@ -423,3 +458,7 @@ The term survey is used with two meanings across the frontier. `frontier-consist
 Also named: commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/review-skills, commons.systems/disposition-graph/clean-context-review.
 
 Proposed: The survivor is `frontier-consistency`'s sense: survey is the reading of the frontier, and the skill family keeps the name. `decomposition` already carries the repair as the option `units-are-readings-not-surveys`, so no new option is needed there; `delegation`'s answer loses the word from its list of verbose investigations, which is a sizing clause `delegation-bounds-and-sizing` has already assigned to `unit-sizing`, so the amendment travels with that move rather than reopening the bound.
+
+### The model named in the brief, 2026-09-08
+
+The author directed mid-sitting that every subagent be given a right-sized model rather than the harness default, `words/2026-09-08/17`, after three of this sitting's briefs had named none. Recorded as `the-model-is-named-in-every-brief`, which is the standing answer with one clause added beside the effort clause, and the recommendation moved to it. The clause is sizing on `commons.systems/disposition-graph/delegation-bounds-and-sizing`'s reading, so an option is recorded there adding it to the enumeration the sizing list quotes; that node's residual rule places a clause neither list reaches with the bounds, and this entry is the asking of the question it requires rather than a silent joining. The review block of 2026-09-05 and the survey pin of 2026-09-07 are stale against this move, and the frontier is where that is read.
