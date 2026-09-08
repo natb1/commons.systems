@@ -15,7 +15,13 @@ any authority, and it does not outlive the sitting.
 A word leaves the store in one of two directions and never sits there. Where the
 sitting resolves that the words bear on a disposition fact, they are entered in the
 ledger at the next checkpoint and the store's copy is struck, which is the graduation
-the quotes node's answer names. Where the sitting resolves that they direct the
+the quotes node's answer names. The strike waits on the landing and not on the
+writing: a copy is struck only where the entry that replaces it is reachable from
+`origin/disposition`, because a checkpoint that writes the entry into a worktree and
+then fails to land it would otherwise strike the only copy there is, and the worktree
+dies with the session. That is the guard the unconfirmed-accumulation node's fold
+already carries, held for the same reason and against the same loss: text that is not
+on the ref is not moved to the history by striking it, it is ended. Where the sitting resolves that they direct the
 sitting alone, they stay in the store and die with it, and the record keeps nothing,
 which is what the author's refinement of 2026-09-08 intends.
 
