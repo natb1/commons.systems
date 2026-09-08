@@ -548,7 +548,13 @@ facts:
       - name: readiness-when-the-cap-is-reached
         source: review
         ref: "2026-09-07"
-    recommends: the-confirmation-folds-an-already-accumulated-node
+      - name: probes-survive-the-recording
+        source: commons.systems/disposition-graph/author-questions
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/32
+          - words/2026-09-08/34
+    recommends: probes-survive-the-recording
     boldness: moderate
     against: "Both readings must pin the recommendation as it stands before the author may answer a single row, so every ruling waits on two readings of the AI's own drafting, and where the cap has been reached the rule bends rather than binds, so the author's last sight of the text is one no reader saw; while the one judgment no instrument can check, whether a denial is about the options or about the ground, is made by the party the denial was aimed at. And the answer now folds what another node's instrument left, so what the confirmation removes moves whenever `unconfirmed-accumulation` moves, on an instrument that does not exist."
   - name: authority
@@ -1565,6 +1571,155 @@ finding that survives being recorded as an option rather than answered by a
 redraw.
 ```
 
+#### probes-survive-the-recording
+
+The recommended answer with one clause changed: what the recording removes now
+carries two exceptions and not one, `probes` beside the author's words, on the
+criterion the paragraph already uses -- the other parts go because the ruling
+makes them dead, and a probe the author has not answered is not dead when the
+node is confirmed -- so that the recording stops being a third way off the probe
+list beside answering and withdrawing; the borrowed citation that had attributed
+the deletion to `author-questions`' own answer goes with it, and the cost of the
+exception, a surviving probe landing on a node no projection shows it on, is
+stated in the answer rather than left to be found.
+
+**AI support.** The author, 2026-09-08, at `words/2026-09-08/32`, striking three
+clauses of `author-questions` and one of them the clause this answer quotes: "A
+disposition can be confirmed at any point after options are recorded for each
+fact. Confirmation is not blocked on draining all probes. Probes persist after
+confirmation and author may continue to answer which may result in a change of AI
+recommendation on confirmed disposition fact." And the same day at
+`words/2026-09-08/34`, answering a probe on `round-termination` from the other
+end: "Probes may be traded between the author and the experts indefinitely. At
+some point the author will decide that they have enough common grounding to
+confirm the disposition. Outstanding probes can continue to be exchanged after
+confirmation." The argument for the strike is `author-questions`' and is not
+remade here. What this option does is repair the one sentence in the record that
+carries out the rule the author struck.
+
+The sentence is this node's own and it is not a cross-reference. The `dialogue`
+node's enumeration of what goes at the recording names the stage, the review, the
+dependencies and the account, and names no `probes` at all; `dialogue`'s option
+`probes-in-the-enumeration` says so in terms, that "the record's only
+reconciliation of the gap today is a sentence of `recording`'s, where this node's
+ruler will not meet it". So the field died here and nowhere else. Left standing,
+the citation would put the record in the worse of the two available states: the
+clause struck where it was argued, and executed where it is applied, since what a
+session performing a recording reads is this answer and not the node the answer
+cites. That is also why the amendment is not read off `author-questions` at
+ruling time. Authority narrows on the way down and a rule is met by its own
+node's ruler; ruling on `author-questions` alone would leave the operative
+sentence unruled, which is the defect `dialogue`'s option was minted to fix from
+the other side and which `author-questions` names again here, recording the
+amendment as an option "so that their rulers meet the change where the rule is".
+
+Three things the author's words require of what the recording removes, and all
+three land on this node. The removal set loses a member, so the sentence now
+names two exceptions where it named one, `probes` beside the author's words. The
+recording stops being a way off the list: `author-questions` fixes the two ways a
+probe leaves it, answered or withdrawn, and the amendment says the recording is
+not a third, so that "author may continue to answer" has something left to
+answer. And an answer that moves a recommendation on a ruled fact needs somewhere
+to land, which this answer already supplies and the amendment points at rather
+than restates: the third of the three cases below is a recommendation moved on a
+node that already has a class, re-opening the dialogue at the movement the
+classification calls for with the confirmed choice keeping its full authority
+until the author rules again. The survival therefore asks this node for no
+machinery it did not already have; it asks it to stop deleting the field.
+
+The amended sentence also removes a contradiction internal to its own paragraph,
+which is the strongest reason the repair is this node's and not a cross-reference
+to be read elsewhere. The next sentence but one says that the confirmation "adds
+no test of its own and takes nothing the accumulation would have kept", striking
+only "the parts a ruling makes dead which the accumulation had to keep while the
+dialogue was live". The `unconfirmed-accumulation` node's answer names `probes`
+in what a node carries through its fold, and it is not there because the dialogue
+is live: it is there because the question is open, and a ruling on the node does
+not answer it. So the incumbent sentence takes at the confirmation something the
+accumulation kept for a reason the ruling does not touch, which is exactly what
+the sentence after it says the confirmation does not do. The deadness criterion
+the amendment uses, that the other parts go because the ruling makes them dead
+and a probe is not dead when the node is confirmed, is that sentence's own
+criterion, and the amendment applies it rather than importing one.
+
+What breaks if the citation stands is more than staleness. The sentence does not
+merely mention `author-questions`, it borrows that node's authority for an act:
+"that node saying a probe dies with the stage". A session that follows the
+citation now finds the opposite of what it was cited for, and a session that does
+not follow it deletes a field the author said persists. No instrument catches
+that. The reader checks a probe's shape and never a claim one node makes about
+another node's answer, so the only checks are the survey's cross-reference
+judgment and a reading that happens to look. The neighbouring version of this gap
+was caught exactly that way, by the second clean-context reading of
+`author-questions` on 2026-09-05, and it is open still.
+
+**AI divergence.** The cleaner repair may belong on another node, and recording
+this one forecloses it. `author-questions`' own divergence names the reading: a
+field written with the dialogue and not removed with it may not be dialogue state
+at all, and if it is not, the sentence as it already stands is correct with no
+exception in it, since what the recording removes is the dialogue "and nothing
+else" and a thing outside the dialogue was never in the removal set. On that
+reading the right change here is the narrow one, strike the borrowed citation and
+say nothing about survival, leaving the home question where it was raised; and
+this option instead writes an exception into the one node that performs the
+deletion, which is where an exception is hardest to withdraw later. The narrow
+option is not on this fact and ought to be, because the choice between them is
+one this node's ruler is entitled to make and this option presents only one side
+of it.
+
+The rule is not executable today. `read.mjs` derives `carriesDialogue` from
+`review`, `depends`, `probes` and `## Account` and refuses a node carrying any of
+them without a stage: "'review', 'depends', 'probes', and '## Account' are parts
+of the dialogue and require stage". So the first node ever to carry a probe past
+its recording fails validation, and the exception that would let it through is
+not written here: it is on `author-questions`, and it is on `dialogue` as of
+2026-09-08, where `probes-are-a-part-that-outlives-the-dialogue` gives the
+validator's stage rule its matching exception, superseding an option drafted on
+2026-09-05, before the strike, which said the opposite -- that the enumeration
+carries `probes` and "the validator paragraph requires a stage of it as it does
+of the others" -- and which is passed over with that reason. Three nodes and one
+instrument have to move together; the three now have, each as an unruled
+recommendation, and the instrument has not, so a ruling on this one alone still
+buys a rule the reader rejects.
+
+The paragraph now separates what persists by two criteria that disagree on this
+one part. Its opening sentence says the test is the dialogue node's, and the
+paragraph below applies it in terms, the account going because "re-running a
+reading reconstructs it while nothing reconstructs the facts". A probe is
+substantially re-derivable: every movement that collects is obliged to ask
+whether the list is still the right list, the admission test is checkable against
+the record, and a movement re-run on the node would raise the question again,
+which is what this answer says of an account. The amendment keeps the field on
+the other criterion, that the ruling has not made it dead, and does not say why
+that criterion governs where the two part. It is the first part of the record
+where they do.
+
+And what the amendment preserves may be worth nothing yet. Twenty-seven nodes
+carry `probes`, and no node file in this record carries a single `ruling`, so
+nothing has ever been confirmed and no probe has ever survived a recording: the
+state this rule is written for has not once occurred. The one surface that shows
+an open probe is the count on the stage chip, and it is this very paragraph that
+removes the stage, so until `alignment-page` is ruled the operative effect of the
+change is to keep bytes in a file no projection reads. The amendment names that
+gap, and so does `author-questions`; a second naming is not a remedy, and a
+reader may hold that the honest form of this option keeps the field only once
+there is somewhere the author can see it.
+
+**Content.**
+
+From: the-confirmation-folds-an-already-accumulated-node
+
+```diff
+@@ -25,7 +25,7 @@
+ 
+ **The edit.** A confirmation with edits is a ruling like any other and is never held: the session applies the author's edits to the option, records the ruling on it with the response `edit` and their words as its reason, and pins `of` to the recommendation as those edits leave it, since the text the ruling stands on is the author's own and a pin that named the text they superseded would flag every clerical edit for good. What decides whether the edited text is read again is substance. A change is substance when it changes what the answer binds: what an executor would do differently under it, what it permits or forbids, which node owns a rule, or what a projection would show the author as the decision. A change of wording, of order, or of a citation that leaves those four alone is not. Where the edits change substance the session sets the node to the review stage, because the text that now stands has had no reading, and the node returns to the author for re-confirmation once the reading forwards it; the confirmed choice keeps its full authority meanwhile, and the re-confirmation replaces the ruling with its own date and pin. Where they do not, the ruling stands as written and the node leaves the frontier. The dialogue node sends a changed recommendation through the review again only when the change is substance, and this is the judgment it leaves to the session. This is the one place a ruling stands on a text no reading has pinned, and it is the author's text: the readings owed on it are owed as on any ratified node whose recommendation has moved, and the frontier shows it so.
+ 
+-**What the recording removes, and what it keeps.** What the recording removes is the dialogue as the dialogue and author-questions nodes define it between them and nothing else, the author's words excepted, which are in the ledger as the quotes node decides; `probes` is the part the dialogue node's enumeration does not carry and the author-questions node does, that node saying a probe dies with the stage, the review, the dependencies and the account at the recording as every other part of the dialogue does. The fold at the confirmation is not the record's first, and this is what it does on a node the accumulation has already reached: the test that separates what persists from what does not is the dialogue node's, and the unconfirmed-accumulation node applies that same test to a node still in dialogue, folding into the history and absorbing into the parts the dialogue reads, so what the confirmation folds is what that accumulation left. The two are one rule applied at two times and not two rules with two tests: the confirmation adds no test of its own and takes nothing the accumulation would have kept, it strikes the parts a ruling makes dead which the accumulation had to keep while the dialogue was live, the stage, the review blocks and the dependencies among them, and where a part has already been folded or absorbed it finds nothing there to remove and the manifest line the accumulation left stands as the account of it. The facts stay, with their options, each option's source and reference, the recommendation with its boldness and its case against, the readings bearing on each option, and the rulings the author gave, so that a later session meets what was considered and why before proposing it again; an option the AI holds dominated stays on the list, marked passed over with the reason it was passed over. Then the node is validated and landed.
++**What the recording removes, and what it keeps.** What the recording removes is the dialogue as the dialogue and author-questions nodes define it between them and nothing else, with two things excepted: the author's words, which are in the ledger as the quotes node decides, and `probes`, which survives it. `probes` is the part the dialogue node's enumeration does not carry and the author-questions node does, and that node's answer, on the author's words of 2026-09-08, holds that the probes outlive the confirmation rather than dying with the stage, the review, the dependencies and the account as the rest of the dialogue does. The exception has a reason and is not a carve-out: the other parts go because the ruling makes them dead, a stage with nothing left to stage, a review of a text already ruled on, a dependency already discharged, and a probe is not dead when the node is confirmed. It is a question the author has not answered; they may go on answering it after the recording; and an answer that moves the AI's recommendation on a fact already ruled re-opens the dialogue at the movement the third of the three cases below names, by the machinery the authority node already has, the confirmed choice keeping its full authority until the author rules again. So the two ways off the list the author-questions node fixes, answered or withdrawn, are the only two, and the recording is not a third. What the exception costs is stated here because this node's own act is what closes the display: the count of a node's open probes rides the stage chip and the recording removes the stage, so a probe that survives the confirmation survives into a node no projection shows it on, and the window in which it is invisible closes only when it is answered and the dialogue re-opens. That is the alignment-page node's to settle, and it is named here rather than left to be found. The fold at the confirmation is not the record's first, and this is what it does on a node the accumulation has already reached: the test that separates what persists from what does not is the dialogue node's, and the unconfirmed-accumulation node applies that same test to a node still in dialogue, folding into the history and absorbing into the parts the dialogue reads, so what the confirmation folds is what that accumulation left. The two are one rule applied at two times and not two rules with two tests: the confirmation adds no test of its own and takes nothing the accumulation would have kept, it strikes the parts a ruling makes dead which the accumulation had to keep while the dialogue was live, the stage, the review blocks and the dependencies among them, and where a part has already been folded or absorbed it finds nothing there to remove and the manifest line the accumulation left stands as the account of it. The facts stay, with their options, each option's source and reference, the recommendation with its boldness and its case against, the readings bearing on each option, and the rulings the author gave, so that a later session meets what was considered and why before proposing it again; an option the AI holds dominated stays on the list, marked passed over with the reason it was passed over. Then the node is validated and landed.
+ 
+ **What the account carries.** What the account carries is the dialogue node's question and when it is written is the checkpoint node's; what this node adds is why it goes at the recording: re-running a reading reconstructs it while nothing reconstructs the facts, which is the test the dialogue node's minimal-state principle sets, applied here. What a resuming session needs of the sitting's minutes beyond the dialogue node's list, the conclusion of every unit the sitting delegated with the commands it ran and the author's response as it was given with the classification the session made of it, is recorded as an option on that node.
+ 
+```
 ### authority
 
 Ratified, at low boldness. This is the node that says what a ruling is and where it is written, so an error here is an error in every ruling the record will ever hold: a response mis-classified confers a class the author did not confer, a ruling recorded on the wrong option records a choice they did not make, and a recording that drops the wrong field loses the reason a question was closed. That is expensive, irreversible in the way a mis-recorded ruling is irreversible, and capture-shaped, which is the test `commons.systems/disposition-graph/class-recommendation` states, moved there from `authority` on 2026-09-05 from the option this node sourced on 2026-09-04, and which the frontier applies across the nodes below it. Delegated would let the recommendation act on how the author's own words are read, which is the one thing a delegation cannot cover; deferred is on the fact because the record's classes are three and the author's third exit stays open, and it is what the author takes if they want the recommendation to act while the question stays before them. Boldness low because the class follows that test, stated in the skill and applied across the frontier, rather than the AI's judgment of this node alone.
@@ -1666,3 +1821,49 @@ Also named: commons.systems/disposition-graph/author-questions, commons.systems/
 Proposed: recording's term survives for the agent: reviewer, or the reading where the act is meant; reader is kept for the parser, which is what read.mjs is. review-cost, what-an-option-row-carries and clean-context-review substitute; author-questions strikes the sentence that leaves the finding to the survey.
 
 Recorded as an option on commons.systems/disposition-graph/review-cost's answer fact: `reader-is-the-parser-and-reviewer-is-the-reading` (source review, 2026-09-07).
+
+### The borrowed deletion is repaired, 2026-09-08
+
+The author's words at `words/2026-09-08/32` struck the clause of
+`author-questions` that this answer quoted, and the sentence that carried it out
+was this node's own. `probes-survive-the-recording` is recorded against
+`the-confirmation-folds-an-already-accumulated-node` as a named change of one
+paragraph, and the recommendation moves to it. The node stays at the maieutic
+stage; the change is drafted and has had no reading.
+
+What the option repairs is not staleness but a borrowed authority. The sentence
+did not merely mention `author-questions`, it cited that node for the act -- "that
+node saying a probe dies with the stage" -- so a session following the citation
+now finds the opposite of what it was cited for, and a session not following it
+deletes a field the author said persists. No instrument catches that: the reader
+checks a probe's shape and never a claim one node makes about another node's
+answer. The repair is this node's and not a cross-reference to be read at ruling
+time, because authority narrows on the way down and a rule is met by its own
+node's ruler; ruling on `author-questions` alone would leave the operative
+sentence unruled, which is the defect `dialogue`'s passed-over option was minted
+to fix from the other side.
+
+The amendment also removes a contradiction internal to its own paragraph. The
+next sentence but one says the confirmation "adds no test of its own and takes
+nothing the accumulation would have kept", striking only "the parts a ruling
+makes dead which the accumulation had to keep while the dialogue was live";
+`unconfirmed-accumulation` names `probes` in what a node carries through its
+fold, and it is there because the question is open and not because the dialogue
+is live. So the incumbent sentence took at the confirmation something the
+accumulation kept for a reason the ruling does not touch. The deadness criterion
+the amendment uses is that sentence's own, applied rather than imported.
+
+Two things stand undischarged and are in the option's divergence rather than
+answered here. The narrow repair -- strike the borrowed citation and say nothing
+about survival -- is not on this fact and ought to be, since `author-questions`'
+own divergence holds that a field written with the dialogue and not removed with
+it may not be dialogue state at all, on which reading the sentence as it already
+stood was correct and this option writes an exception into the one node that
+performs the deletion, where an exception is hardest to withdraw later. And the
+rule is not executable: `read.mjs` refuses a node carrying `probes` without a
+`stage`, and this node's own act removes the stage. Three nodes and one
+instrument have to move together. The three now have, each as an unruled
+recommendation -- `author-questions` at `a9928ddc`, `dialogue` at `fd357f52`,
+this node here -- and the instrument has not, so a ruling on this one alone still
+buys a rule the reader rejects. This is the fourth and last of the amendments
+`author-questions`' recommended text names as owed elsewhere.
