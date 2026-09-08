@@ -543,6 +543,14 @@ facts:
       - name: the-unreached-line-is-cited-from-survey-selection
         source: review
         ref: "2026-09-07"
+      - name: the-review-is-struck-as-superseded-by-the-expert-system
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/37
+      - name: the-independent-reading-is-constituted-and-sequenced-after-the-experts
+        source: ai
+        ref: "2026-09-08"
     recommends: a-surveys-selection-and-its-state-are-the-selection-nodes
     boldness: high
     against: "The wave buys bytes and spends attention, and attention is the quantity this subtree has already said is the scarce one. `review-cost` now recommends that \"Token efficiency and context management are bounds on what a reading is given; attention is what the reading does with it, and it is not the same quantity\", and a wave halves the bytes while quartering what any one object gets of the reader: the brief is fifty-six percent smaller, but each of the four drafts is now judged by a reader holding three other drafts, three other neighbourhoods of options, and three other verdicts it must also write. Deriving the wave's membership and bounding its brief settle who is in it and how large it may be, and neither touches that: on the record's own accounting a wave is a rise in cost per unit of attention and not a fall, and it is invisible to the measurement the case is built on, which counts only bytes. The deeper objection is that the saving and the loss fall on different parties: the bytes are the record's, the independence is the author's, and the author is the one the review exists to protect. And the loss is hedged only by the survey, which this node's own rationale still records as one \"no sitting has yet generated\" and which runs for the first time in the sitting that recommends the wave."
@@ -1236,6 +1244,37 @@ The session that invoked the skill validates every finding against the record be
 
 The survey carries a node the judged set does not reach, or whose read text an earlier survey read, on one line as the survey-selection node states, and this node cites that node and restates nothing; on the table because the recommended answer cites frontier-consistency for a condition frontier-consistency's own recommendation moves to survey-selection.
 
+#### the-review-is-struck-as-superseded-by-the-expert-system
+
+The clean-context review is struck: the expert system of recorded identities, scopes and groundings replaces it, and no fresh-context reader stands between a draft and the author.
+
+**Author choice, unconfirmed.** The author's words of 2026-09-08: "Based on expert feedback and what's been relayed on tradition my current choice is to strike clean-context review as superceded by expert system." It is the author's current choice and it is not a confirmation, and the record has no mark for that state yet; `viable-options` carries the option that would mint one. Recorded here as an option so that the choice is on the ref and visible beside what the first expert convened on it returned.
+
+**Tradition support.** Nemeth, Brown and Rogers (2001) found authentic minority dissent outperformed every assigned devil's-advocate condition, and that assigned advocacy can bolster the position it was assigned to oppose by letting the majority feel the objection has been heard and defeated; a reader briefed to attack a draft is an assigned advocate in that exact sense, so the strike removes an instrument whose independence was thinner than its description. Fagan locates the rigour of inspection in the division of the reading into scoped roles rather than in one reader's diligence, which makes several scoped experts the more Fagan-like instrument. The multi-agent debate result (arXiv:2305.19118) is evidence that a plurality of agents held in tension outperforms one agent reflecting on its own output.
+
+**Tradition divergence.** TIBER-EU and CBEST faced this same choice between a blind adversary and a joint expert exchange and kept the blind test against a defender tested without foreknowledge, placing the joint exchange in a later phase: they chose sequence and not substitution. IV&V doctrine holds that independence must be constituted at three levels, financial, managerial and technical; under this shape the main thread selects which experts are convened, writes the brief fixing each one's scope and grounding, and integrates their returns into the recommendation the experts exist to test, which is none of the three. Auditing's self-review threat is the one threat adding experts cannot cure: where the recommendation is the integration of the experts' choices, every party that sees the integrated draft is a party whose choice was integrated into it, and each expert added to widen the check is another author of the thing checked. Least privilege and compartmentation both hold that a participant bounded to what its scope requires cannot correlate across compartments, so defects of composition -- a contradiction between two facts each individually well supported, a node correct and redundant, vocabulary drift across siblings, a node under the wrong parent -- are invisible to every scoped reader by construction, and this node's own answer constitutes the incumbent as the opposite, read "in one context, with nothing isolated by node". Staw's escalation experiments find self-justification strongest where the party made the prior decision itself and where it is public and attributable, and the degeneration-of-thought result states the same in this record's own medium, that a model which has established confidence in its solution cannot generate novel thoughts through reflection even where the stance is wrong; the accumulation of each expert's support and divergence is that experimental condition by design, and a clean-context reader is by construction the one party with no prior recorded position to defend. Across every tradition the survey reached it found practices that add scoped participants and keep an independent reading, and none that abolishes the independent reading in favour of scoped convened participants.
+
+**Expert choice.** The expert `tradition-on-orchestration-shape`, scoped to the answer fact of the orchestration shape and grounded in tradition, did not choose this option. Its finding is that something specific is lost, that it is nameable, and that three of the four losses are created by the expert system's own scoping and integration clauses rather than merely left uncured by the strike.
+
+**AI support.** The strike answers a real defect and the record should not pretend otherwise. This node's incumbent is described as a fresh, uncommitted, hostile reader, and the first two of those are constituted while the third is assigned; Nemeth's result is that the assigned third undoes some of what the first two buy. An instrument whose independence is asserted rather than constituted is worth less than the record has been treating it as worth.
+
+**AI divergence.** The record has already passed an option over on precisely the ground the strike walks into. `sibling-set-named-by-the-session` was passed with the reason "it is chosen by the party whose blind spots the review exists to catch", and this node's own case against its recommendation says "the bytes are the record's, the independence is the author's, and the author is the one the review exists to protect". Striking the review does not answer that reason; it removes the party the reason was about. And `movements` carries the open probe `who-convenes-the-experts`, which asks whether the party writing the briefs may be the AI whose recommendation the experts exist to test: the strike would remove the mitigation before the probe questioning its replacement is answered, which is the wrong order whatever the answer turns out to be.
+
+#### the-independent-reading-is-constituted-and-sequenced-after-the-experts
+
+The independent reading is kept and constituted rather than struck: its brief fixed by rule instead of composed per launch, convened by something other than the party under test, given the whole object rather than a scope, and placed after the expert exchange so that it reads the integration rather than competing with the experts.
+
+**Expert choice.** Chosen by `tradition-on-orchestration-shape`, as the cure tradition offers for what the strike correctly diagnosed. The expert states it as an option and not a recommendation, on the ground that the answer fact is the author's.
+
+**Tradition support.** TIBER-EU and CBEST are the closest institutional analogue and they sequence rather than substitute, keeping the blind test and placing the joint exchange after it. IV&V's three levels give the test the constitution would have to meet. Fagan's inspection keeps a moderator who is not the author, so the tradition with the strongest measured defect removal used author-adjacent readers under a party who was not one of them. Peer review keeps editor-chosen referees and treats author-suggested reviewers as a supplement and never a replacement.
+
+**Tradition divergence.** Auditor tenure is not monotone: review quality degrades at low tenure as well as at high, because client-specific expertise takes time to acquire, so a permanently rotating stranger is not the optimum and the persistent scoped expert has a real defence this option gives up. And Nemeth still bites: a reader briefed to attack is an assigned advocate whichever phase it runs in, so sequencing alone does not convert the reading into authentic dissent, and the option inherits that defect from the incumbent unchanged.
+
+**AI support.** It concedes what the author's choice diagnosed and cures it in the direction the evidence points: the answer to independence that is asserted rather than constituted is to constitute it, and deleting the party is the one move that forecloses that. It also costs less than it looks, because the reading it asks for is one the record already runs.
+
+**AI divergence.** It requires a party the record does not have. "Convened by something other than the party under test" names no one: there is the author, the main thread, and what the main thread launches, and the first is the party the instrument exists to protect. So the clause is a requirement without an implementation, and it is `movements`' open probe and not this node's to settle. It also adds a phase to a shape the author has just described as iterative rather than sequenced, which is a real tension with the same entry's P3 and not a detail.
+
+
 ### authority
 
 Ratified, at low boldness. The author's words set this node's shape twice on 2026-09-03 and once more on 2026-09-04 through the decomposition node, and being wrong here is capture-shaped: the review is the guard against the blind spots of the session that drafts, and a delegation would let the reviewed party set the terms of its own review. The parent and the decomposition node recommend the same class at the same boldness.
@@ -1416,3 +1455,54 @@ Also named: commons.systems/disposition-graph/author-questions, commons.systems/
 Proposed: recording's term survives for the agent: reviewer, or the reading where the act is meant; reader is kept for the parser, which is what read.mjs is. review-cost, what-an-option-row-carries and clean-context-review substitute; author-questions strikes the sentence that leaves the finding to the survey.
 
 Recorded as an option on commons.systems/disposition-graph/review-cost's answer fact: `reader-is-the-parser-and-reviewer-is-the-reading` (source review, 2026-09-07).
+
+### The author's choice to strike, and the expert convened on it, 2026-09-08
+
+The author's words of 2026-09-08 at `words/2026-09-08/37` state a current choice to
+strike this node's instrument as superseded by the expert system that
+`words/2026-09-08/36` sets out. The choice is recorded above as
+`the-review-is-struck-as-superseded-by-the-expert-system` and nothing is struck: it is a choice
+and not a confirmation, and the author's own words ground it in "expert feedback and
+what's been relayed on tradition", so the record's part is to convene the expert and
+put what it returns beside the choice.
+
+One expert was convened, identity `tradition-on-orchestration-shape`, scope the answer
+fact of the orchestration shape, grounding tradition. It returned thirty readings and
+diverges from the choice. Its finding, in its own terms: what is lost is the only party
+in the design whose context is not constituted by the party under review, and with it
+the only reading of the draft as a whole and the only reader with no recorded position
+to defend; and three of the four losses are created by the expert system's own scoping
+and integration clauses rather than merely left uncured by the strike. It also found a
+loss that is procedural rather than epistemic, that nothing in the shape requires a
+recorded divergence to be *answered* before the author confirms, so that an answered
+divergence and an unanswered one are the same input to the author's judgment.
+
+No recommendation moved, and the reason is worth stating because it cuts against the
+sitting's own convenience. Under the same entry's P2 the AI's recommendation is
+redefined as the main thread's integration of the experts' choices; the one expert
+convened chose `the-independent-reading-is-constituted-and-sequenced-after-the-experts`, so
+integrating the experts' choices as they presently stand would move this fact's
+recommendation *away* from the author's choice and not toward it. The sitting declines
+to make that move on one expert's return, and records the consequence here rather than
+leaving it for the author to discover: the author's redefinition of what a
+recommendation is has the effect that a recommendation can now diverge from the
+author's own unconfirmed choice by construction, and the record has no way to show
+those two marks apart until `viable-options`' selection-per-party option is ruled.
+
+The thirty readings are not minted as reading nodes in this sitting. Under
+this node's neighbour `readings`, a reading is a node under
+the node it bears on, and thirty nodes is a debt the sitting cannot discharge in
+passing; it is residual R12 and R14 of the sitting's store and it grows by thirty here.
+What the sitting did instead is what the author's answer to P1 asks for: tradition's
+support and its divergence are written as strings on each option, both able to stand on
+one option at once, which is the logical shape `words/2026-09-08/37` fixes and which the
+options above are the record's first instances of.
+
+The brief that convened the expert carried the defect `expert-instructions` already
+reports, and the expert caught it. The brief enumerated the traditions it thought
+relevant and described this node's instrument as "a fresh, uncommitted, deliberately
+hostile reader", which names the finding it hoped for inside the list it hands over.
+The expert declared the bias and asked that its agreement with that framing be
+discounted and its disagreements weighted more. That is recorded on
+`expert-instructions` as an instance and is noted here because it conditions everything
+above: the supports in this account were written by a reader that was pointed at them.

@@ -410,3 +410,49 @@ and divergence that say the record's case for it is owed, and this one carries a
 written case, which makes the newer option look better argued than the recommended
 one for a reason that is about what has been written and not about what is right.
 The owed case is this node's, and it is on the sitting's residue.
+
+### The second tracked set, 2026-09-08
+
+The expert `tradition-on-orchestration-shape`, convened the same day on the shape
+`words/2026-09-08/36` sets out and grounded in tradition, was asked to separate what it
+opened and verified from what it asserted without verifying and from what it did not
+reach. It returned twenty-one sources opened and verified, twenty-six items asserted
+from training without checking, and twenty loci not reached.
+
+The instance is sharper than the first one and it sharpens this node's rule rather than
+merely adding to it. The expert's search budget was not exhausted part-way through its
+reading: it was **exhausted before the expert ran a single query**, at 200 of 200, so
+the survey ran entirely on fetches of URLs the expert constructed from memory. Twenty-
+five were attempted, twenty-one succeeded and four returned 404. The expert declared
+the consequence itself, that its verified set is biased toward sources with predictable
+public URLs and away from paywalled primary literature, which is a bias in the *shape*
+of what was verified and not only in its quantity. A report that had absorbed the bound
+would have read as a tradition survey of ordinary coverage; what makes the difference
+visible is the declaration and nothing else, which is exactly what this node holds.
+
+The two highest-value unreached loci are recorded here because both bear on a
+disposition presently in front of the author, and the second is an asymmetry in the
+evidence and not merely a gap in it.
+
+Assurance cases, Goal Structuring Notation, and eliminative argumentation with
+defeaters. A defeater-based confidence argument, in which confidence is built by
+enumerating and discharging the reasons an argument might fail, is a direct structural
+competitor to the design in `words/2026-09-08/36` step 3, which builds confidence by
+accumulating support. The expert identified it as the strongest competitor it knew of
+and could not open it: the Wikipedia locus returned 404 and it had no search budget to
+find the right title.
+
+Recent negative results on multi-agent debate. The expert holds the pro-debate result
+and does not hold the results that qualify it, and said so: "an asymmetry in my evidence
+bearing directly on C8's premise". The premise in question is the author's current
+choice to strike the clean-context review in favour of an expert system, so the record's
+evidence on the live question is one-sided in a direction that favours the choice, and
+the expert that told us so is the one whose divergence is recorded against it.
+
+The remaining eighteen: IEEE 1012's independence clauses, which would fix the
+load-bearing term in the expert's own strongest finding; ICD 203; De Millo, Lipton and
+Perlis; Ladha on correlated Condorcet votes; COPE and IESBA specifics; Knight and
+Leveson; the Fagan author-and-moderator rule; the knowledge-acquisition bottleneck;
+Team B; CBEST's own documents as against the ECB's account of them; the
+perspective-based-reading replications; and the Delphi primary sources this record
+already carries as unreached.

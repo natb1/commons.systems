@@ -1452,3 +1452,31 @@ probe and addressing it are `author-questions`' encoding, recorded there as the 
 probes, which the base option already says, and not what a probe's fields are. Keeping
 it in both places would have put one design in two nodes' answers, which is the seam
 `prose-and-structure` exists to prevent.
+
+### The brief that named its own finding, 2026-09-08
+
+This node reports that briefs in this record have "named the finding they hoped for
+inside the tradition list itself". The sitting of 2026-09-08 committed it again, in a
+brief written after the finding was recorded here, and the instance is worth keeping
+because of how it came back rather than because it happened.
+
+The brief convening `tradition-on-orchestration-shape` enumerated the traditions it
+thought relevant, in a list of some twenty, and described the instrument under
+evaluation as "a fresh, uncommitted, deliberately hostile reader" -- a characterisation
+that is one of the things the expert was being asked to assess. The expert opened its
+return by declaring the defect: it named the enumeration, quoted this node's own finding
+back, identified the pre-framing, and asked that its agreement with that framing be
+discounted and its disagreements weighted more heavily. It then produced its strongest
+finding against the framing it had been handed, which is some evidence that the
+declaration was not merely decorative.
+
+Two things follow for this node's answer. The first supports what it already
+recommends: a brief fixed by rule is the remedy, because the defect entered through the
+part of the brief the launching session composes freshly each time, and the parts that
+were fixed -- the return's shape, the three-way separation of verified, asserted and
+unreached -- came back clean. The second is new and is not yet in the node's options: an
+expert that is *told to declare the brief's bias* can partly repair a biased brief from
+inside, which is cheaper than getting every brief right and is not a substitute for it.
+Whether that clause belongs in the standard skill is a question this account raises and
+does not answer, since it is the node's own answer fact and the sitting has not put it
+to the author.
