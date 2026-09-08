@@ -33,6 +33,15 @@ description: The clean-context survey of the frontier. Invoked with no argument 
 > bootstrap reconciliation for the accumulation and the option encoding, to
 > the recommended text of `survey-selection`, `unconfirmed-accumulation`,
 > `quotes`, `viable-options` and `dialogue`; every recommendation unanswered.
+> Reconciled again on 2026-09-08 under the author's grant of that day, "you
+> have bootstrap authority to reconcile anything that would optimize the
+> reviews/surveys (fix defects, or apply any other recommendation)", to the
+> recommended text of `survey-selection` under its options
+> `the-gate-refuses-only-what-an-instrument-clears`,
+> `the-hub-bound-holds-for-every-key`,
+> `the-frozen-set-is-the-closure-the-survey-read` and
+> `a-pin-moves-on-what-binds-the-node`, and of `dialogue` under its option
+> `a-pin-covers-what-binds-the-node`; every recommendation unanswered.
 > Liquidation: the projector materializes this skill from
 > ratified nodes and this hand-written file is deleted.
 
@@ -60,13 +69,31 @@ nothing of it is here.
    not here; where a node differs from this file, follow the node and
    record the difference as an un-aligned disposition on it.
 3. Run the mechanical tier: `node packages/disposition/validate.mjs
-   disposition --tier`. It is the gate on the launch (`survey-selection`):
-   a node the tier finds a problem with is repaired or kicked back, never
-   read for it, and no reader is launched while the tier reports a finding.
-   Launch only when the tier is clean, or forced with a reason recorded on
-   the launch (`--force-tier` at the brief step, §2): the tier is a bound on
-   what enters it, so a forced launch over a dirty tier is named as one in
-   the brief itself and is a deviation to report, not a default.
+   disposition --tier`. Its eight checks are of two kinds
+   (`survey-selection`, the option
+   `the-gate-refuses-only-what-an-instrument-clears`), and only one kind
+   gates. The gating kind names a defect of the encoding, one an instrument
+   or the session clears before the launch, and it is four checks: an
+   unresolved `depends`, `bears` or `under` reference, two options of one
+   name on one fact, an option whose content resolves through a cycle,
+   through a name no option carries, or through a hunk that does not apply
+   exactly, and a reference to the author's words that resolves to no entry
+   (`TIER_GATE_CHECKS`). A node one of those fires on is repaired or kicked
+   back, never read for it, and no reader is launched while one of them
+   reports a finding. The reporting kind names a state of the record that no
+   instrument clears and only a sitting can, and it is the other four: a
+   recommendation past its pin, a term used by a node with no path to the
+   node whose `defines` carries it, a passage of two hundred bytes or more
+   byte-identical across nodes, and an account section the fold could have
+   reached and has not (`TIER_REPORT_CHECKS`), with the unreferenced ledger
+   entry beside them as a note. Those gate nothing: they are carried into the brief instead, one
+   line each (§2), so the reader has what the record already knows about
+   itself and is not stopped by it. Launch when the gating kind is clean.
+   `--force-tier` at the brief step (§2) bypasses the gate and nothing else,
+   is a diagnostic and never the normal path, is named as such in the brief
+   itself, and is a deviation to report. A gate whose findings the session
+   could only acknowledge was refused on every run and bypassed on every
+   run, and the bypass was then the launch; that is what the division ends.
 
 ## 1. The judged set, and the selection
 
@@ -87,13 +114,57 @@ text has not changed since that survey is carried on one line rather than by
 what it answers, since the pair has already been read once; everything so
 struck is the frozen set, named in the survey's own output and in the
 reader's report. What unchanged means is the pin the survey writes on every
-node it read: the apply step (§4) pins the judged set and the whole
-neighbourhood alike, and a later run freezes a node whose five section
-hashes still match the pin it carries, judged or merely read. A pin on a
+node it read: the apply step (§4) pins the judged set and the neighbourhood
+alike, the nodes it carried by what they answer, and a later run freezes a
+node whose five section hashes still match the pin it carries, judged or
+merely read. That closure is the whole of what the frozen set can cover
+(`survey-selection`, the option
+`the-frozen-set-is-the-closure-the-survey-read`): a node the survey met only
+as a name on one line is not pinned, because a pin attests to the text a
+reader read and a line is not that text, so a pair either of whose members is
+unpinned stays live, and where the brief carries that member on one line the
+reader is handed a name and not a text. The record pays for that in one line
+and not in one reading, and the unpinned residue is no backfill the record
+owes: it shrinks as the frontier moves, each survey pinning the closure it
+read. No instrument changed for this; it is what the generator already did,
+stated here as the rule the record recommends. A pin on a
 node the survey only read carries no recommendation hash, so it freezes that
 node's text and never satisfies the survey a ruling owes: a node at the
 review or the ruling stage carrying a read pin alone is still in the next
 survey's judged set.
+
+What moves the pin the judged set turns on is what binds the node and nothing
+beside it (`survey-selection`, the option
+`a-pin-moves-on-what-binds-the-node`, and `dialogue`, the option
+`a-pin-covers-what-binds-the-node`, which holds the same pin so that the two
+nodes that read it read one thing): per fact, the fact's name, which option it
+`recommends`, that option's sentence, its resolved content read through the
+`From:` chain, and the ledger addresses it references in `supports` and
+`diverges`, together with the name and the status of any option of the fact
+that carries one; the node's hash folds the question in with every fact's
+(`contentFactRecommendationHash`). A rival's body is not that. An option
+recorded beside the recommendation, its sentence, its source, its ref, the
+AI's case on it and its content alike, moves no pin, whoever recorded it, a
+reading, a sitting, or this survey's own apply step, so a survey no longer
+guarantees that every node it wrote an option on is judged again by the next
+one. Boldness, `against`, the AI's accumulated support and divergence, a
+fact's reason and the accounts are outside the pin for the same reason, which
+is why the accumulation's fold and its absorptions move no hash and re-judge
+nothing. The five section hashes are the separate thing the freeze compares:
+a rival recorded on a node moves that node's rivals section, so the node is no
+longer frozen and the reader is given its text again wherever a pair of its is
+live, and that alone does not return it to the judged set.
+
+The pins the record already carried were migrated once, in the same act, and
+this is a fact of the record and not a step a reading repeats:
+`node packages/disposition/migrate-pins.mjs <graph dir> [--sidecar <path>]
+[--dry]` rewrote every `review.of`, every `review.survey.of` and every ruled
+option's `ruling.of` whose recorded hash was the node's hash in the old form
+to the node's hash in the new form, nothing the reader read having changed,
+and left a pin already stale in the old form stale, so each node is judged
+exactly as it would have been. It ran on the graph at commit `981f5367`,
+rewriting 236 pins, leaving 56 stale and finding 17 already in the new form,
+and it is idempotent: run again over a migrated graph it rewrites nothing.
 
 The delta is the norm and the whole reading is a backfill
 (`survey-selection`, the option
@@ -117,7 +188,19 @@ key that nominated it — a defined term (the node that defines it paired with
 each node that uses it), an entry of the author's words referenced by
 options on both, a citation either way in prose or in `depends`, a shared
 parent, or near-duplicate resemblance (Jaccard similarity over word shingles
-of a half or more). The key is recorded with any finding it produces and
+of a half or more). One bound holds over every key and not over one of them
+(`survey-selection`, the option `the-hub-bound-holds-for-every-key`):
+whatever relation a key runs on, what stands at more than a tenth of the
+record's nodes nominates nothing on that key, so a term more than a tenth of
+the nodes use pairs with none of them, and a node whose prose names more than
+a tenth of the record names none of them here. The ceiling is
+`TERM_KEY_MAX_SHARE`, defined once and shared with the tier's own check so the
+two cannot drift. It is a share and not a count, so that it holds at any size
+of record, and it silences a key and never an edge the record declared: a
+hub's `depends` entries are written on purpose and are nominated by their own
+key, which is what stands where the scraped citation falls away. Stating the
+bound once rather than per key is what stops the next key the record adds from
+arriving unbounded. The key is recorded with any finding it produces and
 narrows attention, never the corpus: every node the brief carries stays
 readable, and a finding on a pair no key nominated is a finding like any
 other.
@@ -166,7 +249,11 @@ every earlier reading's silence and so runs the same whole reading. Nothing
 else makes a run whole: there is no cadence, no count of deltas and no lapse
 of days behind either flag, and a run passed neither is a delta however long
 it has been since the last whole reading. The tier gate of §0 is
-`--force-tier`'s, recorded there and not repeated here.
+`--force-tier`'s, recorded there and not repeated here; it bypasses the
+gating kind alone, and the run's own line names what the tier did:
+`tierFindingCount`, the gating count, which is what the launch turns on,
+`tierReportCount` and `tierNoteCount`, which turn nothing, and `tierForced`,
+true only where a gating finding was overridden.
 
 Beside the brief it writes three sidecars, by default under `tmp/review/`:
 `survey.pins.json`, the graph commit read and the recommendation hash of
@@ -195,13 +282,32 @@ reads against.
 
 The brief carries the validations this reading runs, how a tangle and a
 subtree divergence are recorded (`alignment-order`), the admission test and
-the cap a probe is held to, the tier's own stamp (clean, or forced with the
-reason recorded at the launch), a summary of the selection (how many nodes
-judged, how many pairs live, how many frozen, whether this run is whole and
-why), the judged index, the live candidate pairs each with the key that
-nominated it, the drift probe, and the reached-unchanged list — the nodes
-the judged set reaches but carries on one line rather than by what they
-answer — and nothing of the session. `tmp/` is gitignored scratch.
+the cap a probe is held to, the tier's own stamp (how many findings each kind
+returned, and whether the launch was forced, the reason for which is the session's report's to carry, since the flag takes none),
+a summary of the selection (how many nodes judged, how many pairs live, how
+many frozen, whether this run is whole and why), the judged index, the live
+candidate pairs each with the key that nominated it, the drift probe, and the
+reached-unchanged list — the nodes the judged set reaches but carries on one
+line rather than by what they answer — and nothing of the session. Under
+"What the record already knows about itself" it carries the tier's reporting
+kind and the notes beside it, one line each, grouped by check with a count
+per check, said there to be states of the record no instrument clears, so
+that a finding of the reader's that repeats one tells the record nothing it
+has not already measured. `tmp/` is gitignored scratch.
+
+The brief is the whole of what the reader reads, and it carries each node
+compacted so that it can be. A judged node is carried once: its question, the
+author's words its options reference, quoted at most once and otherwise by
+address, the one answer that binds it, and every other option by name, status
+and sentence with its content given as its sectionwise difference from that
+answer, given whole only where a difference would not be shorter. A node the
+judged set reaches is carried by what it answers, and by the answer its
+recommended option resolves to where that differs from what stands. Each node
+so carried holds a `#### Probes` block, every probe on it, open and
+discharged alike, one line each with the count of the open ones against the
+cap of three: a reader asked to check a cap against a set it is never shown
+counts only the probes it raises itself and re-asks what the record has asked
+already.
 
 ## 3. The reader
 
@@ -220,9 +326,9 @@ reader of the skill sees it. Never a fork: a forked
 context carries the session's framing and is not clean. The prompt: "Read and
 follow `<the brief the previous step wrote>` exactly; you are a clean-context
 reviewer with no context but the record; read the brief and nothing else —
-it carries everything you judge, and it says so — in pieces of no more than
-600 lines per Read call, from its first line to its last, and never skim
-past what does not fit; every finding you write quotes the locus it
+it carries everything you judge, and it says so — in the fewest pieces your
+Read tool allows, up to 2,000 lines per call, from its first line to its
+last, and never skim past what does not fit; every finding you write quotes the locus it
 bears on verbatim, the sentence or clause exactly as it stands in the file, so
 it can be verified by search; never run state-changing git; write
 only the output file the brief names."
@@ -265,7 +371,9 @@ as a finding of nothing.
    the record answers it, and it stays on the list discharged rather than
    leaving it. Record the validation as
    the session's reply in `tmp/review/replies.json`, `{ "<id>": "<reply>" }`,
-   one per judged node and one per node a finding names. A rejected stage
+   one per judged node and one per node a kept finding is written on, which
+   is what the apply's own validation asks for and never the nodes a finding
+   named but was not applied to. A rejected stage
    recommendation is held by `tmp/review/overrides.json`,
    `{ "<id>": "<stage>" }`; the finding is still recorded on the node with the
    reply, as the dialogue's history, and the author sees both on the alignment
@@ -346,7 +454,13 @@ as a finding of nothing.
    Every node is parsed before and after its write: a node that would not
    validate after the write is reported and left unwritten, a node whose
    standing hash the edit moved is reported and left unwritten, and a run with
-   any problem writes nothing at all. An override wins on the stage, except
+   any problem writes nothing at all. Recording an option no longer moves the
+   pin the survey wrote (§1), so the guard that checks the recommendation hash
+   against that pin fires only where an option this run wrote carries a status
+   or where what the fact recommends moved; there it is a note naming the
+   option, saying the node stands as moved past its survey pin and is judged
+   again by the next survey, and any other movement of that hash is still
+   refused with the node left unwritten. An override wins on the stage, except
    that no override puts a node carrying an open probe at the ruling stage.
    Nothing else in a node is touched — the `## Recommendation` fence, the
    rulings, and what each fact recommends least of all.

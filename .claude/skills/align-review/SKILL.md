@@ -38,6 +38,18 @@ description: The clean-context review of one draft. Invoked by node id the momen
 > bootstrap reconciliation for the accumulation and the option encoding, to
 > the recommended text of `survey-selection`, `unconfirmed-accumulation`,
 > `quotes`, `viable-options` and `dialogue`; every recommendation unanswered.
+> Reconciled again on 2026-09-08 under the author's grant of that day, "you
+> have bootstrap authority to reconcile anything that would optimize the
+> reviews/surveys (fix defects, or apply any other recommendation)", to the
+> recommended text of `survey-selection` under its options
+> `the-gate-refuses-only-what-an-instrument-clears`,
+> `the-hub-bound-holds-for-every-key`,
+> `the-frozen-set-is-the-closure-the-survey-read` and
+> `a-pin-moves-on-what-binds-the-node`, and of `dialogue` under its option
+> `a-pin-covers-what-binds-the-node`; every recommendation unanswered. Of
+> those five, what bears on this reading is the pin: the first three are the
+> survey's launch, its keys and its freeze, and they are stated in
+> `.claude/skills/align-survey/SKILL.md` and not here.
 > It has no authority of
 > its own: where it differs from the graph at `origin/disposition`, the graph
 > wins and the difference is recorded as an un-aligned disposition on the node
@@ -170,6 +182,18 @@ cap bounds amendment and not redrawing: either reading may still kick the
 draft back, and a kickback is a new answer, which owes a reading of its own.
 What the cap forbids is a third reading of the same answer.
 
+The count is taken from the boundary and never over the whole account. A
+kickback ends it; so does a move to another option of the answer fact, a
+redrawn answer being a new answer whether a kickback wrote it or not; and so
+does a frontier finding the survey wrote, since a reading after one answers
+that finding rather than overrunning the readings before it. Each reading's
+subsection records which option the fact recommended when it read, and that
+line is what the count reads back; a subsection recording none stops the walk
+rather than being assumed to match, so a node whose history cannot be read is
+never over-counted. Where the apply would record a third reading of one
+answer with no boundary between, it warns and writes all the same: the cap
+binds the movement the session asked for, not the mechanical step.
+
 It returns the probes it raises on that node too (`author-questions`): the
 questions it needs the author to answer before the recommendation can be
 grounded, each with what it `asks`, `why` the record cannot answer it,
@@ -181,7 +205,12 @@ not itself a disposition, a question of that last kind being a node and going
 to the merge finding instead. Finding none is a complete answer. The cap is
 three open probes on one node, a compound probe counting as the probes it
 compounds, and the reading checks it as a finding naming the node and the
-probes; the parser does not enforce it. A probe beats the verdict: a reader
+probes; the parser does not enforce it. The brief carries the node's own
+`#### Probes` block, every probe standing on it, open and discharged alike,
+one line each with the count of the open ones against the cap, so the reader
+counts from what the record has already asked and adds its own to that: a
+reader shown no probe counts only the ones it raises and re-asks the
+questions the record asked before it. A probe beats the verdict: a reader
 that returns one has said the draft is not ready, so a probe and a forward
 cannot both stand, and §4 applies the kick-back whichever the reader wrote.
 
@@ -190,6 +219,26 @@ node with its stage, its class, what its facts recommend, and its review and
 survey state. A node is ready for the author's ruling when it carries a
 forward verdict pinned to the recommendation as it stands and a survey pin on
 the same; this reading gives the first of the two.
+
+What a pin covers is what binds the node and nothing beside it
+(`survey-selection`, the option `a-pin-moves-on-what-binds-the-node`, and
+`dialogue`, the option `a-pin-covers-what-binds-the-node`, which holds the
+same pin so that the two nodes that read it read one thing): per fact, the
+fact's name, which option it `recommends`, that option's sentence, its
+resolved content read through the `From:` chain, and the ledger addresses it
+references in `supports` and `diverges`, together with the name and the status
+of any option of the fact that carries one; the node's hash folds the question
+in with every fact's. Outside it are a rival's body, its sentence, its
+source, its ref, the AI's case on it and its content, together with boldness,
+`against`, the AI's accumulated support and divergence, a fact's reason, and
+the accounts. So recording an option beside the recommendation does not stale
+this reading's verdict and owes no re-reading; what does is a move in which
+option the fact recommends, in that option's own sentence, content or
+referenced words, or in the status any option of the fact carries. The pins
+the record already carried were migrated to this form once, at graph commit
+`981f5367`: a pin whose recorded hash was the node's hash in the old form was
+rewritten, nothing the reader read having changed, and a pin already stale in
+the old form stayed stale.
 
 ## 2. The brief
 
@@ -208,6 +257,21 @@ the admission test and the cap a probe is held to, the judging criteria from
 `recording`, and nothing of the session: no draft of
 the reply, no account of the sitting, no verdict hoped for. `tmp/` is
 gitignored scratch.
+
+The node under review is carried whole, and whole is not twice. Its answer is
+the recommended option's own resolved content and stands once, under the
+answer heading; every other option on that fact is carried by its sentence,
+the AI's support and divergence on it, and its content given as the
+sectionwise difference from that answer, which is the survey's own compaction
+applied here. Printing the answer and then each option's subsection raw
+printed the recommendation's whole node twice and every rival's beside it,
+437,719 bytes for `review-cost` on 2026-09-08, against the bound the launch
+prompt promises. There is no recommendation section beside the answer: in the
+content encoding the answer is the recommended option's content, so a heading
+for it repeated the answer on every node it fired for. A neighbour is carried
+by what it answers, which is the answer its recommended option resolves to
+where that differs from what stands. The brief is the whole of what the reader
+reads.
 
 Which of the two readings the brief is written for is the tool's to derive
 from the record, and not the session's to name (`review-cost`): where the
