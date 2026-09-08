@@ -129,8 +129,23 @@ and its account of what an expert is given; `transience` and `session-state`, wh
 own the rule that state not on the ref dies with the sitting, and which this
 disposition extends from the author's words to the AI's unfinished reading;
 `evaluation`, whose global-tier answer runs every evaluation against tradition; and
-the sitting's own store, whose residuals R12 and R14 are the population this node
-would move onto the ref.
+the sitting's own store, where the two instances in hand are held.
+
+That last reading was wrong when it was written and the correction is recorded here
+rather than made silently. It named the store's residuals R12 and R14 together as the
+population this node would move onto the ref. R12 is not: it is some forty-five
+traditions the survey of 2026-09-08 forwarded *with* loci and verification status, and
+a tradition that was read has a locus and a relation and can be written as a reading,
+so what it lacks is a reading node and the debt is `readings`' and `stub-traditions`',
+not this node's. The distinction is the whole of why this node exists, so blurring it
+in the node's own account was the one error that made the mint look redundant. This
+node's population is what has neither locus nor relation because nobody looked: the
+loci the tradition reading on the terminator named and did not open, which is R14's
+object under a description R14 does not give it, and whatever the telemetry lookup of
+the same day would have read had it not reported its WebSearch budget exhausted at
+200/200. Whether all forty of R14's loci are unopened, or only some, is exactly the
+split the survey has been asked to return, and until it does the population is bounded
+above and not enumerated.
 
 The words are an observation and a rule, and only the rule is durable. That the
 expert's web search budget is fixed and was exhausted is a fact of the harness and
