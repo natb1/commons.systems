@@ -89,6 +89,11 @@ facts:
       - name: confirmed-is-a-derived-label
         source: review
         ref: "2026-09-07"
+      - name: an-option-carries-a-selection-per-party
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/36
     recommends: confirmed-is-a-derived-label-and-every-option-carries-its-content
     boldness: high
     against: "The author scoped what persists to options 'categorized as viable by the AI', and this node's own rationale rejected keeping the rest, so the recommendation reverses the author's words on the AI's reading of the regression purpose those same words gave, and prices that reversal at a status on rows the author must read, a hundred and two at graph commit 417b8335 across twenty-eight nodes and a hundred and forty-one at 0daa4792 across thirty-eight, while the discretion the change was bought to remove survives untouched in which candidates the AI names at all; and the amendment binds that decision to a second one, so one ratification would confer both the derivation of a class and what an option must carry, which is the bundling the record's own rule that a text answering two questions is two nodes exists to prevent."
@@ -1047,6 +1052,72 @@ under:
 `passed-over-options-stay` with one passage amended: the confirmed choice is marked by a label derived from the rulings, nothing being confirmed where no option carries a confirming ruling, and a projection that puts an unconfirmed text in that place is showing the author the AI's draft where their own choice belongs. What an option carries and in what form is left to `commons.systems/disposition-graph/dialogue`, whose answer this one cites and does not restate, so that a ruling here settles how a class and a confirmation are read off the rulings and nothing about the encoding.
 ```
 
+#### an-option-carries-a-selection-per-party
+
+The recommendation with a third thing an option carries: the selection each party
+has made on it. The author's confirmation and the author's selection short of
+confirmation are labels read off the rulings, as the class and the confirmed label
+already are; an expert's selection is stored on the option, because no ruling of the
+author's stands behind it. The term `selected` is glossed on this node, since the
+projections may carry no sentence of their own for a status.
+
+**AI support.** It is the author's, at `words/2026-09-08/36`, whose third step says
+that "Where previously answer options could be marked as confirmed, or AI
+recommended, now answer options can be confirmed by author, selected by the author
+but not confirmed, or selected by an AI expert". The subject is this node's and not
+another's: what an option must carry is fixed here by what a ruling for it takes,
+and a marking the author will read beside an option is exactly that. The entry's
+description of what it amends is accurate, which is worth recording because an
+entry that misdescribes the text it amends is a different thing to handle: the
+recommendation does mark an option confirmed and does mark one recommended, and it
+marks nothing else. So this is an amendment and not a correction, and the two
+markings it adds are additions to an enumeration rather than strikes against it.
+
+**AI divergence.** It puts the first stored marking into a design whose reason for
+storing nothing is that a stored copy drifts from what it copies, and the
+qualification this option offers, that an expert's selection has no original to
+drift from, is true of the value and not of its currency. An expert's selection is
+a judgment on a text, and the text moves under it: an option's content is amended,
+or the fact gains an option the expert never read, and the stored mark still says
+the expert chose this one. The record's instrument for that is a pin, which is what
+a ruling carries and what a review carries, and this option mints none, so it leaves
+on the record a mark with no way to tell whether the party chose the option as it
+now stands. Against it also stands that it obliges an amendment it does not carry:
+the author's selection short of confirmation is read off a ruling whose response the
+record does not have, `recording`'s answer offering confirm and edit and nothing
+else, so a ruling for this option is a ruling for a marking that cannot yet be
+recorded. The option names that debt rather than hiding it, which is the most this
+node can do about a decision that belongs to another.
+
+**Content.**
+
+From: confirmed-is-a-derived-label-and-every-option-carries-its-content
+
+```diff
+@@ -8,17 +8,19 @@
+   - grant
+   - term: passed over
+     gloss: "Passed over is the status of an option the AI holds dominated on the record's criteria, written in the record as the value `passed`: it stays on the fact with one clause saying why, is never what the fact recommends and never the option confirmed, and carries no ruling; the author may rule for it all the same, and the recording clears the status."
++  - term: selected
++    gloss: "Selected is the marking of an option a party has chosen without the author having confirmed it: the author's own selection, which is read off a ruling whose response is short of confirm, and an expert's, which is that expert's choice on the fact and is stored on the option because no ruling of the author's stands behind it."
+ under:
+   - commons.systems/disposition-graph/authority
+   - commons.systems/disposition-graph/dialogue
+ ---
+ ## Answer
+ 
+-Yes. A node's authority is read off the rulings recorded on its facts, and no stamp is written beside them. Every decision on a node is a fact with a list of options, possibly one: the answer, whose options are the candidate answers to the node's question, and the reserved three the dialogue node names, authority, topology, and persistence; any other decision the author would rule on separately is a question and a node under this one. What an option must carry is fixed by what a ruling for it takes, which is this node's question and not another's: the author rules on a text and never on a description of one, so every option of the answer fact carries in full the text a ruling for it would confirm, and a projection can therefore render the node as it would stand under the option the author has selected; it carries the case both ways that the ruling is made against, the AI's accumulated support for it and divergence from it kept whatever the fact recommends, the author's own words that support it and those it diverges from, and the readings that bear on it, each saying whether the tradition supports the option or the option departs from it; and it carries the two judgments the AI is answerable for, the recommendation, on the one option of each fact the AI recommends, with why and with what boldness, the recommendation being the judgment that weighs the support and the divergence across the options, and, where the AI holds the candidate dominated, the status passed with the one clause saying why. In what form each of those is written, by what keys and in what section, this answer does not decide: that is the dialogue node's question, whose encoding — the two forms an option's content takes, whole or as a named change resolved strictly against another option's, and the keys the references to the author's words are written in — is carried by that node's recommendation of 2026-09-07 and not yet by its answer, so it is cited here as a recommendation and not as doctrine, and a ruling there settles the form and nothing this answer requires. An option also carries its name, its source and its reference. The source names who put the candidate on the table and the reference points at that, so that an option sourced to the author carrying a graph commit where the date of the words should be is a finding and not a fact; that rule is stated here because a source is the claim by which the record can be checked against the party it names, and it is raised on the dialogue node as the option `source-names-who-raised-it`, where the rest of what an option carries is encoded, so a ruling there takes it and this sentence goes with it. The author's later agreement with a reason the AI gave is not a source: it is a ruling where the author gave one and an account where they did not. A ruling is the author's act on the option they chose, recorded on it: the response, the date, and a pin of the recommendation it answered. Only the author rules, on the alignment page or in prose, and the AI writes no ruling and no class for itself.
++Yes. A node's authority is read off the rulings recorded on its facts, and no stamp is written beside them. Every decision on a node is a fact with a list of options, possibly one: the answer, whose options are the candidate answers to the node's question, and the reserved three the dialogue node names, authority, topology, and persistence; any other decision the author would rule on separately is a question and a node under this one. What an option must carry is fixed by what a ruling for it takes, which is this node's question and not another's: the author rules on a text and never on a description of one, so every option of the answer fact carries in full the text a ruling for it would confirm, and a projection can therefore render the node as it would stand under the option the author has selected; it carries the case both ways that the ruling is made against, the AI's accumulated support for it and divergence from it kept whatever the fact recommends, the author's own words that support it and those it diverges from, and the readings that bear on it, each saying whether the tradition supports the option or the option departs from it; and it carries the two judgments the AI is answerable for, the recommendation, on the one option of each fact the AI recommends, with why and with what boldness, the recommendation being the judgment that weighs the support and the divergence across the options, and, where the AI holds the candidate dominated, the status passed with the one clause saying why. And it carries the selection each party has made on it, which is neither of those judgments and not the recommendation either: the author's confirmation; the author's selection short of confirmation, where they have chosen the option and not yet confirmed it; and each expert's selection, where an expert convened on the fact chose it. The first two are labels read off the rulings and stored nowhere, as the class is, and the second requires a response beside confirm and edit, which is the recording node's to mint and is named here so that the requirement is reconciled and not discovered. The third is stored on the option, because no ruling of the author's stands behind an expert's choice and there is nothing to derive it from. That the record derives two of the three and stores the third is not an exception to the rule against stored stamps: what that rule refuses is a second copy of something the record already holds, and an expert's selection has no original to drift from. In what form each of those is written, by what keys and in what section, this answer does not decide: that is the dialogue node's question, whose encoding — the two forms an option's content takes, whole or as a named change resolved strictly against another option's, and the keys the references to the author's words are written in — is carried by that node's recommendation of 2026-09-07 and not yet by its answer, so it is cited here as a recommendation and not as doctrine, and a ruling there settles the form and nothing this answer requires. An option also carries its name, its source and its reference. The source names who put the candidate on the table and the reference points at that, so that an option sourced to the author carrying a graph commit where the date of the words should be is a finding and not a fact; that rule is stated here because a source is the claim by which the record can be checked against the party it names, and it is raised on the dialogue node as the option `source-names-who-raised-it`, where the rest of what an option carries is encoded, so a ruling there takes it and this sentence goes with it. The author's later agreement with a reason the AI gave is not a source: it is a ruling where the author gave one and an account where they did not. A ruling is the author's act on the option they chose, recorded on it: the response, the date, and a pin of the recommendation it answered. Only the author rules, on the alignment page or in prose, and the AI writes no ruling and no class for itself.
+ 
+ The class follows from the rulings. Ratified: the answer fact carries a ruling, and the confirmed choice acts. Delegated: the authority fact carries the ruling delegated, the recommendation acts, the delegation covers the class of decision it names below the node, and the author does not want to be asked again. Deferred: the authority fact carries the ruling deferred, the recommendation acts, and the node stays on the alignment frontier until the author returns to it. Unanswered: no fact carries a ruling, nothing on the node acts, and reconciling anything under it takes an explicit grant from the author for that reconciliation, given in their words and never assumed; that is a standing rule of this record, not a shim, and it does not expire. A ruling on an ancestor grants the decisions its scope covers to the nodes beneath it, and authority only narrows on the way down. A class the AI wrote for itself is not a grant: the deferred stamps the bootstrap wrote are unanswered, as the author classified them on 2026-09-03, until a ruling grants them.
+ 
+-The facts persist after the ruling: the confirmed choice with the author's reason, the recommendation with its reason, the readings on each option, and every candidate the AI considered and can name, so that a later session meets what was considered and why before proposing it again. Viable means not dominated on the record's criteria, in the AI's judgment, which is what the evaluation node's solution frontier means for one decision. Viability is a judgment shown on an option and never the condition of its listing. A candidate the AI holds dominated is passed over: it keeps its place on the fact, carries the status with the one clause saying why, and acts on nothing, being neither what the fact recommends nor the option confirmed and carrying no ruling; it is shown to the author with the others, and the author may rule for it, which clears the status. Passed over is the term and `passed` is the value the field carries, and they are one status under a short name and a full one, so a projection resolving the gloss looks the term up from the value the option holds and no third name is minted. Passing an option over says the AI holds the candidate dominated and says nothing about whether its text may be addressed: an option other options resolve their content against keeps that place whatever its status, since a base is not a thing that acts. The AI passes an option over on its own authority and lifts that status on the same authority, saying in the fact's prose what changed; it raises a passed-over candidate again by lifting the status on the option itself and never by minting a second option under a new name, since a duplicate is how a list stops being the record of what was considered. Struck is the other thing, and it is the author's alone: a struck option leaves the record and version control alone holds it, so the AI does not strike, a list the AI may prune being the AI's shortlist under another name. A projection shows a status as it shows a vocabulary fact's option, by the gloss on the node that defines the term, and carries no sentence of its own for either. What a rejected alternative is and how it is recorded is the rejected node's question. What dies at the recording is the dialogue: the stage, the review, the dependencies, and the account; the author's words stay as the quotes node decides. The projections show a node's confirmed choice first, marked confirmed, which is a label on the option the author last ruled with the response confirm and is derived from the rulings rather than stored, by the same reason that derives the class; and beneath it the recommendation and the other options with their status, each carrying the case both ways a ruling on it is made against. What a row carries at its first level and what its details carry beneath is the what-an-option-row-carries node's question and is not decided here. Where no option carries a confirmed ruling nothing is confirmed, and a projection that puts an unconfirmed text in that place is showing the author the AI's draft where their own choice belongs, which is the state of every node of this record on 2026-09-07.
++The facts persist after the ruling: the confirmed choice with the author's reason, the recommendation with its reason, the readings on each option, and every candidate the AI considered and can name, so that a later session meets what was considered and why before proposing it again. Viable means not dominated on the record's criteria, in the AI's judgment, which is what the evaluation node's solution frontier means for one decision. Viability is a judgment shown on an option and never the condition of its listing. A candidate the AI holds dominated is passed over: it keeps its place on the fact, carries the status with the one clause saying why, and acts on nothing, being neither what the fact recommends nor the option confirmed and carrying no ruling; it is shown to the author with the others, and the author may rule for it, which clears the status. Passed over is the term and `passed` is the value the field carries, and they are one status under a short name and a full one, so a projection resolving the gloss looks the term up from the value the option holds and no third name is minted. Passing an option over says the AI holds the candidate dominated and says nothing about whether its text may be addressed: an option other options resolve their content against keeps that place whatever its status, since a base is not a thing that acts. The AI passes an option over on its own authority and lifts that status on the same authority, saying in the fact's prose what changed; it raises a passed-over candidate again by lifting the status on the option itself and never by minting a second option under a new name, since a duplicate is how a list stops being the record of what was considered. Struck is the other thing, and it is the author's alone: a struck option leaves the record and version control alone holds it, so the AI does not strike, a list the AI may prune being the AI's shortlist under another name. A projection shows a status as it shows a vocabulary fact's option, by the gloss on the node that defines the term, and carries no sentence of its own for either. What a rejected alternative is and how it is recorded is the rejected node's question. What dies at the recording is the dialogue: the stage, the review, the dependencies, and the account; the author's words stay as the quotes node decides. The projections show a node's confirmed choice first, marked confirmed, which is a label on the option the author last ruled with the response confirm and is derived from the rulings rather than stored, by the same reason that derives the class; beneath it the option the author has selected without confirming, where there is one, marked selected and derived the same way; and beneath those the recommendation and the other options with their status and with the experts that selected each, so that the author reads what the parties chose before reading what the AI concluded from it, each carrying the case both ways a ruling on it is made against. What a row carries at its first level and what its details carry beneath is the what-an-option-row-carries node's question and is not decided here. Where no option carries a confirmed ruling nothing is confirmed, and a projection that puts an unconfirmed text in that place is showing the author the AI's draft where their own choice belongs, which is the state of every node of this record on 2026-09-07.
+ 
+ The AI may add an option to any fact, may pass an option over and lift a status it wrote, and may move a fact's recommendation, in alignment, in reconciliation, and in the loop on itself, passing an option over being a third act where the work-loop and author-questions nodes today enumerate two, the delegation node having struck its enumeration on 2026-09-05 and cited work-loop for the bound, and may not rule, edit a ruling or the author's words, strike an option, or recommend beyond the scope a delegation confers. What a move does is read from the class. On a ratified node the confirmed choice keeps its full authority and the node returns to the alignment frontier for re-confirmation, at the movement the recording node's classification calls for, the review where only the recommendation moved; that state is what proposal names here: a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. On a deferred node the recommendation acts, the reconciliation frontier changes with it, and the node was on the alignment frontier already. On a delegated node the recommendation acts within the delegation's scope and the node stays off the alignment frontier, since that is what the author asked for; a move that would leave the scope is not the AI's to recommend, is recorded as an option, and returns the node to the author with its class intact. On an unanswered node nothing acts and the move is dialogue. Moved is a matter of content and not of clock: the ruling pins the recommendation it answered, and the frontier flags the node when the recommended option or its reason has changed since. The frontiers are projections of the same state, and the record stores neither: the alignment frontier is every node with no ruling, every deferred node, and every proposal; the reconciliation frontier is every node whose acting option's instrument fails.
+ 
+```
+
 ### authority
 
 Ratified. The answer redefines what authority is in this record and opens a
@@ -1157,3 +1228,47 @@ Also named: commons.systems/disposition-graph/author-questions, commons.systems/
 Proposed: recording's term survives for the agent: reviewer, or the reading where the act is meant; reader is kept for the parser, which is what read.mjs is. review-cost, what-an-option-row-carries and clean-context-review substitute; author-questions strikes the sentence that leaves the finding to the survey.
 
 Recorded as an option on commons.systems/disposition-graph/review-cost's answer fact: `reader-is-the-parser-and-reviewer-is-the-reading` (source review, 2026-09-07).
+
+### The three markings `words/2026-09-08/36` puts on an option, 2026-09-08
+
+The author's third step replaces the marking of an answer option: where an option
+could be confirmed or AI-recommended, it can now be confirmed by the author,
+selected by the author without being confirmed, or selected by an AI expert. The
+three land differently on this node and the difference is the whole of what the
+recording had to get right.
+
+Confirmed is unchanged and needs nothing. It is the label this node's recommendation
+already defines and already derives from the rulings.
+
+Selected by the author but not confirmed is new vocabulary and not a new mechanism.
+It is a ruling like any other, with a response the record does not yet offer:
+`recording`'s answer gives confirm and edit, and a fourth response is that node's to
+mint. So the marking is derived here in the same way confirmed is, and the amendment
+it requires is named in the option's own content rather than recorded as a second
+option on a node the entry does not otherwise reach. It is not the status
+`viable-not-chosen-as-it-stands`, which is the AI's judgment that a candidate is on
+the table, and it is not `authority`'s proposal, which is a ratified node whose
+recommendation has moved; both of those are things the record says about an option,
+and this is a thing a party did to it.
+
+Selected by an AI expert is the one that changes the design. It cannot be derived,
+because no ruling of the author's stands behind it, so it is the first marking this
+record stores rather than reads off. The rule it appears to cut against is this
+node's own, that a class or a label is derived and no stamp is written beside the
+rulings, and the passed-over option `a-stored-stamp-beside-the-rulings` carries the
+reason in four words, that it is a copy and drifts. The reason does not reach an
+expert's selection, which copies nothing, so the option refines the rule rather than
+contradicting it and no divergence is recorded on the recommendation. What the
+reason does reach, and what the option's divergence records, is staleness: a stored
+selection is a judgment on a text that moves under it, and this option mints no pin
+for it.
+
+Two things the entry touches on this node are recorded elsewhere and are named here
+so the division is visible. The per-expert accumulation of support and divergence is
+`dialogue`'s, under the option `an-option-accumulates-per-expert`, because what this
+answer decides is what an option carries and what that answer decides is where each
+part is written; this node's phrase "the AI's accumulated support for it and
+divergence from it" is not falsified by the entry, since the count of accumulations
+is the sentence `dialogue` carries and this one names the party generically. And the
+tradition an answer fact leaves unexplored is `unreached-traditions`', which is a
+fact-level record and not an option's.

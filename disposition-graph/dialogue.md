@@ -307,6 +307,13 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/32
+        diverges:
+          - words/2026-09-08/36
+      - name: an-option-accumulates-per-expert
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/36
     recommends: probes-are-a-part-that-outlives-the-dialogue
     boldness: moderate
     against: "It takes every surface on which the author checks the AI and makes it something the AI derives — the answer resolved through hunks against another option, the author's own words reached by `supports` and `diverges` references the AI files, the confirmed label computed — and it composes the encoding in force, five clauses folded into it earlier, the per-option content, the ledger, the removal of four sections and a six-key survey block into one row whose bundling the AI chose, so a confirmation confers together what the author examined and what they did not. And the pin it now defines leaves a rival recorded after a reading on the page at the ruling with no reader having set it against the record, and lets the AI move a pin by a status it writes while a rival it records moves nothing."
@@ -3184,6 +3191,70 @@ From: a-pin-covers-what-binds-the-node
  What the instrument holds of that at implementation commit `feaaac1b`, and what it is owed, named here so that the debt is reconciled and not discovered. It holds the two hard pieces: `packages/disposition/patch.mjs`, which parses hunks, applies them strictly with no fuzz and no offset search, and produces them by diffing two resolved texts; and `packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry, and reports the entries no option references. Neither is wired into the reader, and eight things are owed there. The option keys `content`, `supports` and `diverges`, where `OPTION_KEYS` is `name`, `source`, `ref`, `status`, `reason` and `ruling`. The survey block's `commit`, `text`, `findings` and `pairs`, where the survey keys are `date` and `of`. The resolution of an option's content and the cycle check over it, the reader refusing a cycle for `under` alone today. A `depends` entry that closes a loop, refused for `under` and not there. `stands` struck from the fact keys and the confirmed label derived in its place. The four section names struck from the section order, which still lists Disposition, Answer, Rationale and Recommendation. The answer fact and the fact's own reason required from the review stage on, beside the authority fact the reader already requires. And the `####` requirement inverted, since the reader today exempts the option `stands` names from carrying one. What the record owes beside the instrument, measured at graph commit `93644144` over its hundred and fifty nodes: a hundred and five options on answer facts carry no subsection, and every one of them is the option `stands` names, so the exemption and the debt are the same hundred and five; eighty-six facts recommend with no reason recorded, fifty-two of them at the review or the ruling stage; two hundred and four recommend with no case against, sixty-eight of them at those stages; a hundred and thirty-four node files carry a `## Answer` and a `## Rationale`, seventy-four a `## Disposition`, and forty-four a `## Recommendation` fence; and not one node carries a single ruling, so nothing anywhere in this record is confirmed today and every projection that shows a text in the confirmed place is showing the AI's draft.
  
 ```
+#### an-option-accumulates-per-expert
+
+The recommendation with the accumulations counted per party rather than at three. An
+option carries the author's accumulation, the traditions', and one for each expert
+convened on its fact, each stored once in the place that owns it: an expert's on the
+option, in the pair of paragraphs its identity heads, the traditions' projected from
+the readings' `bears` entries, the author's projected from the ledger. Where no
+expert has been convened the one pair is the main thread's own, which is the
+encoding the record already carries.
+
+**AI support.** It is the author's, at `words/2026-09-08/36`, whose third step has
+each option record "accumulated support/divergence from each expert", and whose
+fourth has an expert return its support and divergence per option. The clause it
+amends is the author's own, at `words/2026-09-07/4`: "AI response is accumulated,
+reference to tradition is accumulated, author response is concatenated quotation."
+So this is the author amending the author, and the count of three was never a
+finding of the AI's to defend. The amendment is also small where it looks large. The
+rule the count expressed is not the count: it is one accumulation per party and one
+place per accumulation, which is what keeps a projection from showing the same case
+twice and a session from writing it twice. That rule is untouched, and what changes
+is that the parties are enumerable at run time instead of fixed at three, so the
+existing subsections stand unmodified as the one-party case.
+
+**AI divergence.** It puts an unbounded number of paragraph pairs under a `####`
+subsection, and the record has no bound on how many experts a fact may convene, so a
+node's `## Facts` section grows with the sitting rather than with the question. The
+existing encoding is a fixed shape a reader can hold; this one is a list whose
+length the reader learns by reading it, and the node file is the thing the author
+reads. Against it also stands that the identity heading a pair is a value from
+another node's record, so the validator here can check the shape and not the name:
+`expert-identity` owns what an identity is, and until that node is answered this
+encoding can require a heading and cannot say what a valid one looks like. And the
+support paragraph now carries two things, the accumulated case and the expert's
+choice, where every other part of this encoding carries one; the choice is a
+marking, `viable-options` says what markings an option carries, and a reader may
+hold that it belongs beside the other markings rather than inside a paragraph of
+prose. This option puts it in the prose because that is where the reason for the
+choice already is, and records the objection rather than answering it.
+
+**Content.**
+
+From: probes-are-a-part-that-outlives-the-dialogue
+
+```diff
+@@ -40,7 +40,7 @@
+ 
+ An option on the answer fact is a candidate answer to this node's question, whole or a named change to another, so that a ruling for a change is a ruling for that text with that change. Every option of the answer fact carries its content, so that a projection can render the node as it would stand under any option the author selects, which is what the alignment page's context pane does. It carries it in one of two forms and no third: whole, as a fenced `markdown` block holding the node as it would stand under it, its frontmatter without the dialogue's own keys and without the facts, and its `## Answer`; or as a named change to another option of the same fact, a line naming that option followed by a fenced `diff` block of unified-diff hunks against that option's resolved content. A hunk carries an `@@ -l,s +l,s @@` header, context lines prefixed by one space, removals by `-` and additions by `+`, with three lines of context each side where the text allows; it is applied strictly, at the line its header names, every context and removal line matching byte for byte, with no fuzz and no offset search, so a hunk that does not apply exactly is an error of the record and is never re-anchored. The resolution is acyclic and a cycle is a finding, as it is in `depends`. Hunks are produced by diffing the two resolved texts and never written by hand. Every text is stored once: a ladder of options that each add a clause to the one above stores one text and the clauses, and the difference the prose used to assert is data the projections apply and the validator resolves.
+ 
+-Every option of every fact has that sentence, and the record holds it in one place for each kind of option. An option of the answer or the persistence fact has a `#### <option>` subsection under its fact in `## Facts`, carrying in this order and no other: its sentence, in prose, what it would answer; a paragraph led `**AI support.**` and a paragraph led `**AI divergence.**`, the AI's accumulated support for the option and its accumulated divergence from it, each kept whatever the fact recommends, so that the case for an option the AI declined is not written only by the act of declining it; and, on the answer fact, its content in one of the two forms above. Every option has a subsection, the one the author last confirmed included, since its content is an option's content like any other and no section stands outside the facts to hold it. What the traditions say of an option is not written there: it is the derived inverse of what the readings bear on, as the readings node has it, and the projections show it beside the other two accumulations, headed support or divergence like them. So an option carries three accumulations and no more, and each is stored once in the place that owns it: the AI's on the option, the traditions' on the reading's `bears` entries and projected from them, and the author's own in the ledger and projected through the option's `supports` and `diverges`. An option of the two facts whose options are the record's own vocabulary, `authority` and `topology`, has no subsection at all: its name is a term, and its sentence is the gloss on the node that defines the term. A gloss is the sentence a `defines` entry carries beside its term, written as the term and the gloss together, saying what the term means and so what confirming that choice would mean; it is written once, on the defining node, and read from there, ratified, delegated and deferred on the authority node and keep and prune here. No projection carries a sentence of its own for an option: a sentence that lives only in a projection is a rule no node projects, and the same sentence written again on every node that carries the fact would drift.
++Every option of every fact has that sentence, and the record holds it in one place for each kind of option. An option of the answer or the persistence fact has a `#### <option>` subsection under its fact in `## Facts`, carrying in this order and no other: its sentence, in prose, what it would answer; one pair of paragraphs for each party accumulating on the option, led `**<identity> support.**` and `**<identity> divergence.**` by that party's recorded identity, holding its accumulated support for the option and its accumulated divergence from it, and, where the party is an expert convened on the fact and the option is the one it chose, its choice stated in the support paragraph, each pair kept whatever the fact recommends, so that the case for an option a party declined is not written only by the act of declining it; where no expert has been convened the one pair is the main thread's own, led `**AI support.**` and `**AI divergence.**`, which is this encoding with one party and is why the record's existing subsections need no rewriting to stand under it; and, on the answer fact, its content in one of the two forms above. Every option has a subsection, the one the author last confirmed included, since its content is an option's content like any other and no section stands outside the facts to hold it. What the traditions say of an option is not written there: it is the derived inverse of what the readings bear on, as the readings node has it, and the projections show it beside the others, headed support or divergence like them. So an option carries the author's accumulation, the traditions', and one for each party that has accumulated on it, and each is stored once in the place that owns it: a party's on the option, in the pair of paragraphs its identity heads, the traditions' on the reading's `bears` entries and projected from them, and the author's own in the ledger and projected through the option's `supports` and `diverges`. The count is not fixed because the parties are not: the rule is one accumulation per party and one place per accumulation, and how many there are follows from how many experts the fact convened, which is the expert-identity node's record and not this one's. An option of the two facts whose options are the record's own vocabulary, `authority` and `topology`, has no subsection at all: its name is a term, and its sentence is the gloss on the node that defines the term. A gloss is the sentence a `defines` entry carries beside its term, written as the term and the gloss together, saying what the term means and so what confirming that choice would mean; it is written once, on the defining node, and read from there, ratified, delegated and deferred on the authority node and keep and prune here. No projection carries a sentence of its own for an option: a sentence that lives only in a projection is a rule no node projects, and the same sentence written again on every node that carries the fact would drift.
+ 
+ `## Facts` holds one `###` subsection per fact, in the facts' order, opening with the reason the fact recommends what it does and the boldness of that recommendation, and the `####` subsections of that fact's options beneath it, in the options' order. A recommendation may be recorded at any stage of the dialogue, as the author ruled on 2026-09-04, and is required from the review stage on, since a node cannot be reviewed without one; a recommendation withheld until a stage boundary is a recommendation held in a session, which the first requirement above forbids. The AI may add an option or move a recommendation in alignment, in reconciliation, and in the loop on itself, within the scope its class allows, as the authority, evaluation and work-loop nodes say.
+ 
+@@ -62,7 +62,7 @@
+ 
+ `## Account`, the AI's account in prose: the evidence, the findings, the reasoning behind the recommendation of each fact, the review's findings and its counter-argument with the session's reply, and what is open for the author. It is not a proposal and does not carry that name: a proposal is the state the authority node defines.
+ 
+-The validator holds the parts together. A stage on every node no ruling grants, on every deferred node, and on every node whose recommendation has moved since its ruling, and every part of the dialogue but one, the review, the dependencies and the account, requiring one; the probes requiring none, being the part that outlives the recording, so that a node carrying them carries a stage while a dialogue is live on it and carries none once the recording has removed the stage, and a confirmed node still carrying an open probe is read rather than refused. From the review stage on, facts, with every fact recommending one of its own options, a boldness beside it, and the reason for that recommendation written in the fact's own `###` subsection; and the answer fact and the authority fact wherever a staged node carries facts. On the answer fact from the review stage on, every option carrying its content in one of the two forms, each whole content parsing as a node, answering the same question, and carrying none of the node's own keys nor a `## Facts` section, each named change naming an option of the same fact, the resolution acyclic and resolving through no name no option carries, every hunk applying exactly, and every `supports` and `diverges` reference resolving to an entry of the ledger that exists. The facts' names from the reserved four with the answer first, each option's name unique on its fact and a slug on the answer fact, an answer option carrying its source and its ref, the two vocabulary facts offering only their own vocabulary, a `status` that is `passed` with its `reason` on an option that is neither recommended nor ruled, at most one ruling per fact, and no key naming the confirmed option, that label being derived from the rulings and stored nowhere. The `## Facts` subsections matching the facts in name and order, with one `####` under a per-node fact for every option of that fact, the confirmed one included, and none at all under a vocabulary fact, each `####` carrying its sentence, then its `**AI support.**`, then its `**AI divergence.**`, then, on the answer fact, its content, in that order. The review's four required draft keys together or not at all, with `against` and `commit` optional beside them and the survey block standing alone. A forward verdict at the ruling stage. No `## Answer`, `## Recommendation`, `## Rationale` or `## Disposition` section on any node file. Every `depends` entry resolving to a node that still carries a stage, and to an option on its answer fact where one is named, with no entry that closes a loop. And every reading's `bears` entry resolving to a fact and an option of the node it names.
++The validator holds the parts together. A stage on every node no ruling grants, on every deferred node, and on every node whose recommendation has moved since its ruling, and every part of the dialogue but one, the review, the dependencies and the account, requiring one; the probes requiring none, being the part that outlives the recording, so that a node carrying them carries a stage while a dialogue is live on it and carries none once the recording has removed the stage, and a confirmed node still carrying an open probe is read rather than refused. From the review stage on, facts, with every fact recommending one of its own options, a boldness beside it, and the reason for that recommendation written in the fact's own `###` subsection; and the answer fact and the authority fact wherever a staged node carries facts. On the answer fact from the review stage on, every option carrying its content in one of the two forms, each whole content parsing as a node, answering the same question, and carrying none of the node's own keys nor a `## Facts` section, each named change naming an option of the same fact, the resolution acyclic and resolving through no name no option carries, every hunk applying exactly, and every `supports` and `diverges` reference resolving to an entry of the ledger that exists. The facts' names from the reserved four with the answer first, each option's name unique on its fact and a slug on the answer fact, an answer option carrying its source and its ref, the two vocabulary facts offering only their own vocabulary, a `status` that is `passed` with its `reason` on an option that is neither recommended nor ruled, at most one ruling per fact, and no key naming the confirmed option, that label being derived from the rulings and stored nowhere. The `## Facts` subsections matching the facts in name and order, with one `####` under a per-node fact for every option of that fact, the confirmed one included, and none at all under a vocabulary fact, each `####` carrying its sentence, then its support and divergence paragraphs, one pair per party accumulating on the option and each pair headed by that party's recorded identity, then, on the answer fact, its content, in that order. The review's four required draft keys together or not at all, with `against` and `commit` optional beside them and the survey block standing alone. A forward verdict at the ruling stage. No `## Answer`, `## Recommendation`, `## Rationale` or `## Disposition` section on any node file. Every `depends` entry resolving to a node that still carries a stage, and to an option on its answer fact where one is named, with no entry that closes a loop. And every reading's `bears` entry resolving to a fact and an option of the node it names.
+ 
+ What the instrument holds of that at implementation commit `feaaac1b`, and what it is owed, named here so that the debt is reconciled and not discovered. It holds the two hard pieces: `packages/disposition/patch.mjs`, which parses hunks, applies them strictly with no fuzz and no offset search, and produces them by diffing two resolved texts; and `packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry, and reports the entries no option references. Neither is wired into the reader, and eight things are owed there. The option keys `content`, `supports` and `diverges`, where `OPTION_KEYS` is `name`, `source`, `ref`, `status`, `reason` and `ruling`. The survey block's `commit`, `text`, `findings` and `pairs`, where the survey keys are `date` and `of`. The resolution of an option's content and the cycle check over it, the reader refusing a cycle for `under` alone today. A `depends` entry that closes a loop, refused for `under` and not there. `stands` struck from the fact keys and the confirmed label derived in its place. The four section names struck from the section order, which still lists Disposition, Answer, Rationale and Recommendation. The answer fact and the fact's own reason required from the review stage on, beside the authority fact the reader already requires. And the `####` requirement inverted, since the reader today exempts the option `stands` names from carrying one. What the record owes beside the instrument, measured at graph commit `93644144` over its hundred and fifty nodes: a hundred and five options on answer facts carry no subsection, and every one of them is the option `stands` names, so the exemption and the debt are the same hundred and five; eighty-six facts recommend with no reason recorded, fifty-two of them at the review or the ruling stage; two hundred and four recommend with no case against, sixty-eight of them at those stages; a hundred and thirty-four node files carry a `## Answer` and a `## Rationale`, seventy-four a `## Disposition`, and forty-four a `## Recommendation` fence; and not one node carries a single ruling, so nothing anywhere in this record is confirmed today and every projection that shows a text in the confirmed place is showing the AI's draft.
+ 
+```
+
 ### authority
 
 Ratified. This node fixes what every node in the record carries and what every
@@ -3377,3 +3448,38 @@ part; that was right under the rule the author struck and is false once a probe 
 the recording that removes the stage. Its content was a migration stub carrying no
 amended enumeration, so nothing of it is lost. Two live options for one change on one
 fact would be the variance in encoding the author's words of the same day were about.
+
+### The accumulations counted per party, 2026-09-08
+
+The recommended option says an option "carries three accumulations and no more".
+`words/2026-09-08/36` has each option record "accumulated support/divergence from
+each expert", so the clause is falsified in its own words and the divergence is
+recorded on the option that carries it.
+
+The divergence names `words/2026-09-07/4` as well, and the reference matters to how
+the reader should take it. The count of three is the author's own enumeration from
+that entry -- "AI response is accumulated, reference to tradition is accumulated,
+author response is concatenated quotation" -- so this is the author amending the
+author and not the record correcting a reading of them. The AI has nothing to defend
+here and did not weigh a fourth accumulation and reject it; the count was
+transcribed from the words and the words have moved.
+
+`an-option-accumulates-per-expert` is what the answer would be with the count
+replaced by the rule the count expressed. That rule is one accumulation per party
+and one place per accumulation, and it is what keeps a projection from showing the
+same case twice and a session from writing it twice; nothing in the amendment
+touches it. What changes is the arity: the parties are enumerable when the sitting
+runs rather than fixed when the encoding was written. The subsections the record
+already carries stand as the one-party case, so nothing in the graph must be
+rewritten for the option to be ruled.
+
+Three things the amendment leaves open, recorded because the option cannot close
+them from here. The heading is a party's recorded identity, and what an identity is
+belongs to `expert-identity`, so the validator can require a heading and cannot yet
+say what a valid one looks like. There is no bound on how many experts a fact may
+convene, so a `####` subsection grows with the sitting; whether that wants a bound
+is a question about how many experts a fact should have and not about this encoding.
+And the expert's choice is carried in the support paragraph, which puts a marking
+inside prose; `viable-options` carries the markings under
+`an-option-carries-a-selection-per-party`, and where the choice is finally written
+is a seam between the two nodes that a ruling on either will have to settle.
