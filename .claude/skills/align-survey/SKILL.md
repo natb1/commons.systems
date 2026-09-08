@@ -219,19 +219,27 @@ recommended answer names unsupported implementation until the author rules on
 reader of the skill sees it. Never a fork: a forked
 context carries the session's framing and is not clean. The prompt: "Read and
 follow `<the brief the previous step wrote>` exactly; you are a clean-context
-reviewer with no context but the record; read the brief in the fewest pieces
-your tool allows — the Read tool takes up to 2,000 lines per call — and never
-skim past what does not fit; every finding you write quotes the locus it
+reviewer with no context but the record; read the brief and nothing else —
+it carries everything you judge, and it says so — in pieces of no more than
+600 lines per Read call, from its first line to its last, and never skim
+past what does not fit; every finding you write quotes the locus it
 bears on verbatim, the sentence or clause exactly as it stands in the file, so
 it can be verified by search; never run state-changing git; write
 only the output file the brief names."
 
 Read the result's conclusion, never its transcript. A reader that fails is
 relaunched once with the same brief; a second failure is reported and every
-node stays at its stage. This brief is the whole graph and is long: when
-`brief.mjs` warns that it may exceed what one reader holds, ask the reader to
-report what it could not read, and treat an unread part as a gap in the
-reading rather than as a finding of nothing.
+node stays at its stage. A brief the reader cannot hold is a defect of the
+brief and not of the reader (`review-cost`): the cure is narrowing what the
+brief carries or points to, never a reader that holds more. What the brief
+points to counts toward what the reader holds — on 2026-09-07 a brief of
+680 KB told its reader to open thirteen node files whole, 1.28 MB the brief
+already carried by what each answers, and the reader's context overflowed
+before it wrote a finding; the template now carries every node by its answer
+and tells the reader to open no file whole. When `brief.mjs` warns that the
+brief may exceed what one reader holds, ask the reader to report what it
+could not read, and treat an unread part as a gap in the reading rather than
+as a finding of nothing.
 
 ## 4. Validate, then apply
 

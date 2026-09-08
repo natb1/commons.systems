@@ -758,6 +758,14 @@ describe("renderNeighbourNode: the answer in both encodings", () => {
 
 // -------------------------------------------------------- the survey
 
+test("the survey template no longer tells the reader to read thirteen node files whole; it says the brief is the whole of what they read", async () => {
+  const template = await readFile(path.join(HERE, "brief-survey.md"), "utf8");
+  assert.ok(!template.includes("Read first, in full"),
+    "the paragraph that doubled what the reader had to hold, and overflowed a reader on 2026-09-07, is gone");
+  assert.ok(template.includes("This brief is the whole of what you read"),
+    "its replacement bounds the reader to the brief itself");
+});
+
 describe("writeSurveyBrief", () => {
   test("the judged set is surveyJudges, whole, in the ruling order; its neighbourhood is lean; everything else is one line; no account anywhere", async () => {
     const rootDir = await freshFrontierFixture("survey-ok-");
