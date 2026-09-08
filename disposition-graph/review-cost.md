@@ -312,6 +312,10 @@ depends:
   - commons.systems/disposition-graph/frontier-consistency#split-survey-from-per-draft
   - commons.systems/disposition-graph/dialogue
   - commons.systems/disposition-graph/survey-selection#candidate-pairs-with-their-nominating-key
+instrument:
+  kind: check
+  ref: "`packages/clean-context-review/brief.mjs` writes what a reading is given: the node under review whole, its neighbourhood by what each neighbour answers, and everything that grows with the record as one line each; the fragment `brief-bounds.md` states the one reading discipline, and `brief.test.mjs` pins the bound"
+  note: "what a reading costs is measured by no telemetry; the briefs' sizes on disk, recorded in the account, are the evidence"
 ---
 
 ## Facts

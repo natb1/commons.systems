@@ -139,6 +139,10 @@ depends:
   - commons.systems/disposition-graph/review-cost#one-answer-a-node-and-one-read
   - commons.systems/disposition-graph/unconfirmed-accumulation#the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed
   - commons.systems/disposition-graph/dialogue#the-survey-block-carries-what-the-next-survey-selects-on
+instrument:
+  kind: check
+  ref: "`packages/disposition/tier.mjs` is the mechanical tier; `packages/clean-context-review/brief.mjs --survey` selects the judged set on the pins, draws the neighbourhood from the candidate pairs and freezes on the read pins in `tmp/review/survey.pins.json`; `apply.mjs` writes every pin"
+  note: "which of the tier's checks refuse a launch and which are reported beside it is the option of 2026-09-08 on this node, applied in the reconciliation of that day"
 ---
 
 ## Facts

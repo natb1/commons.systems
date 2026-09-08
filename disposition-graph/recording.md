@@ -572,6 +572,9 @@ defines:
   - kickback
   - steelman
   - substance
+instrument:
+  kind: check
+  ref: "`packages/clean-context-review/apply.mjs` classifies a reading's verdict and records it on the node, a forward or a kickback typed to its movement, with the reading's account entry and the pin of what it read"
 ---
 
 ## Facts

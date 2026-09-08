@@ -567,6 +567,10 @@ depends:
 form: rule
 under:
   - commons.systems/disposition-graph/recording
+instrument:
+  kind: check
+  ref: "`packages/clean-context-review/brief.mjs` writes the draft, delta and survey briefs from `brief-draft.md`, `brief-delta.md`, `brief-survey.md` and the fragments `brief-bounds.md` and `brief-record.md`; `apply.mjs` applies a reading's findings; the skills `align-review` and `align-survey` launch the readings"
+  note: "the two skills are declared shims and are hand-written until the projector writes them"
 ---
 
 ## Facts

@@ -366,6 +366,10 @@ depends:
   - commons.systems/disposition-graph/review-cost#one-answer-a-node-and-one-read
   - commons.systems/disposition-graph/dialogue#the-survey-block-carries-what-the-next-survey-selects-on
   - commons.systems/disposition-graph/survey-selection#candidate-pairs-with-their-nominating-key
+instrument:
+  kind: check
+  ref: "`packages/clean-context-review/brief.mjs --survey` quotes the sixteen validations into the survey's brief from this node's text, and `apply.mjs` records each frontier finding on every node it names"
+  note: "the validations are run by a reader and not by code; what code checks is that the brief carries them as they stand"
 ---
 
 ## Facts

@@ -466,6 +466,10 @@ defines:
 depends:
   - commons.systems/disposition-graph/viable-options
   - commons.systems/disposition-graph/traditions-home
+instrument:
+  kind: check
+  ref: "`packages/disposition/read.mjs` parses a reading's `form: reading`, its `source` and its `bears`, and rejects a reading whose `bears` names no fact or option of the node it is under"
+  note: "the relation a reading records is checked for shape and not for truth"
 ---
 
 ## Facts
