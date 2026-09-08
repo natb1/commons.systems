@@ -93,6 +93,11 @@ facts:
           - words/2026-09-04/21
           - words/2026-09-04/30
           - words/2026-09-04/31
+      - name: an-alignment-input-decomposes-into-facts
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/36
     recommends: interim-follows-the-authors-word
     boldness: moderate
     against: "Four of the five paragraphs of the recommended answer are the AI's own: the three tests put to the response, the independence test, the two refusals and the tie-break were drawn in one sitting from the failure the author named and are not yet worn by use, and the survival test asks the recorder to predict whether a response will be needed later, which is a judgment about the future of the record and not a fact a reading can check today. On the clause that moved, sending the prune to a node of its own does not answer the case against the delegation, it only moves where the author rules on it: the power at issue is deletion, which `class-recommendation` names irreversible, conferred on the party that also finds the node redundant; the bound `may not prune something that is ratified` excludes nothing in the record as it stands, no option on any node carrying a ruling; and the second bound, that anything of the author's be transferred first, is checked by the same session that wants the file gone. The delegation is still a forward reference, acting only when `commons.systems/disposition-graph/graph-topology`'s authority fact is ruled, so what the author confirms here about the standing rule is where it will be answered and not what it says. And the interim is now the one part of this answer that acts today: it hands an untested discriminator a deletion before the node that would confer the power has been ruled, and which of the author's words reached a particular prune is read by the same session that wants the file gone, with nothing but that session's account to check it."
@@ -525,6 +530,58 @@ Two things the tests refuse to rest on. Whether the author has spoken: a probe a
 Mixed cases resolve upward, and doubt resolves downward. A question whose response would both move this node's recommendation and stand is a node, because a node can carry both and a probe neither; it is entered in `depends` and the recommendation here waits on it. A question the recorder cannot classify is recorded as a probe, because that is the reversible error: a probe whose answer arrives and turns out to need to stand is promoted to a node then, with the author's words in hand to found it, whereas a node, once minted, stands until it is pruned, and while it stands it puts rulable rows on the alignment page and asks the author for a ruling where an answer was wanted. This is the opposite of the asymmetry the reverse sweep of 2026-09-04 worked under, which favoured keeping a node, and both are right: that sweep reviewed nodes already standing, where the expensive error is destroying a question the author may have asked for, and this rule governs the recording of new ones, where the expensive error is minting.
 ```
 
+#### an-alignment-input-decomposes-into-facts
+
+An alignment input is an answer and not an open question, so it takes a fourth route
+the four tests do not govern: it is decomposed into the disposition facts it bears
+on, and lands on each as a reference to the ledger entry that holds the author's
+words. The questions such an input raises still go through the four tests.
+
+**AI support.** The rule as it stands is written for an open question found in a
+movement, and all four of its tests are put to what the author's response would do,
+so an input that is itself a response gives them nothing to test. Reading such an
+input as a question is what produces the error the addition prevents: an input that
+bears on six facts gets recorded as one probe or one node, and five of the six never
+learn of it. Naming the fact as the fourth home states what the record already does,
+every option's `supports` list being an input landed on a fact, and what the addition
+supplies is the rule that says so, which is what a later sitting can be held to. The
+three homes lose nothing, since the questions an input raises still run the tests.
+
+**AI divergence.** This node asks when an open question is a probe, an option, or a
+node, and the option answers a question the node did not ask, which is the shape the
+record elsewhere calls a node of its own. A reader could hold that how an alignment
+input decomposes belongs under `recording`, or under a node beneath `movements`, and
+that what belongs here is at most the one sentence saying the tests do not run on an
+input. It was written here because the sentence about three homes is here and would
+otherwise stand unqualified, and that is a reason about where a claim already sits
+rather than about where the answer belongs. The placement goes to the author with the
+option.
+
+**Content.**
+
+From: interim-follows-the-authors-word
+
+```diff
+@@ -6,7 +6,7 @@
+ ---
+ ## Answer
+ 
+-By what the author's response would do once it is given, and never by how the question is worded, since any question can be worded either way and the wording is the asker's to choose. An open question found in any movement has three homes in the record and this rule sends it to one of them. It is an option where the AI holds a candidate answer to this node's question viable, whether or not it recommends that candidate: the record's home for a candidate is the fact it answers, and a question the AI could answer is not a question for the author. It is a probe where the AI holds no candidate it can recommend among without knowing something about what the author intends, and where the author's response, once given, would be consumed whole by moving a recommendation on this node: the response is quoted under `## Disposition`, the recommendation moves, and nothing afterwards needs to read the response rather than the recommendation it moved. It is a node where the response would have to stand: be enforced by the record after it is given, be cited by another node, project a rule, ground work, be read by a session that never saw the question, or be delegated or deferred. A response that must stand is a disposition, and the record has exactly one shape for a disposition, a question with its standing answer, its facts, and the ruling that gives it a class; a probe carries none of that, so wherever the response would need any of it the question is a node, minted where its question belongs under the record's own placement rule, which is what it refines, and entered in the blocked node's `depends`, since `depends` is what records the blocking and `under` what a node refines; the parent's third limb is amended with it.
++By what the author's response would do once it is given, and never by how the question is worded, since any question can be worded either way and the wording is the asker's to choose. An open question found in any movement has three homes in the record and this rule sends it to one of them; an alignment input, being an answer and not a question, has a fourth, and the paragraph after the four tests says which and why the tests do not run on it. It is an option where the AI holds a candidate answer to this node's question viable, whether or not it recommends that candidate: the record's home for a candidate is the fact it answers, and a question the AI could answer is not a question for the author. It is a probe where the AI holds no candidate it can recommend among without knowing something about what the author intends, and where the author's response, once given, would be consumed whole by moving a recommendation on this node: the response is quoted under `## Disposition`, the recommendation moves, and nothing afterwards needs to read the response rather than the recommendation it moved. It is a node where the response would have to stand: be enforced by the record after it is given, be cited by another node, project a rule, ground work, be read by a session that never saw the question, or be delegated or deferred. A response that must stand is a disposition, and the record has exactly one shape for a disposition, a question with its standing answer, its facts, and the ruling that gives it a class; a probe carries none of that, so wherever the response would need any of it the question is a node, minted where its question belongs under the record's own placement rule, which is what it refines, and entered in the blocked node's `depends`, since `depends` is what records the blocking and `under` what a node refines; the parent's third limb is amended with it.
+ 
+ Four tests apply the rule, each put to the response and not to the question, and each with something a reading can check against the record; the first that settles the matter settles it.
+ 
+@@ -18,6 +18,8 @@
+ 
+ The independence test, which runs the other way and catches the opposite miss. A node whose only possible answer is a reading of its parent's answer, whose facts would repeat the parent's, and which would be pruned the moment the parent's recommendation moved is a probe on the parent and not a child of it: its question can be put as "on the parent, which did you intend", and that is a probe's question. Such a node found at recording is re-encoded on the parent, as a probe, or as an option on the parent's fact where the AI holds its answer viable, with `source` naming the node it was; its account folds into the parent's, any words of the author's on it move to the parent's `## Disposition`, and its options are struck, since options that were never candidates are the costumed options the author classified on 2026-09-04 on the review node. A node already standing is re-encoded on the parent the same way but is not struck by the recorder: the survivor is recorded on the parent, the account folds into it, the author's words move with it, and the reason the question was closed is written down before the file goes. Who then takes the prune is not this node's to say, and this node does not confer it: the prune of a standing node is taken under the author's delegation of graph topology, which is recorded on `commons.systems/disposition-graph/graph-topology` and acts only when that node's authority fact is ruled `delegated`; until then a prune of a node no ruling reaches that the author has directed in their own words is taken on that word wherever it was given, in the dialogue or at the node's row, on the author's words of 2026-09-06 that the prune grant is standard disposition, a standing direction about a class of act rather than a grant given case by case; that such a direction acts by right is what the what-acts-during-bootstrap node's option `a-standing-direction-acts-by-right` records against that node's own definition of a grant, which reaches one named reconciliation and no class, so the interim rests on the author's words and on nothing that node confers until the option is ruled, and where no such word has been given the node's topology fact moves to `prune` with this test as its reason and the row asks the author. A ratified node's prune is asked at the row in either period. The test does not reach a reading: a reading's answer is a standing relation between a tradition and the node above it, which stands by construction.
+ 
++The fourth home is the fact, and it is reached by decomposition rather than by the four tests. An alignment input is the author's answer given without a question having been put to them: it arrives through `/align <disposition>`, or as a response in a live sitting that says more than the probe asked, and it is not an open question at all, so there is nothing in it for the tests to classify. What is done with it instead is that it is read for the disposition facts it bears on, and on each of them it lands as a reference to the ledger entry holding the author's words, carried in an option's `supports` or `diverges` where it bears on an option and written into the fact's own prose where it bears on the fact as a whole; one input reaches as many facts as it bears on, and the same entry is referenced from each of them rather than copied. An input that bears on no fact bears on the sitting alone and stays in the store, which is `session-state`'s rule and not this one's. Where the decomposition finds a question the record does not hold, and an answer to a question nobody asked usually carries one, the four tests run on that question in the ordinary way. So the fourth home does not displace the three: it is where an answer goes, and the three are where a question goes.
++
+ Two things the tests refuse to rest on. Whether the author has spoken: a probe asks what the author intends, and most of this record was minted without quoting them, so the absence of the author's words is not evidence that no disposition stands behind a node, and their presence is not evidence that a question is a probe; where the author has said nothing, the tests still run on what a response would do. And the question's wording: "what should this be" and "what did you mean by this" are each rewritable as the other, so wording is a tell and never the test, and the parent's line between a question of the record and a probe is read through this rule.
+ 
+ Mixed cases resolve upward, and doubt resolves downward. A question whose response would both move this node's recommendation and stand is a node, because a node can carry both and a probe neither; it is entered in `depends` and the recommendation here waits on it. A question the recorder cannot classify is recorded as a probe, because that is the reversible error: a probe whose answer arrives and turns out to need to stand is promoted to a node then, with the author's words in hand to found it, whereas a node, once minted, stands until it is pruned, and while it stands it puts rulable rows on the alignment page and asks the author for a ruling where an answer was wanted. This is the opposite of the asymmetry the reverse sweep of 2026-09-04 worked under, which favoured keeping a node, and both are right: that sweep reviewed nodes already standing, where the expensive error is destroying a question the author may have asked for, and this rule governs the recording of new ones, where the expensive error is minting.
+```
+
 ### authority
 
 `ratified` is recommended on two of the three limbs `commons.systems/disposition-graph/class-recommendation` names, and either would carry it. Capture-shaped: the rule decides what the author is asked to rule on and what they are merely asked, so the party that would set it is the party it exists to check, and a recorder that may classify its own questions decides its own accountability. Irreversible: since 2026-09-07 the independence test's remedy reaches a deletion — "Irreversible means it is not paid back at all: a deletion, a swap, a landing that other work is built on" — and while the delegation that takes that deletion is now recorded on `commons.systems/disposition-graph/graph-topology`, the test that fires it is this node's, so a wrong test here is not paid back either. That is what makes a wrong ruling on this node unrecoverable rather than merely expensive, and it is the limb the reading of 2026-09-07 found missing. Boldness low: the escalation is the record's own test applied to a rule whose subject-matter is what the author sees, and the author may still hold the four tests to be operating detail under the parent's ratification and delegate them with it.
@@ -615,3 +672,19 @@ dialogue's standing answer: 'The author\'s words are not a section of the node. 
 Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/transience.
 
 Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.
+
+### The fourth home, 2026-09-08
+
+The option `an-alignment-input-decomposes-into-facts` was recorded in the alignment
+sitting of 2026-09-08 under the grant at `words/2026-09-08/2` as refined at
+`words/2026-09-08/22`, from steps 1 and 3 of `words/2026-09-08/36`. No recommendation
+was moved: the author gave the seven steps as an option emerging from the dialogue and
+not as a settled answer. The option's own divergence carries the placement question,
+whether this belongs here or under `recording`, and the author is asked it with the
+option rather than after it.
+
+One defect on the recommended option was found and not repaired. `interim-follows-the-authors-word`
+still says a probe's response "is quoted under `## Disposition`", a section the content
+encoding removed in the migration of 2026-09-07; the repair moves a recommendation,
+and entry 36 gave the AI no warrant to move one, so the defect is on this sitting's
+residue and named here rather than fixed.

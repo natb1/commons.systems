@@ -187,6 +187,11 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "the author's refinement of 2026-09-08 admits to the ledger only what bears on a disposition fact, so a ledger that takes everything is the position that refinement left"
+      - name: the-store-is-written-verbatim-and-holds-the-sequencing
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/36
     recommends: a-compaction-store-the-ai-shapes
     boldness: low
     against: "The answer records a requirement and delegates the mechanism, which is what the author asked for and is also the shape in which a rule can be satisfied by nothing in particular. Compaction survival is not observable from inside the sitting that needs it: a store the AI judged adequate and that turns out not to have survived is discovered by a session that no longer has the thing it would have compared against, so the delegation hands the AI a choice whose failure it is structurally unable to see. The displaced option was worse in its reason and better in this one respect, that a fixed path is checkable by anyone at any time. What would close the gap is a test the sitting can run rather than a mechanism the rule names, and the record does not have one."
@@ -576,6 +581,75 @@ From: a-file-a-global-rule-fixes
  sitting resolves that the words bear on a disposition fact, they are entered in the
 ```
 
+#### the-store-is-written-verbatim-and-holds-the-sequencing
+
+The author's words go to the store verbatim, whatever their relation to a disposition
+fact turns out to be, and the sitting's re-evaluated alignment sequencing is among the
+working state the store holds.
+
+**AI support.** Both additions are the author's own at `words/2026-09-08/36`, steps 2
+and 3, and both follow from what this answer already requires rather than adding
+weight to it. Verbatim follows from the store being write-through: what waits is the
+resolution and never the writing, and a reading written in place of the words has
+resolved something the sitting said it had not, so the copy that reaches the ledger
+would be the sitting's and not the author's. The sequencing follows from the store's
+own definition of working state as what does not outlive the sitting: a sitting that
+re-orders what it will take up has produced exactly such a thing, and of the two
+places it could go, this one and the ref, the ref is closed to it because nothing
+rules on it.
+
+**AI divergence.** Writing the sequencing down is a stored view, and this record's
+answer on `event-sourcing-derived-view` holds that a view is never stored, a second
+implementation of the fold being a second truth; `--frontier` already derives the
+ruling order from the graph, and an ordering held beside it is the second
+implementation that answer refuses. This node's own probe already names that tension
+and the option does not resolve it. What is said for the option is that the sequencing
+is not a fold of the ref at all, being the sitting's departure from the derived order
+under input the ref does not yet hold, so there is nothing for it to be a stale copy
+of. What is said against it is that the departure becomes a copy the moment the input
+lands, and nothing here strikes it then.
+
+**Content.**
+
+From: a-compaction-store-the-ai-shapes
+
+```diff
+@@ -17,9 +17,11 @@
+ must cross no other. It does not reach another session or another sitting, so it does
+ not cross a network, so it has no business in version control; a local memory or a
+ local temporary file is enough. What the store holds is what the sitting has not yet
+-been able to put in the record: the author's words whose relation to a disposition
+-fact is unresolved, and the sitting's own working state. Nothing in it has any
+-authority, it is not on the disposition ref, and it does not outlive the sitting.
++been able to put in the record: the author's words, written verbatim the turn they
++are said and whatever their relation to a disposition fact turns out to be, and the
++sitting's own working state, of which the sitting's alignment sequencing is one part.
++Nothing in it has any authority, it is not on the disposition ref, and it does not
++outlive the sitting.
+ 
+ The mechanism is the AI's to choose, and different state may be held by different
+ tools or in different files as the AI judges best. What this rule fixes is the
+@@ -42,6 +44,18 @@
+ word. Quotations may also be kept in other stores for other reasons, by rule or by
+ the AI's judgement; the ledger's rule governs the ledger.
+ 
++Two of the things the store holds are named because the record depends on their being
++there. The author's words are written verbatim: the store holds the record's one copy
++of them until the ledger takes it, and a paraphrase cannot be promoted, since what the
++ledger keeps is the words and not the sitting's reading of them. And the sitting's
++alignment sequencing is working state like any other. A sitting re-evaluates what it
++will take up next each time alignment input arrives, and that ordering is the
++sitting's own: nothing rules on it, it binds no later sitting, and it dies with this
++one, so it is held here and not on the ref. It is not a second copy of the record's
++order. `alignment-order`'s rank is derived from the graph by `--frontier` and stays
++derived; what the store holds is this sitting's departure from that order under the
++input in hand.
++
+ A word leaves the store in one of two directions and never sits there. Where the
+ sitting resolves that the words bear on a disposition fact, they are entered in the
+ ledger and the store's copy is struck, which is the graduation the quotes node's
+```
+
 ### authority
 
 Delegated, on the author's words of 2026-09-08, which say in terms that "session
@@ -725,3 +799,24 @@ would claim the author's words back a recommendation the record has not yet made
 Fourteen entries from the sittings of 2026-09-02 and 2026-09-03 stand unreferenced
 too, so the pattern is the record's and not this day's, and whether the validator's
 rule should except a grant is a question this node does not own.
+
+### The verbatim copy and the sequencing, 2026-09-08
+
+The option `the-store-is-written-verbatim-and-holds-the-sequencing` was recorded in
+the alignment sitting of 2026-09-08 under the grant at `words/2026-09-08/2` as refined
+at `words/2026-09-08/22`, from steps 2 and 3 of `words/2026-09-08/36`. No
+recommendation was moved: the author gave the seven steps as an option emerging from
+the dialogue and not as a settled answer.
+
+The decomposition of that entry named `a-file-a-global-rule-fixes` as the option the
+named change should be written against. This fact recommends
+`a-compaction-store-the-ai-shapes`, and the recommended option is what was used, so
+that a reader compares the addition against the answer the record currently proposes
+and against the text `.claude/rules/session-state.md` projects. The discrepancy is
+written down because it is the third of its kind in this sitting, after a summary
+count that disagreed with its own enumeration and an omission from a unit's list, and
+the three together are the sitting's standing finding: a count or a name written by
+hand into a unit's report should be derived from the record instead.
+
+This node is `tier: global`. Recording an option stales no rule projection, since the
+rule file follows the option the answer fact recommends and that did not change.

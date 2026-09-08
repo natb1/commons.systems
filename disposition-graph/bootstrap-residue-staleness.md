@@ -63,3 +63,26 @@ what a pin attests to. The implementation the criteria point to is
 `packages/disposition/accumulate.mjs` and the hashing in
 `packages/disposition/read.mjs`. The instance is this sitting's own residue
 list, which is where the author found the problem.
+
+### What entry 36 widens, 2026-09-08
+
+Step 6 of `words/2026-09-08/36` bears on this node's question and supplies nothing
+that answers it, so it is recorded here and no fact is minted. The step gives the
+main thread a judgment about whether the grounding between the author and the
+experts suffices for reconciliation, and adds: "else, tracked as residue". That
+makes residue the complement of a judgment. Under the account above, a residual is
+something the sitting noticed and could not reconcile, one item at a time; under
+step 6 everything beneath a node the judgment did not clear is residue at once,
+whether or not the sitting looked at any of it individually.
+
+The class grows and the staleness hazard grows with it. A residual entered as the
+complement of a judgment carries no record of which text it was written against,
+there having been no act of noticing to date it, so the pin machinery the periagogic
+object names has nothing on such an entry to compare a later text with. The step adds
+no guard, and the author's constraint that the guard be cheap now has to hold over a
+larger and less individuated set.
+
+Nothing is proposed. The node stays at the periagogic stage with its object unread,
+and this section widens the problem statement rather than answering it. Recorded in
+the alignment sitting of 2026-09-08 under the grant at `words/2026-09-08/2` as
+refined at `words/2026-09-08/22`.

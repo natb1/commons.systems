@@ -9,6 +9,12 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/35
+      - name: unreached-tradition-is-recorded-on-the-answer-fact
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/35
+          - words/2026-09-08/36
     recommends: named-on-the-ref-and-resumed
     boldness: low
   - name: authority
@@ -85,6 +91,68 @@ under:
 A tradition an expert could not reach is recorded on the ref, named and with what
 stopped the reading, and stays there to be resumed in a later round of probing and
 dialogue with the experts.
+```
+
+#### unreached-tradition-is-recorded-on-the-answer-fact
+
+The tradition is written on the answer fact of the node it was to be read against,
+named, with what it was expected to bear on, what stopped the reading, and the
+expert that could not reach it. The fact is the locus because an unreached tradition
+bears on no option, and the expert's return is the source because no other party can
+say what it did not open.
+
+**AI support.** The author's words at `words/2026-09-08/35` fix that such a tradition
+is recorded and that it is resumed, and leave where it is written open; this option
+answers that and nothing more. The answer fact is where the option list lives, so it
+is the smallest place in the record that holds every option the tradition might have
+borne on without asserting that it bore on any of them, and it is already the unit
+the record uses for everything else about a question's alternatives. Naming the
+expert follows `words/2026-09-08/36`, which makes an expert an identified party whose
+support and divergence the record keeps per option: an unreached tradition is that
+same party's account of what it could not do, and an account with no author cannot be
+resumed by asking anyone.
+
+**AI divergence.** A fact accumulates unreached traditions with every round and this
+option fixes no bound on the list, so a long-lived node grows a section whose entries
+may have been reached since, by another expert or another sitting, with nothing here
+striking them. The strike belongs with the reading that resolves the absence, and
+`readings` says how a reading is recorded and not how one retires an entry standing
+elsewhere; the option does not mint that rule and the gap is named rather than
+closed. And the locus is the fact the tradition was to be read against, so a
+tradition unreached against three questions is written three times. That is faithful
+to what each expert reported and it is not a list of the traditions this record has
+not read, which is a different object and one no fact can hold.
+
+**Content.**
+
+From: named-on-the-ref-and-resumed
+
+```diff
+@@ -7,6 +7,21 @@
+ 
+ ## Answer
+ 
+-A tradition an expert could not reach is recorded on the ref, named and with what
+-stopped the reading, and stays there to be resumed in a later round of probing and
+-dialogue with the experts.
++A tradition an expert could not reach is recorded on the answer fact of the
++disposition it was to be read against, named, with what it was expected to bear on,
++what stopped the reading, and the expert that could not reach it, and it stays there
++to be resumed in a later round of probing and dialogue with the experts.
++
++The locus is the fact and not an option, because an unreached tradition bears on no
++option. A relation to an option is what a reading finds, and a reading is what the
++budget stopped, so writing the tradition beside an option would assert the very
++relation the absence consists of. The fact is the smallest thing the record holds
++that the tradition was to be read against, the expert having been convened on the
++question and not on one answer to it, and it is where the next round's expert will
++look, the fact being what it is convened on in turn.
++
++The source is the expert's return. An unreached tradition has no other author: the
++only party that can say what it did not open is the party that was reading, so the
++record takes the naming from the expert's report and the main thread writes it onto
++the fact, as it writes every other conclusion a unit returns. Nothing derives the
++list and nothing can, an absence not being computable from what is present.
 ```
 
 ### authority
@@ -323,3 +391,22 @@ node's own confirmation. That is the same shape as the probe question settled on
 `recording` the same day, and it is the first thing the design owes when this node
 leaves the periagogic stage: the tracked set needs a home that survives a recording,
 and the account is not one.
+
+### The locus named, 2026-09-08
+
+The option `unreached-tradition-is-recorded-on-the-answer-fact` was recorded in the
+alignment sitting of 2026-09-08, under the grant at `words/2026-09-08/2` as refined
+at `words/2026-09-08/22`, from the author's words at `words/2026-09-08/35` and
+`words/2026-09-08/36` read together. Entry 35 said that an unreached tradition is
+recorded on the ref and resumed, and the option already standing carries that; what
+35 left open is where on the ref, and entry 36 supplies the other half, the
+identified expert who is the party the record names beside the gap.
+
+No recommendation was moved. The author gave the seven steps of entry 36 as an
+option emerging from the dialogue and not as a settled answer, so nothing in this
+sitting's reading of it moves a mark. The asymmetry between the two options is left
+standing and named: `named-on-the-ref-and-resumed` carries the placeholder support
+and divergence that say the record's case for it is owed, and this one carries a
+written case, which makes the newer option look better argued than the recommended
+one for a reason that is about what has been written and not about what is right.
+The owed case is this node's, and it is on the sitting's residue.

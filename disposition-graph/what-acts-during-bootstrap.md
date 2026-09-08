@@ -39,6 +39,11 @@ facts:
         ref: "2026-09-05"
         supports:
           - words/2026-09-04/44
+      - name: reconciliation-runs-on-a-judgment-of-sufficient-grounding
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/36
     recommends: shim-and-grant
     boldness: high
     against: "Every rule file under `.claude/rules/` that a session loads, this node's own projection among them, is the projection of a node no ruling reaches, and the `session-context` node declares a shim on `CLAUDE.md` and on `.claude/settings.json` and on neither the rules projection nor this file, so this answer says the doctrine the record is running on today acts on nothing, and says it in a file that binds every session while saying it. It leaves a session no account at all of what those files bind it to, and the option that would give one is `projected-doctrine-acts`."
@@ -534,6 +539,77 @@ From: shim-and-grant
  
 ```
 
+#### reconciliation-runs-on-a-judgment-of-sufficient-grounding
+
+What licenses the grant's run-on is the main thread's judgment that the grounding
+between the author and the experts convened on a node suffices for reconciliation,
+and not the sitting's having run the three movements on it. The movements are
+evidence for the judgment and not the condition, and what the judgment does not
+clear is tracked as the sitting's reconciliation residue.
+
+**AI support.** The clause this changes is the AI's own, written into the recommended
+text when the grant's run-on was reconciled, and step 6 of `words/2026-09-08/36` is
+the author speaking on it directly. What it changes is not a loosening. Under the
+recommended text a node that has run its three movements is reconcilable whatever
+stands unanswered on it, an expert's divergence or a probe to the author, and a node
+that has not run all three is not reconcilable however plain the grounding on the
+narrow point at issue; both are wrong in the same way, reading a procedure as a proxy
+for the state it was meant to produce. Making the state the condition and the
+procedure its evidence is what the author's step does, and it is what this record
+already does with the author's own confirmation, which `round-termination` makes an
+asserted judgment and not a computed one. The residue clause is what makes the
+judgment safe to give an AI at all: a judgment that can license only work, and that
+must name what it declined to license, leaves an account behind it where a silent
+deferral leaves none.
+
+**AI divergence.** A condition anyone can check is replaced by a judgment only the
+judging party can check, and the judging party is the AI. The three movements are
+visible in the record; that the grounding between the author and the experts suffices
+is visible nowhere, and the residue list is the AI's own account of what it declined,
+which records the judgments it chose to withhold and is no check on one it made too
+freely. `class-recommendation` calls that shape capture-shaped, and this node's own
+answer holds that a class the AI writes for itself is not a grant. What the option
+offers against that is only that the judgment licenses no confirmation and leaves the
+author's ruling untouched. It offers nothing by which the author could see, after the
+fact, that a reconciliation ran on grounding that was not there; the record has no
+such instrument, and this option mints none.
+
+**Content.**
+
+From: shim-and-grant
+
+```diff
+@@ -28,10 +28,24 @@
+ sitting, as the authority node says; the grant is what the author's words call
+ bootstrap authority, and the two names are one thing. Within the sitting it
+ grants two things the narrower clause withheld. It runs on rather than once:
+-once the sitting has established baseline grounding on a node through the
+-periagogic, maieutic and review movements, reconciliation executes as the AI's
+-recommendations evolve, and what is reconciled is applied to the sitting in hand
+-rather than held for the next. And it turns the sitting back on itself:
++where the main thread judges that the grounding between the author and the
++experts convened on a node suffices for reconciliation, reconciliation executes
++as the AI's recommendations evolve, and what is reconciled is applied to the
++sitting in hand rather than held for the next. The judgment is the main
++thread's, and it is a judgment and not a test: the movements of the sitting are
++what produce the grounding it weighs, so passing through the periagogic,
++maieutic and review movements is evidence of grounding and not the thing
++itself, since a node may run all three and leave an expert's divergence
++unanswered, or be grounded enough for a narrow reconciliation before the third
++has run. It is not the shared grounding the author's confirmation rests on,
++which is `round-termination`'s and the author's alone; that judgment's object
++is the disposition and this one's is the work, and the option
++`grounding-for-reconciliation-is-not-grounding-for-confirmation` on that node
++keeps the two apart. What this judgment does not clear is not reconciled and is
++not lost either: it is tracked as the sitting's reconciliation residue and
++carried in the sitting's report, and what keeps such a residual from being
++acted on after the disposition beneath it has moved is the question of
++`bootstrap-residue-staleness`. And it turns the sitting back on itself:
+ alignment already sequenced in that sitting is re-visited where newly reconciled
+ disposition would change it, so a sitting leaves behind no work its own later
+ findings have overtaken. Its one bar is confirmed ratified disposition, which
+```
+
 ### authority
 
 Ratified, at moderate boldness: this node says what an agent may act on by
@@ -675,3 +751,30 @@ it bought was named before it was replaced, which is what the evaluation node re
 of any replacement. The clean-context reading of the amended text is owed, and the node
 carries `stage: review` with its forward verdict now pinned to a recommendation that
 has moved, which is the state that says so.
+
+### The grant's run-on put on a judgment, 2026-09-08
+
+The option `reconciliation-runs-on-a-judgment-of-sufficient-grounding` was recorded
+in the alignment sitting of 2026-09-08 under the grant at `words/2026-09-08/2` as
+refined at `words/2026-09-08/22`, from step 6 of `words/2026-09-08/36`: "if bootstrap
+authority explicitly granted for this session, main thread makes a judgement about
+whether sufficient grounding/alignment of author/experts exists for reconciliation
+(else, tracked as residue)".
+
+No recommendation was moved, here or on any other node this entry reaches. The author
+gave the seven steps as an option emerging from the dialogue and not as a settled
+answer, and the record takes them at that.
+
+Two things the option leaves to other nodes rather than settling here. The word
+"grounding" already names a different judgment on `round-termination`, the state the
+author's confirmation rests on, and whether the author meant that term is a probe put
+to them in this sitting's report; the option carries the reading that it is not, and
+the option `grounding-for-reconciliation-is-not-grounding-for-confirmation` on that
+node holds the distinction, so the two were recorded in one act. And the residue the
+clause produces is what `bootstrap-residue-staleness` asks about, whose account this
+sitting widened rather than answered.
+
+This node is `tier: global`. Recording an option stales no rule projection, since
+`.claude/rules/what-acts-during-bootstrap.md` follows the option the answer fact
+recommends and that did not change; a ruling for this option would stale it, and the
+regeneration would land on the implementation ref.

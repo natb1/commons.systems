@@ -152,6 +152,11 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/34
+      - name: grounding-for-reconciliation-is-not-grounding-for-confirmation
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/36
     recommends: no-terminator-the-author-confirms
     boldness: moderate
     against: "The answer states a condition the record cannot check and gives the judgment that it is met to the two parties whose dialogue it ends, which is the one structural feature every instrument in its family avoids. Stalnaker's defective context is the failure mode with no signature: both parties can believe the ground is common when it is not, and nothing in the answer produces a trace by which that would later be told from a round that ended well. Rittel's Property 2 predicts the other failure, that the operative stop is external and the stated condition supplies the justification afterwards, and the record's own paradigm is an instance, since the Theaetetus is broken off because Socrates has a court appointment. And the typing is one route short: it admits and excludes modes of persuasion and says nothing about restructuring the question so the disagreement no longer arises, which is the move the record's machinery makes routine and which the discharge that produced this node is itself an instance of."
@@ -771,6 +776,77 @@ a reframing that dissolves a disagreement falls is open still, since the typing
 covers persuasion alone.
 ```
 
+#### grounding-for-reconciliation-is-not-grounding-for-confirmation
+
+The grounding a main thread judges sufficient for reconciliation is a second and
+weaker judgment than the shared grounding the author's confirmation rests on, and
+the record names them apart. The first has the work for its object and the AI for
+its judge; the second has the disposition and the author.
+
+**AI support.** The words this is written from, step 6 of `words/2026-09-08/36`, use
+"grounding" for a judgment the AI makes, and this node had already given the word to
+a judgment only the author makes. One of three things had to follow: the author's
+usage is read as this node's term, and the AI acquires the power to judge that the
+ground is held; this node's term is read as the author's, and the confirmation becomes
+something an AI can reach; or the two are distinguished. Only the third costs nothing,
+neither usage needing the other. And the distinction it draws is one the record
+already keeps everywhere else, between a judgment about a disposition and a judgment
+about work derived from it: an unanswered node grounds no work and is a node all the
+same, and a grant licenses work without conferring a class.
+
+**AI divergence.** Two terms one word apart is a reader's trap, and a reader meeting
+"grounding" in a brief or a report will not know which is meant without going back to
+the glosses. The option puts the near-synonym on the node whose whole point is that
+one judgment is the author's alone, which is where such a trap is most costly and not
+least; a record that wanted none would name the weaker judgment something with no
+"grounding" in it. And the option says the weaker answers to the stronger without
+saying what happens when they part: where the main thread judged the ground sufficient,
+reconciled, and the author then confirms an option the reconciliation contradicts.
+`what-acts-during-bootstrap` bars reconciliation only from contradicting confirmed
+ratified disposition, and that bar is presently empty, so the case is live and neither
+node answers it.
+
+**Content.**
+
+From: no-terminator-the-author-confirms
+
+```diff
+@@ -8,6 +8,8 @@
+     gloss: "The state in which the parties to a round hold a common understanding of the traditions in play and of the recorded state of the graph. It is what the author's confirmation rests on and not the terminator of a round, since nothing terminates a round, and it is not agreement in the conclusion."
+   - term: recorded divergence
+     gloss: "A disagreement that survives shared grounding and is kept by the record as a terminal state rather than resolved, the parties being free to hold alternative readings of a tradition or alternative dispositions each internally consistent."
++  - term: grounding for reconciliation
++    gloss: "The main thread's judgment, under an explicit grant on an unanswered node, that what the author and the experts convened on that node hold in common suffices for work to be derived from it. Its object is the work and its judge is the AI, which is what distinguishes it from shared grounding, whose object is the disposition and whose judge is the author."
+ ---
+ 
+ ## Answer
+@@ -52,6 +54,24 @@
+ because no round ends by argument or by anything else, and the confirmation is
+ the author's own act rather than a thing an argument reaches.
+ 
++Two judgments about grounding stand in this record and they are not one judgment
++under two names. Shared grounding is the state the author's confirmation rests on:
++its object is the disposition, its judge is the author, and it is asserted and
++never computed. Grounding for reconciliation is the main thread's judgment, under
++an explicit grant on an unanswered node, that what the author and the experts
++convened on that node hold in common is enough for work to be derived from it; its
++object is the work, its judge is the AI, and what it does not clear is tracked as
++the sitting's reconciliation residue rather than reconciled. The second is weaker
++than the first and answers to it: it licenses derived work and never a
++confirmation, it binds nothing, and the author's later confirmation is untouched by
++whatever was reconciled under it, which is the only reason an AI may make it at
++all. The record keeps the two apart because one word for both would let the AI's
++judgment stand where the author's is required, and a substitution of judges is what
++this answer exists to prevent; having refused a third party the power to certify
++that the ground is held, it cannot hand that power to one of the two parties. Where
++that grant is given, and what it licenses, are `what-acts-during-bootstrap`'s
++questions and not this one's.
++
+ What this answer does not settle, and what it does not pay for. It appoints no
+ third party to judge that the ground is held and gives that judgment to one of
+ the two parties whose dialogue it governs, where every instrument in this family
+```
+
 ### authority
 
 Ratified, at low boldness. The terminator says when the one dialogue that checks
@@ -977,3 +1053,21 @@ Dialectics: A Classical Approach to Inquiry (Ontos, 2007) with no digital text
 found, so the acquiescence probe's Pluralism p. 172 citation stands on the one
 instrument it always stood on. Those two are entries 8 and 9 of the first tracked
 set now recorded on `unreached-traditions`, which is where an unreached locus lives.
+
+### The two groundings named apart, 2026-09-08
+
+The option `grounding-for-reconciliation-is-not-grounding-for-confirmation` was
+recorded in the alignment sitting of 2026-09-08 under the grant at
+`words/2026-09-08/2` as refined at `words/2026-09-08/22`, from step 6 of
+`words/2026-09-08/36`. No recommendation was moved: the author gave the seven steps as
+an option emerging from the dialogue and not as a settled answer.
+
+The decomposition of that entry carried this as an unsettled reading rather than a
+finding: whether the "grounding" step 6 gives the main thread to judge is the "shared
+grounding" this node defines. The option takes the reading that it is not, and the
+question goes to the author in this sitting's report as a maieutic probe rather than
+being closed here, the author's words being the only place the two usages meet. The
+option was recorded in the same act as
+`reconciliation-runs-on-a-judgment-of-sufficient-grounding` on
+`what-acts-during-bootstrap`, which is where the judgment itself is stated, so that
+neither node references a distinction the other does not yet carry.
