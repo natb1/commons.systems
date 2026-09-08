@@ -790,45 +790,6 @@ answer fact's `against` says how little they carry today.
 
 ## Account
 
-### Sitting on the topology authority, 2026-09-08
-
-The author opened the sitting with three inputs and a grant, and gave this node
-the second of them. Their words are `words/2026-09-08/11`, entered in the ledger
-and referenced by the two options this sitting added. Asked whether the three
-inputs should be taken together or in some order, the sitting recommended taking
-this one first, because the encoding of topology is what the other two inputs
-would have to write into; the author agreed in `words/2026-09-08/16` and directed
-that the reconciliation follow the recommendation rather than wait on a ruling,
-the sitting running under bootstrap authority.
-
-What was recorded. `topology-as-a-fact-of-the-node` carries the author's model
-whole: topology as a fact of every node, the exception and its ground, the moment
-the AI acts, and the re-confirmation of a confirmed ratified node.
-`topology-is-a-field-until-it-is-contested` carries the same disposition with one
-clause changed, and the recommendation moved to it, which the author invited in
-the same words: "If there is a cleaner model for encoding this disposition on AI
-authority to manage graph topology, then recommend it through periagoge." The
-periagoge is written into the fact's prose and turns on three nodes the record
-already holds, `model`, `codd-update-anomaly` and `which-facts-are-listed`, none
-written for this question. The divergence on the author's stated ground, that a
-topology move reconciles the graph and not the implementation layer, is recorded
-on both options and in the fact's prose: read as it stands the ground also
-describes writing an answer, so it does not draw the line the rule needs, and the
-recommended text draws it at shape against substance instead.
-
-What the move costs the review. The review of 2026-09-07 stands on the text this
-sitting moved, so the node's review is stale from this edit and the alignment page
-will show it as changed since its reading. The author directed that the cost of
-review be managed in this sitting, so no clean-context round was bought for an
-edit whose divergences are stated on the fact; the staleness is left for the
-frontier to carry.
-
-The author's second question of the day, whether a parallel projection would make
-the split, merge and reparent rules deterministic rather than heuristic
-(`words/2026-09-08/14`), is not this node's question, which asks what the recorder
-may do without asking rather than by what rule it decides. It was minted as
-`commons.systems/disposition-graph/topology-criteria` beneath this node.
-
 ### Manifest
 
 - Folded: Minted, 2026-09-07, at f0741490d538f17733f64bce56a14d8e122c8d34
@@ -894,6 +855,45 @@ Also named: commons.systems/disposition-graph/frontier-consistency, commons.syst
 Proposed: The survivor is the recommended answer's list of sixteen validations in the record's current vocabulary. The four live option fences are re-derived from it, each carrying only its own named change, so that the difference between an option and the answer is the change the option's name states and nothing else. `probe-or-node` is named because it owns the sixteenth validation the fences drop, and `graph-topology` because `sixteenth-validation-reads-the-delegation` makes that validation read the delegation off it.
 
 Recorded as an option on commons.systems/disposition-graph/frontier-consistency's answer fact: `the-live-options-carry-the-sixteenth-validation` (source review, 2026-09-07).
+### Sitting on the topology authority, 2026-09-08
+
+The author opened the sitting with three inputs and a grant, and gave this node
+the second of them. Their words are `words/2026-09-08/11`, entered in the ledger
+and referenced by the two options this sitting added. Asked whether the three
+inputs should be taken together or in some order, the sitting recommended taking
+this one first, because the encoding of topology is what the other two inputs
+would have to write into; the author agreed in `words/2026-09-08/16` and directed
+that the reconciliation follow the recommendation rather than wait on a ruling,
+the sitting running under bootstrap authority.
+
+What was recorded. `topology-as-a-fact-of-the-node` carries the author's model
+whole: topology as a fact of every node, the exception and its ground, the moment
+the AI acts, and the re-confirmation of a confirmed ratified node.
+`topology-is-a-field-until-it-is-contested` carries the same disposition with one
+clause changed, and the recommendation moved to it, which the author invited in
+the same words: "If there is a cleaner model for encoding this disposition on AI
+authority to manage graph topology, then recommend it through periagoge." The
+periagoge is written into the fact's prose and turns on three nodes the record
+already holds, `model`, `codd-update-anomaly` and `which-facts-are-listed`, none
+written for this question. The divergence on the author's stated ground, that a
+topology move reconciles the graph and not the implementation layer, is recorded
+on both options and in the fact's prose: read as it stands the ground also
+describes writing an answer, so it does not draw the line the rule needs, and the
+recommended text draws it at shape against substance instead.
+
+What the move costs the review. The review of 2026-09-07 stands on the text this
+sitting moved, so the node's review is stale from this edit and the alignment page
+will show it as changed since its reading. The author directed that the cost of
+review be managed in this sitting, so no clean-context round was bought for an
+edit whose divergences are stated on the fact; the staleness is left for the
+frontier to carry.
+
+The author's second question of the day, whether a parallel projection would make
+the split, merge and reparent rules deterministic rather than heuristic
+(`words/2026-09-08/14`), is not this node's question, which asks what the recorder
+may do without asking rather than by what rule it decides. It was minted as
+`commons.systems/disposition-graph/topology-criteria` beneath this node.
+
 ### The fact renamed to follow its question, 2026-09-08
 
 This node's recommended answer widens the record's `existence` fact from whether
