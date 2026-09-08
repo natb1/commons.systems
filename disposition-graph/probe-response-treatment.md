@@ -128,13 +128,13 @@ The periagogic object, to be read before anything is proposed: `author-questions
 as the worked instance of the failure and the ledger entries of 2026-09-08 as the
 evidence.
 
-### The sitting's own probe responses, sequenced, 2026-09-08
+### The sitting's own alignment inputs, sequenced, 2026-09-08
 
 The account above names "the ledger entries of 2026-09-08 as the evidence" and does
 not say which. That pointer is worth no more than the search it saves, and the
-sitting that could make it is ending, so the population is enumerated here. Seven
-entries of that day are alignment input in this node's sense: five are probe
-responses and two are dispositions the author stated while the sitting was in hand,
+sitting that could make it is ending, so the population is enumerated here. Eight
+entries of that day are alignment input in this node's sense: four are probe
+responses and four are dispositions the author stated while the sitting was in hand,
 which this node's rule treats alike. For each, where its own periagogic and maieutic
 sequencing stands is what the rule demands be visible, so it is given.
 
@@ -154,6 +154,12 @@ with tradition, which is what convened the tradition survey.
 `words/2026-09-08/30`, answering a periagogic probe on what standardizing the
 expert's instructions is for. Recorded as `expert-instructions`, at the periagogic
 stage with no survey run. Sequencing owed.
+
+`words/2026-09-08/31`, stated in the sitting, on reconciliation residue going stale
+under a bootstrap grant that reconciles while alignment is still moving. Recorded as
+`bootstrap-residue-staleness`, at the periagogic stage with no survey run and, alone
+among the eight, with no fact on its node at all, the words stating a problem and
+asking for a recommendation rather than giving an answer. Sequencing owed.
 
 `words/2026-09-08/32`, stated in the sitting rather than answering a probe, striking
 three clauses of this node's parent. It is supported on `author-questions`,
@@ -175,12 +181,29 @@ Recorded as `unreached-traditions`, at the periagogic stage; its first tracked s
 is enumerated in that node's account, and no survey has run on the node itself.
 Sequencing owed.
 
-So four of seven are sequenced and three are not, and the three are exactly the
-three nodes this sitting minted and left at the periagogic stage. That is the
-measurement this node's rule exists to make possible, and it says something the
-prose above does not: the treatment does not fail on the responses a sitting acts
-on, it fails on the ones it mints a node for and then runs out of sitting. The
-implicit practice the author observed catches the first kind and not the second.
+So four of eight are sequenced and four are not, and the four unsequenced are
+exactly the four nodes this sitting minted and left at the periagogic stage:
+`expert-instructions`, `bootstrap-residue-staleness`, this node, and
+`unreached-traditions`. Exactly half. That is the measurement this node's rule
+exists to make possible, and it says something the prose above does not: the
+treatment does not fail on the responses a sitting acts on, it fails on the ones it
+mints a node for and then runs out of sitting. The implicit practice the author
+observed catches the first kind and not the second.
+
+How this enumeration was first drawn wrong is itself the finding, and is kept rather
+than tidied away. The first drawing counted seven and put the split at five and two,
+because it walked the entries that nodes cite as supports on their options. Entry 31
+is cited only in an account, since `bootstrap-residue-staleness` carries no fact and
+therefore no option to support, so a support-walk cannot see it -- and the validator
+sees the same hole from the other side, reporting that entry as referenced by no
+option. The method was therefore biased against precisely the inputs it was convened
+to find: an input not yet sequenced far enough to have a fact is the one an
+option-keyed search misses, and the further behind an input is, the more invisible it
+is to the instrument that would report it. An enumeration of what is owed cannot be
+drawn from what has already been recorded. The correction was made in the sitting
+that made the error, from the ledger itself rather than from the graph's references
+to it, which is the only source that carries every entry by construction.
+
 Whether the enumeration belongs here at all is open, since this node's account is
 folded at its own recording and a list of what is owed is not reconstructed by
 re-running a reading, which is the same placement question `unreached-traditions`
