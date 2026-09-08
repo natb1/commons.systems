@@ -60,9 +60,31 @@ facts:
           - words/2026-09-07/22
           - words/2026-09-07/23
           - words/2026-09-07/24
-    recommends: the-whole-reading-is-a-backfill-and-the-delta-is-the-norm
+      - name: the-gate-refuses-only-what-an-instrument-clears
+        source: ai
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/1
+      - name: the-hub-bound-holds-for-every-key
+        source: ai
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-07/23
+          - words/2026-09-08/1
+      - name: the-frozen-set-is-the-closure-the-survey-read
+        source: ai
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-07/23
+          - words/2026-09-08/1
+      - name: a-pin-moves-on-what-binds-the-node
+        source: ai
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/1
+    recommends: a-pin-moves-on-what-binds-the-node
     boldness: moderate
-    against: "Every clause narrows what the record's only whole-graph reader is shown, and it narrows on a dependency relation this record does not have: semantic contradiction respects neither `under` nor citation nor shared vocabulary, so the pair the survey exists to find, two nodes that disagree in disjoint words and never name each other, is exactly the pair the delta freezes, no nominating key nominates, and only a drift probe whose size this same design chose could ever catch."
+    against: "The top rung narrows the pin the judged set turns on to what binds the node, so a node judged before a rival was recorded is never judged against that rival by the one reader that holds the whole frontier, and the reader is handed the rival with no way to tell which; and the hash it narrows is the one a ruling and a draft review pin too, so the rung reaches dialogue and authority, whose questions those are, from a node that is not theirs."
   - name: authority
     options:
       - name: ratified
@@ -474,6 +496,256 @@ From: options-by-sentence-and-status-and-words-by-address
 +**The whole reading is a backfill, and the delta is the norm.** What the reader is shown grows with what moved and its partners, and never with the graph: the judged set is the nodes whose recommendation moved past the survey's pin, and the neighbourhood is those nodes' reach less everything the pins freeze, so a record in which nothing moved yields a survey that reads nothing. That holds only if every node the survey read carries the survey's pin, judged or not, since a freeze keyed on the judged nodes' pins alone leaves every settled node unfrozen and reads the whole graph forever; the survey therefore pins every node it read with the hash of the text it read, and a pin on a node that was not judged freezes it and detects its movement without standing as the survey the node's own ruling owes. The one reading priced at the graph's size is the backfill, run once, on the author's word, so that the pins exist for the delta to freeze against. The bound is the author's, given in their words of 2026-09-07: no process of this record grows with the record's size without bound, a one-time backfill that makes a process bounded is done at once rather than deferred, and an instrument found growing with the record is a defect repaired before it runs again and never a cost the record carries.
 +
 +**What this does not decide.** How many readers the survey uses is not divided here: it is one reader, as the clean-context-review node has it. Which validations a survey runs is the frontier-consistency node's; what a reading costs and what a brief must fit are the review-cost node's; when a survey runs and what it gates are the clean-context-review node's and the recording node's; what a node carries is the dialogue node's and the unconfirmed-accumulation node's. What this answer names is materialized as the account records it, at the implementation commits named there and never by a calendar date: at a8a69389, measured with `brief.mjs --survey disposition --force-tier --whole`, the brief generator runs a mechanical tier of eight checks before the launch, nominates candidate pairs by key with the term key bounded, freezes a reached node on the pin any read node carries, and runs whole on the author's word alone; the apply step pins every node the survey read; the validator holds no tier of its own and the projector emits no concordance. The ledger, the hunk resolution, the fold this answer reads through and the survey's bound are the reconciliation the author's grants of 2026-09-07 cover.
+```
+
+#### the-gate-refuses-only-what-an-instrument-clears
+
+Everything the recommendation says, with the mechanical tier's checks divided
+into the ones an instrument or the session clears before the launch and the
+ones that report a state of the record, only the first kind gating and the
+second carried into the brief as one line each: the answer's paragraph "**The
+mechanical tier gates the launch.**" amended in
+`the-whole-reading-is-a-backfill-and-the-delta-is-the-norm`.
+
+**AI support.** The gate as it stands gates nothing, because it refuses every
+launch. Measured over graph `513edc3b` with the working tree at `3b0c54e3`,
+`checkTier` returns 211 findings over 154 nodes, and the division the option
+draws is already the division in the numbers: the four checks that name a
+defect of the encoding return nothing at all -- `unresolved-reference` 0,
+`duplicate-option-name` 0, `option-content-unresolvable` 0,
+`unresolved-words-reference` 0 -- and the four that report a state of the record
+return all 211, `term-without-a-path` 136, `recommendation-past-its-pin` 35,
+`unfolded-account-section` 35 and `duplicated-passage` 5, beside 14 notes that
+already gate nothing. None of the 211 is clearable by any instrument the record
+has: the 35 stale pins are nodes at stages `surveyOwed` will never re-read
+(`SURVEY_STAGES` is review and ruling, `read.mjs:183`), the 35 unfolded
+accounts stand because `loadFoldable()` imports `./accumulate.mjs`, which does
+not exist, and the 136 term findings are node edits only a sitting makes. The
+tier reported 3,485 findings before the three defects of 2026-09-08 were fixed
+and 211 after, and the refusal survived both, so every survey the record has
+run has run on `--force-tier` (item 10, verified by running the brief step
+without it). That is the failure the tier option's own support named in the
+other direction: "a rule that says so and then launches the most expensive
+reader the record has over a graph that still holds them has said the thing and
+not done it". A gate the session bypasses on every run is a rule the record
+states and does not do, and the bypass, not the gate, is what actually decides.
+The division is the tier's own bound applied to itself: a check is obviously
+right when it fires only where what it names is repaired by naming it, which is
+`fagan-entry-criteria` on entry criteria and
+`lint-and-the-false-positive-threshold` on the false-positive threshold, both
+adopted on this paragraph already.
+
+**AI divergence.** On today's record the reformed gate never fires either. All
+four gating checks are refused by `read.mjs` at parse time, as `tier.mjs`'s own
+header says, so a graph that reads at all carries none of them: the gate that
+refused everything becomes a gate that refuses nothing, and the whole of the
+tier's present value moves into a report the reader may ignore. What the reader
+gains is 211 lines about debts it cannot pay, which is attention spent on the
+record's condition rather than on its answers, and the honest reading of that is
+that this rung buys the launch and not the reading. And the division is a
+judgment that can be wrong in the direction that looks safe:
+`unfolded-account-section` clears the moment `accumulate.mjs` lands, and
+`duplicated-passage` is arguably cleared mechanically by citing rather than
+restating, so two of the four in the second kind may belong in the first, and a
+check misfiled there is a defect carried past a launch that should have refused.
+
+**Content.**
+
+From: the-whole-reading-is-a-backfill-and-the-delta-is-the-norm
+
+```diff
+@@ -16,7 +16,7 @@
+ 
+ **The judged node is carried once.** The judged set is the nodes a survey judges, and a judged node is carried by what the validations read of it: its question, the author's words its options carry, the one answer that binds it — the resolved content of the option last confirmed, or of the option the answer fact recommends where none is confirmed — and, of its answer fact, each option's name and its status, with the sentence saying what that option would answer, which is what the fifteenth validation reads of an option; an option's source, its ref, the reason it was passed over and the readings recorded under it are not carried, since no validation reads them, and a reader that wants one has the node's id. The author's words are carried by address: every entry an option references is named by its ledger address, and the quotation itself is carried only where the recommended option references it, since the sixteenth validation reads the words against the answer that binds the node, and a rival option's words are evidence for that rival's content and not for the answer. The resolved content of every other option on its answer fact is carried, once, since a rival's content is a draft the seventh and the fifteenth validations read; the prose of its facts and the AI's accumulated support and divergence on its options are not carried, because no validation from the seventh to the sixteenth reads them, and the review-cost node's rule is that a part no validation reaches is struck rather than shortened. It is never carried twice: the answer is the resolved content of one option and no structured render stands beside it.
+ 
+-**The mechanical tier gates the launch.** The mechanical tier is the set of checks the validator holds and runs over the whole graph before a brief is written, and no reader is launched while one of them reports a finding: a node that fails the tier is repaired or kicked back, and it is never read for it. The checks are an unresolved `depends`, `bears` or `under` reference; a recommendation past its pin; two options of one name on one fact; an option whose content resolves through a cycle, through a name no option carries, or through a hunk that does not apply exactly; a term used by a node with no path to the node whose `defines` carries it, read off a term concordance the projector emits; a reference to the author's words that resolves to no entry, read off the ledger; a passage of two hundred bytes or more byte-identical across nodes; and an account section the unconfirmed-accumulation node's fold could have reached and has not. An entry of the author's words that no option anywhere references is reported beside the tier and gates nothing, since it may be context the record has not yet attached. The tier's bound is part of the rule: a check enters it only where it is obviously right when it fires, and anything merely probable enters the brief as a hint the reader may ignore and never as a gate, because a tier the applying session learns to disbelieve is worth less than no tier. A clean tier is not a clean frontier and is never reported as one: the reading's own report says which checks ran. This is the review-cost node's rule that a defect an instrument can name is the instrument's, carried to the point where it changes what happens: the debt is paid before the reader is, and not after.
++**The mechanical tier gates the launch.** The mechanical tier is the set of checks the validator holds and runs over the whole graph before a brief is written, and the checks are of two kinds. The first kind is a defect of the encoding, which an instrument or the session clears before the launch and which no reading is ever spent on: an unresolved `depends`, `bears` or `under` reference; two options of one name on one fact; an option whose content resolves through a cycle, through a name no option carries, or through a hunk that does not apply exactly; and a reference to the author's words that resolves to no entry, read off the ledger. No reader is launched while one of those reports a finding: a node that fails one is repaired or kicked back, and it is never read for it. The second kind reports a state of the record, which no instrument can clear and only a sitting can: a recommendation past its pin, where nothing will read the node again; a term used by a node with no path to the node whose `defines` carries it, read off a term concordance the projector emits; a passage of two hundred bytes or more byte-identical across nodes; and an account section the unconfirmed-accumulation node's fold could have reached and has not. Those gate nothing. They are reported beside the tier and carried into the brief as one line each, so that the reader has what the record already knows about itself and is not stopped by it, which is where an entry of the author's words that no option anywhere references is reported too, since it may be context the record has not yet attached. A gate whose findings the session can only acknowledge is refused on every run and bypassed on every run, and the bypass is then the launch: the override stays as a diagnostic and is never the normal path. The tier's bound is part of the rule: a check enters it only where it is obviously right when it fires, and anything merely probable enters the brief as a hint the reader may ignore and never as a gate, because a tier the applying session learns to disbelieve is worth less than no tier. Which kind a check is enters the rule the same way: a check gates only where naming the defect is most of repairing it. A clean tier is not a clean frontier and is never reported as one: the reading's own report says which checks ran, of which kind, and what the second kind found. This is the review-cost node's rule that a defect an instrument can name is the instrument's, carried to the point where it changes what happens -- the debt is paid before the reader is, and not after -- and where the debt is the record's own rather than the instrument's it is shown to the reader instead of charged against the launch.
+ 
+ **The selection, and what it gives up.** The judged set is every node at the review or the ruling stage whose recommendation has moved past its survey pin or that no survey has read, together with every node whose read text differs from the hash the last survey wrote on it. A judged node is compared against the nodes that reach it, on the frontier-consistency node's reach, and against the other judged nodes. A pair both of whose members are unchanged since a survey read them together is not compared, and a node the judged set reaches but whose read text has not changed since a survey read it, judged or reached, is carried on one line rather than by what it answers, because the pair has already been read once; what unchanged means is the pin the survey writes on every node it read, holding the hash of the text it read, and never the pin of the judged nodes alone. The frozen set is everything so struck. It is named in the survey's own output and in the reader's report, so that what was not read is a fact of the run and not an inference from the generator. The selection is unsafe, and the answer says so, but the remedy is not a recurring whole reading. The whole survey, in which nothing is frozen, is a backfill and never the norm: it runs on the author's word, and after any amendment to the validations, to what a reading is given, or to the tier, because a change in what the reader is asked to look for invalidates every earlier reading's silence, and it runs on no cadence and after no count of deltas. The delta is the survey's only recurring form, and the drift probe its only standing check: every delta survey carries a random sample of one in twenty of the frozen pairs and never fewer than ten, drawn by a seeded generator whose seed the run records, handed to the reader like any other pair and marked as the probe, and a finding anywhere in the sample is a finding on the freeze, recorded on the nodes it names and reported as the freeze's failure, which puts a backfill in front of the author and does not launch one.
+ 
+```
+
+#### the-hub-bound-holds-for-every-key
+
+Everything above, with the hub bound stated once for every nominating key
+rather than on the term key alone, so that a node whose text names more than a
+tenth of the record nominates nothing on the citation key and its declared
+`depends` edges stand: the answer's paragraph "**The candidate pairs.**"
+amended in `the-gate-refuses-only-what-an-instrument-clears`.
+
+**AI support.** The paragraph states the principle and applies it to one key.
+Measured at graph `513edc3b`, `candidatePairs` nominates 2,990 pairs, of which
+`cites` nominates 2,525 and is the sole key on 2,010; the bounded term key
+nominates 251, `parent` 687, `words` 200, `depends` 92 and `jaccard` 25. So the
+one unbounded key nominates 84% of the pair list, and it is unbounded in the
+exact sense the paragraph forbids: `namesNode` is run over every ordered pair,
+which is O(N-squared) by construction, and the hubs it produces pair with
+everything -- in the pair census `dialogue` stands in 152 of its 153 possible
+pairs, `readings` in 96 and `authority` in 86, and on the naming side the
+median node names 19 others against a ceiling of 15.4, with
+`codd-update-anomaly` at 66, `madr-decision-records` at 63,
+`dry-single-source-of-truth` at 62 and `srs-introduction` at 60. The author's
+words of 2026-09-07 (words/2026-09-07/23) bind exactly this: no process of the
+record grows with the record's size without bound. Applying the paragraph's own
+bound to what a node names takes the citation key from 2,525 pairs to 503 and
+the whole pair list from 2,990 to 1,302, at graph `513edc3b`. Stating the bound
+once rather than per key is what stops the next key the record adds from
+arriving unbounded, which is how this one arrived.
+
+**AI divergence.** 86 of the record's 154 nodes name more than a tenth of it, so
+the bound silences the citation key over more than half the record and takes it
+from the largest key to the third, and the pairs it is best at are the ones it
+stops nominating: the hubs by naming are the readings, `codd-update-anomaly`,
+`madr-decision-records`, `dry-single-source-of-truth`, whose whole business is
+to name the nodes they bear on, and a reading contradicting a node it cites is a
+pair no other key reaches. The bound is also measured on a scrape and not on a
+declaration -- `namesNode` counts a slug followed by the word "node" in prose --
+so a node's degree is partly an artifact of how carefully its prose names its
+neighbours, and the key demotes the nodes that write about their neighbours
+best. The 92 declared `depends` pairs that stand are not a replacement for the
+2,022 that go. And one tenth is inherited from the term key and is measured for
+nothing here; `size-the-cadence-and-the-sample-on-inclusiveness-and-precision`,
+already recorded on this fact, is where a threshold with a measure behind it
+would come from.
+
+**Content.**
+
+From: the-gate-refuses-only-what-an-instrument-clears
+
+```diff
+@@ -22,7 +22,7 @@
+ 
+ **What the survey leaves on the node.** What a node carries between surveys is the dialogue node's question and, before a confirmation, the unconfirmed-accumulation node's; what this node needs of them is named, so the dependency is visible: the commit the survey read at, the hashes of the five sections its validations read, the register of the findings it left open on the node with the support each rests on and the condition on which each is discharged, and the pairs read that touch that node, each with the key it was drawn on. The five sections are the question; the answer, being the resolved content of the option last confirmed or, where none is, of the option the answer fact recommends; the option names with their statuses and their sentences; the resolved content of every other option on the answer fact, since a rival's content is a draft the seventh and fifteenth validations read; and the author's words the options carry, resolved from their references in option order and date order, since the eighth and the fourteenth read the words. The delta compares hashes and not commits, so a change to the AI's accumulated support or divergence on an option, to an account, or to a fact's reason propagates nothing — which is also why the accumulation's fold and its absorptions, whose object is exactly those parts, move no hash and re-judge nothing. A finding whose support is unmoved is carried forward and reported as standing rather than as new; a finding one of whose supports moved is re-derived; a finding not in the register is new.
+ 
+-**The candidate pairs.** A candidate pair is two nodes the generator nominates for comparison, with the key that nominated it. The keys are the union of several cheap ones — a defined term outside the record's commonest, the node that defines it paired with each node that uses it, where a term used by more than a tenth of the record's nodes nominates nothing, since a key that pairs a hub with everything orders nothing and grows with the graph; an entry of the author's words referenced by options on both, a citation either way in prose or in `depends`, a shared parent, and near-duplicate resemblance, a Jaccard similarity over word shingles of a half or more — and each pair is handed to the reader with its key, so the reader is told where to look and what to look for. The key is recorded with any finding it produced, so that a key's yield is measurable across surveys and one that has produced nothing may be demoted on the evidence. A key narrows attention and never the corpus: every node the brief carries stays readable, the pair list orders the reading rather than partitioning it, and a finding on a pair no key nominated is a finding like any other and is the one worth most, being the measurement of what the keys miss.
++**The candidate pairs.** A candidate pair is two nodes the generator nominates for comparison, with the key that nominated it. The keys are the union of several cheap ones -- a defined term, the node that defines it paired with each node that uses it; an entry of the author's words referenced by options on both; a citation either way in prose or in `depends`; a shared parent; and near-duplicate resemblance, a Jaccard similarity over word shingles of a half or more -- and each pair is handed to the reader with its key, so the reader is told where to look and what to look for. One bound holds over every key and not over one of them: whatever relation a key runs on, what stands at more than a tenth of the record's nodes nominates nothing on that key, since a key that pairs a hub with everything orders nothing and grows with the graph. So a term more than a tenth of the nodes use pairs with none of them, and a node whose text names more than a tenth of the record names none of them here. It is a share and not a count, so that it holds at any size of record, and it silences a key and never an edge the record declared: a hub's `depends` entries are written on purpose and are nominated by their own key, which is what stands where the scraped citation falls away. The key is recorded with any finding it produced, so that a key's yield is measurable across surveys and one that has produced nothing may be demoted on the evidence. A key narrows attention and never the corpus: every node the brief carries stays readable, the pair list orders the reading rather than partitioning it, and a finding on a pair no key nominated is a finding like any other and is the one worth most, being the measurement of what the keys miss.
+ 
+ **The whole reading is a backfill, and the delta is the norm.** What the reader is shown grows with what moved and its partners, and never with the graph: the judged set is the nodes whose recommendation moved past the survey's pin, and the neighbourhood is those nodes' reach less everything the pins freeze, so a record in which nothing moved yields a survey that reads nothing. That holds only if every node the survey read carries the survey's pin, judged or not, since a freeze keyed on the judged nodes' pins alone leaves every settled node unfrozen and reads the whole graph forever; the survey therefore pins every node it read with the hash of the text it read, and a pin on a node that was not judged freezes it and detects its movement without standing as the survey the node's own ruling owes. The one reading priced at the graph's size is the backfill, run once, on the author's word, so that the pins exist for the delta to freeze against. The bound is the author's, given in their words of 2026-09-07: no process of this record grows with the record's size without bound, a one-time backfill that makes a process bounded is done at once rather than deferred, and an instrument found growing with the record is a defect repaired before it runs again and never a cost the record carries.
+ 
+```
+
+#### the-frozen-set-is-the-closure-the-survey-read
+
+Everything above, with the frozen set covering the judged set and its
+neighbourhood and no more, a node the survey met on one line going unpinned
+because a pin attests to the text a reader read: the answer's paragraph "**The
+whole reading is a backfill, and the delta is the norm.**" amended in
+`the-hub-bound-holds-for-every-key`.
+
+**AI support.** The answer says the survey pins every node it read, and the
+instrument reads that as the closure it rendered by answer
+(`surveyPins({... read: neighbourNodes})`), which is the only reading of it a
+pin can honestly bear: a pin freezes a pair on the strength of an earlier
+reader's silence, and a reader that was handed one line was silent about
+nothing. Measured at graph `513edc3b`: 154 nodes, 3 judged, 58 in the
+neighbourhood, so 61 nodes are pinnable in a run and 93 are met on one line;
+the pin census is 71 judged pins, 30 read pins and 53 nodes with no pin at all,
+79 pins carry all five text hashes and `frozenNodeIds` freezes 75. Item 12
+measured the same shape at `b388e8b3`, where `cutPairs` left 2,225 of 2,990
+pairs live. The rung changes no instrument. It states what the instrument
+already does and why, and it bounds the cost of the residue at one line each:
+an unpinned node is carried on the line it was already carried on, and what the
+record gives up is that a pair touching it stays live, so the reader is handed
+a name where it might have been handed a text. That is a bound the record can
+state and defend; the alternative buys a smaller residue with a pin over text
+nobody read.
+
+**AI divergence.** The alternative is real and it is the one the measurement
+favours on size alone: a whole reading widens the neighbourhood to every node,
+so the one backfill pins the graph and every later delta freezes against a
+complete set. Measured at `513edc3b`, rendering by answer the 93 nodes outside
+today's closure adds 315,026 bytes, which against the whole reading's 581,022
+bytes at `b388e8b3` (item 23) is a backfill of about 896,000 bytes -- half again
+as large, and still inside the author's own allowance that a megabyte is a
+backfill's size and not a recurring one (words/2026-09-07/22). Buying a
+complete frozen set once, at that price, is precisely the trade their words of
+2026-09-07 (words/2026-09-07/23) ask for, that a one-time backfill making later
+processes bounded is done at once. Against this rung directly: 93 of 154 nodes
+can never be frozen under it, any pair touching one of them stays live forever,
+and the delta therefore keeps a floor it will not fall below. The claim that
+the residue shrinks as the frontier moves is asserted and not measured, and
+nothing in the design makes it happen.
+
+**Content.**
+
+From: the-hub-bound-holds-for-every-key
+
+```diff
+@@ -24,6 +24,6 @@
+ 
+ **The candidate pairs.** A candidate pair is two nodes the generator nominates for comparison, with the key that nominated it. The keys are the union of several cheap ones -- a defined term, the node that defines it paired with each node that uses it; an entry of the author's words referenced by options on both; a citation either way in prose or in `depends`; a shared parent; and near-duplicate resemblance, a Jaccard similarity over word shingles of a half or more -- and each pair is handed to the reader with its key, so the reader is told where to look and what to look for. One bound holds over every key and not over one of them: whatever relation a key runs on, what stands at more than a tenth of the record's nodes nominates nothing on that key, since a key that pairs a hub with everything orders nothing and grows with the graph. So a term more than a tenth of the nodes use pairs with none of them, and a node whose text names more than a tenth of the record names none of them here. It is a share and not a count, so that it holds at any size of record, and it silences a key and never an edge the record declared: a hub's `depends` entries are written on purpose and are nominated by their own key, which is what stands where the scraped citation falls away. The key is recorded with any finding it produced, so that a key's yield is measurable across surveys and one that has produced nothing may be demoted on the evidence. A key narrows attention and never the corpus: every node the brief carries stays readable, the pair list orders the reading rather than partitioning it, and a finding on a pair no key nominated is a finding like any other and is the one worth most, being the measurement of what the keys miss.
+ 
+-**The whole reading is a backfill, and the delta is the norm.** What the reader is shown grows with what moved and its partners, and never with the graph: the judged set is the nodes whose recommendation moved past the survey's pin, and the neighbourhood is those nodes' reach less everything the pins freeze, so a record in which nothing moved yields a survey that reads nothing. That holds only if every node the survey read carries the survey's pin, judged or not, since a freeze keyed on the judged nodes' pins alone leaves every settled node unfrozen and reads the whole graph forever; the survey therefore pins every node it read with the hash of the text it read, and a pin on a node that was not judged freezes it and detects its movement without standing as the survey the node's own ruling owes. The one reading priced at the graph's size is the backfill, run once, on the author's word, so that the pins exist for the delta to freeze against. The bound is the author's, given in their words of 2026-09-07: no process of this record grows with the record's size without bound, a one-time backfill that makes a process bounded is done at once rather than deferred, and an instrument found growing with the record is a defect repaired before it runs again and never a cost the record carries.
++**The whole reading is a backfill, and the delta is the norm.** What the reader is shown grows with what moved and its partners, and never with the graph: the judged set is the nodes whose recommendation moved past the survey's pin, and the neighbourhood is those nodes' reach less everything the pins freeze, so a record in which nothing moved yields a survey that reads nothing. That holds only if every node the survey read carries the survey's pin, judged or not, since a freeze keyed on the judged nodes' pins alone leaves every settled node unfrozen and reads the whole graph forever; the survey therefore pins every node it read with the hash of the text it read, and a pin on a node that was not judged freezes it and detects its movement without standing as the survey the node's own ruling owes. What the survey read is the judged set and its neighbourhood, the nodes carried by what they answer, and that closure is the whole of what the frozen set can cover: a node the survey met only as a name on one line is not pinned, because a pin attests to the text a reader read and a line is not that text, and a pin written over a line would freeze the node against a reading that never happened. The record pays for that in one line and not in one reading. A pair either of whose members is unpinned stays live, and where the brief carries that member on one line the reader is handed a name and not a text, which is the bound this accepts; where a particular pair matters the node is in the neighbourhood already, a citation, a shared parent or a term having put it there. The unpinned residue is no backfill the record owes: it shrinks as the frontier moves, each survey pinning the closure it read. The one reading priced at the graph's size is the backfill, run once, on the author's word, so that the pins exist for the delta to freeze against. The bound is the author's, given in their words of 2026-09-07: no process of this record grows with the record's size without bound, a one-time backfill that makes a process bounded is done at once rather than deferred, and an instrument found growing with the record is a defect repaired before it runs again and never a cost the record carries.
+ 
+ **What this does not decide.** How many readers the survey uses is not divided here: it is one reader, as the clean-context-review node has it. Which validations a survey runs is the frontier-consistency node's; what a reading costs and what a brief must fit are the review-cost node's; when a survey runs and what it gates are the clean-context-review node's and the recording node's; what a node carries is the dialogue node's and the unconfirmed-accumulation node's. What this answer names is materialized as the account records it, at the implementation commits named there and never by a calendar date: at a8a69389, measured with `brief.mjs --survey disposition --force-tier --whole`, the brief generator runs a mechanical tier of eight checks before the launch, nominates candidate pairs by key with the term key bounded, freezes a reached node on the pin any read node carries, and runs whole on the author's word alone; the apply step pins every node the survey read; the validator holds no tier of its own and the projector emits no concordance. The ledger, the hunk resolution, the fold this answer reads through and the survey's bound are the reconciliation the author's grants of 2026-09-07 cover.
+```
+
+#### a-pin-moves-on-what-binds-the-node
+
+Everything above, with the pin the judged set turns on covering what binds the
+node and never a rival's body, so that an option recorded beside the
+recommendation moves no pin and the pins the record already carries are
+migrated once: the answer's paragraph "**What the survey leaves on the node.**"
+amended in `the-frozen-set-is-the-closure-the-survey-read`.
+
+**AI support.** The paragraph already says that a change to the AI's support or
+divergence, to an account or to a fact's reason propagates nothing, and stops
+one field short of the case that actually fires. In the content encoding
+`deriveFactRecommendationHash` hashes every option's name, source, ref, status,
+reason, `supports` and `diverges`, and `deriveRecommendationHash` folds every
+fact's hash with the question (`packages/disposition/derive.mjs:724-790`), so
+recording any option at all moves the node's hash. The apply step says so in its
+own note (`packages/clean-context-review/apply.mjs`, `planTouchedNode`, ~line
+1832): recording an option "moved the recommendation hash ..., because the
+content encoding hashes every option; the node stands as moved past its survey
+pin and is judged again by the next survey". The consequence is measured: six of
+the seven nodes the last survey judged were its own footprints, options the
+apply of `31e257b9` had recorded (item 13). A survey that guarantees the next
+survey re-reads whatever it wrote on is a process whose object is its own
+exhaust. Two more things fall out of the same narrowing. `judgedSet` re-judges
+on two limbs, a moved judged pin and a judged pin whose five section hashes
+moved, and separating them lets the freeze do its job without restarting the
+judgment: a rival recorded on a node still moves that node's rivals section, so
+its text is unfrozen and the reader is given it again where a pair is live, and
+the node is not judged whole for it. And the same hash is what a ruling pins, so
+today merely recording a rival on a ratified node makes `fact.moved` true and
+puts the node back before the author as a proposal -- which contradicts
+`authority`, where a proposal is "the state of a ratified node whose
+recommendation has moved from its confirmed choice" and an option "acts on
+nothing until the author rules". The narrowing makes the hash mean what the two
+nodes that read it already say it means.
+
+**AI divergence.** What it loses is a reading: a node judged before a rival was
+recorded is never judged against that rival's content, so the reader that would
+have set the rival against the rest of the record does not, and the draft
+reading of the node the recording itself triggers is where the rival is read
+instead. That moves a rival's cross-graph check from the one reader that holds
+the whole frontier to the one reader that holds one node, which is the same kind
+of loss as the delta's and is the kind this node exists to price. The reader
+also cannot see the distinction: it is handed a rival's content with no way to
+tell whether the node was judged with it or without it, unless the brief says
+so. And the change does not stay inside this node. The hash it narrows is the
+one a ruling pins and the one a draft review pins, so this rung moves when a
+ruling goes stale, when a review goes stale and when a ratified node returns to
+the author, which are `dialogue`'s question and `authority`'s and not
+`survey-selection`'s; a rung recorded here that reaches them is a rung the
+author may prefer to rule on there.
+
+**Content.**
+
+From: the-frozen-set-is-the-closure-the-survey-read
+
+```diff
+@@ -20,7 +20,7 @@
+ 
+ **The selection, and what it gives up.** The judged set is every node at the review or the ruling stage whose recommendation has moved past its survey pin or that no survey has read, together with every node whose read text differs from the hash the last survey wrote on it. A judged node is compared against the nodes that reach it, on the frontier-consistency node's reach, and against the other judged nodes. A pair both of whose members are unchanged since a survey read them together is not compared, and a node the judged set reaches but whose read text has not changed since a survey read it, judged or reached, is carried on one line rather than by what it answers, because the pair has already been read once; what unchanged means is the pin the survey writes on every node it read, holding the hash of the text it read, and never the pin of the judged nodes alone. The frozen set is everything so struck. It is named in the survey's own output and in the reader's report, so that what was not read is a fact of the run and not an inference from the generator. The selection is unsafe, and the answer says so, but the remedy is not a recurring whole reading. The whole survey, in which nothing is frozen, is a backfill and never the norm: it runs on the author's word, and after any amendment to the validations, to what a reading is given, or to the tier, because a change in what the reader is asked to look for invalidates every earlier reading's silence, and it runs on no cadence and after no count of deltas. The delta is the survey's only recurring form, and the drift probe its only standing check: every delta survey carries a random sample of one in twenty of the frozen pairs and never fewer than ten, drawn by a seeded generator whose seed the run records, handed to the reader like any other pair and marked as the probe, and a finding anywhere in the sample is a finding on the freeze, recorded on the nodes it names and reported as the freeze's failure, which puts a backfill in front of the author and does not launch one.
+ 
+-**What the survey leaves on the node.** What a node carries between surveys is the dialogue node's question and, before a confirmation, the unconfirmed-accumulation node's; what this node needs of them is named, so the dependency is visible: the commit the survey read at, the hashes of the five sections its validations read, the register of the findings it left open on the node with the support each rests on and the condition on which each is discharged, and the pairs read that touch that node, each with the key it was drawn on. The five sections are the question; the answer, being the resolved content of the option last confirmed or, where none is, of the option the answer fact recommends; the option names with their statuses and their sentences; the resolved content of every other option on the answer fact, since a rival's content is a draft the seventh and fifteenth validations read; and the author's words the options carry, resolved from their references in option order and date order, since the eighth and the fourteenth read the words. The delta compares hashes and not commits, so a change to the AI's accumulated support or divergence on an option, to an account, or to a fact's reason propagates nothing — which is also why the accumulation's fold and its absorptions, whose object is exactly those parts, move no hash and re-judge nothing. A finding whose support is unmoved is carried forward and reported as standing rather than as new; a finding one of whose supports moved is re-derived; a finding not in the register is new.
++**What the survey leaves on the node.** What a node carries between surveys is the dialogue node's question and, before a confirmation, the unconfirmed-accumulation node's; what this node needs of them is named, so the dependency is visible: the commit the survey read at, the hashes of the five sections its validations read, the register of the findings it left open on the node with the support each rests on and the condition on which each is discharged, and the pairs read that touch that node, each with the key it was drawn on. The five sections are the question; the answer, being the resolved content of the option last confirmed or, where none is, of the option the answer fact recommends; the option names with their statuses and their sentences; the resolved content of every other option on the answer fact, since a rival's content is a draft the seventh and fifteenth validations read; and the author's words the options carry, resolved from their references in option order and date order, since the eighth and the fourteenth read the words. The delta compares hashes and not commits, so a change to the AI's accumulated support or divergence on an option, to an account, or to a fact's reason propagates nothing — which is also why the accumulation's fold and its absorptions, whose object is exactly those parts, move no hash and re-judge nothing. What moves the pin the judged set turns on is what binds the node and nothing beside it: the question, which option the answer fact recommends, that option's sentence, its resolved content and the ledger addresses it references, and the status any option of the fact carries, a status being the record's own ruling that an option is out. A rival's body is not that. An option recorded beside the recommendation -- its sentence, its source, its ref, the AI's case on it and its content -- moves no pin, whoever recorded it, a reading, a sitting, or the survey's own apply step, so a survey no longer guarantees that every node it wrote an option on is judged again by the next one. The five section hashes are the separate thing the freeze compares: a rival recorded on a node moves that node's rivals section, so the node is no longer frozen and the reader is given its text again wherever a pair of its is live, and that alone does not return it to the judged set. The pins the record already carries are migrated once and in the same act: a pin whose recorded hash is the node's hash in the old form is rewritten to the new form, nothing the reader read having changed, and a pin already stale in the old form stays stale, so the node is judged exactly as it would have been. A finding whose support is unmoved is carried forward and reported as standing rather than as new; a finding one of whose supports moved is re-derived; a finding not in the register is new.
+ 
+ **The candidate pairs.** A candidate pair is two nodes the generator nominates for comparison, with the key that nominated it. The keys are the union of several cheap ones -- a defined term, the node that defines it paired with each node that uses it; an entry of the author's words referenced by options on both; a citation either way in prose or in `depends`; a shared parent; and near-duplicate resemblance, a Jaccard similarity over word shingles of a half or more -- and each pair is handed to the reader with its key, so the reader is told where to look and what to look for. One bound holds over every key and not over one of them: whatever relation a key runs on, what stands at more than a tenth of the record's nodes nominates nothing on that key, since a key that pairs a hub with everything orders nothing and grows with the graph. So a term more than a tenth of the nodes use pairs with none of them, and a node whose text names more than a tenth of the record names none of them here. It is a share and not a count, so that it holds at any size of record, and it silences a key and never an edge the record declared: a hub's `depends` entries are written on purpose and are nominated by their own key, which is what stands where the scraped citation falls away. The key is recorded with any finding it produced, so that a key's yield is measurable across surveys and one that has produced nothing may be demoted on the evidence. A key narrows attention and never the corpus: every node the brief carries stays readable, the pair list orders the reading rather than partitioning it, and a finding on a pair no key nominated is a finding like any other and is the one worth most, being the measurement of what the keys miss.
+ 
 ```
 
 ### authority
