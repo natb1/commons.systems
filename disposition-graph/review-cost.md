@@ -96,6 +96,7 @@ facts:
         supports:
           - words/2026-09-07/22
           - words/2026-09-07/23
+          - words/2026-09-08/1
       - name: reader-is-the-parser-and-reviewer-is-the-reading
         source: review
         ref: "2026-09-07"
