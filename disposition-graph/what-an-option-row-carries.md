@@ -57,6 +57,8 @@ facts:
           - words/2026-09-07/2
           - words/2026-09-07/3
           - words/2026-09-07/4
+        diverges:
+          - words/2026-09-08/36
     recommends: the-details-carry-the-three-accumulations
     boldness: moderate
     against: "The record asks the AI for a case against every recommendation — `dialogue`'s recommended text makes a fact's `against` the argument the recommendation had to beat, written when the recommendation is recorded — and under this answer the author never sees it at the level they read: on every fact of every node but one, the row carries a mark saying no reader's line bears and the AI's written objection, where one exists, sits behind a fold, because a reading returns one counter-argument for a node and `caseAgainst` substitutes it on the answer fact alone. The rule is mostly unmet today, 53 fact-level `against` fields beside 247 recommendations at this head, so on most rows the mark replaces nothing yet; that is back-fill debt against the rule, as `dialogue`'s own account records, and not a reason the rule will stay unmet, so what the fold hides grows as the debt is paid. The arrangement this answer forbids, the AI's line at the first level, is the only one under which an objection the record holds is always where the author reads."
@@ -1097,3 +1099,32 @@ Also named: commons.systems/disposition-graph/author-questions, commons.systems/
 Proposed: recording's term survives for the agent: reviewer, or the reading where the act is meant; reader is kept for the parser, which is what read.mjs is. review-cost, what-an-option-row-carries and clean-context-review substitute; author-questions strikes the sentence that leaves the finding to the survey.
 
 Recorded as an option on commons.systems/disposition-graph/review-cost's answer fact: `reader-is-the-parser-and-reviewer-is-the-reading` (source review, 2026-09-07).
+
+### The count in the recommended option's name is falsified, 2026-09-08
+
+`words/2026-09-08/36` states the shape of alignment dialogue orchestration in seven
+steps, and step 3 has an option accumulate a selection per expert alongside the
+author's marks and tradition's relation. The recommended option here is
+`the-details-carry-the-three-accumulations`, whose count comes from `dialogue`'s answer
+and from `words/2026-09-07/4` beneath it: the author's, the traditions', and the AI's.
+An expert's selection is a fourth, and where there is more than one expert on a fact it
+is a fourth that is not even fixed in number.
+
+Recorded as a divergence and not as a rewrite, and the option keeps its name. The name
+carries the count, so the divergence is visible in the row itself rather than only in
+the option's text, which is the right place for it: a reader scanning the fact sees an
+option whose name says three standing beside a reference to words that say more than
+three.
+
+What the divergence does not decide is what the row should do about it. Three
+arrangements are open and none is this node's to choose alone. The details could carry
+one accumulation per party, growing with the experts convened, which is faithful and
+unbounded. They could carry the three kinds and fold every expert into one, which keeps
+the row's size fixed and loses which expert selected what. Or the expert selections
+could sit at the first level as a mark, since step 3 puts `expert-selected` beside
+`author-selected-but-unconfirmed` as a marking of the option and not as an
+accumulation under it, which would make this a question about marks rather than about
+details. The third reading is the one the author's own words come closest to, and it is
+the one that would move this node's answer furthest; it is not recorded as an option
+because what it turns on is `dialogue`'s question of where a part of the dialogue's
+state is stored, and that node carries the divergence too.

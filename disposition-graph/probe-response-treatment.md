@@ -9,6 +9,7 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/33
+          - words/2026-09-08/36
     recommends: common-treatment-with-alignment-input
     boldness: low
   - name: authority
@@ -208,3 +209,19 @@ Whether the enumeration belongs here at all is open, since this node's account i
 folded at its own recording and a list of what is owed is not reconstructed by
 re-running a reading, which is the same placement question `unreached-traditions`
 records against its own tracked set.
+
+### The option restated as a step, 2026-09-08
+
+`words/2026-09-08/36` states the shape of alignment dialogue orchestration in seven
+steps, and step 1 has alignment input arrive either by an `/align` invocation or as a
+response to a probe, with no branch between them thereafter. That is this node's
+recommended option stated as a step of the orchestration rather than as a rule about
+probes, and it is the same disposition: a probe response is alignment input and is
+treated as any other is.
+
+Recorded as a `supports` reference. The entry adds nothing this node does not already
+recommend and takes nothing away. What it does add is a second reading of why the
+option is right, which the node's own account did not have: with the treatment common,
+step 1 is one clause instead of two, and every step after it is written once. A rule
+that divided them would have had to be carried through steps 2, 3 and 7 as a branch
+each time.

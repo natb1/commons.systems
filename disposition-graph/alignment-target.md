@@ -29,6 +29,7 @@ facts:
         supports:
           - words/2026-09-08/3
           - words/2026-09-08/18
+          - words/2026-09-08/36
       - name: ruling-order-not-rank
         source: author
         ref: "2026-09-03"
@@ -377,3 +378,21 @@ exchanges produced, which is not the acceptance of one order but the standing
 one: what a sitting does with an input it is given while running. One quotation
 reaching an option it was not filed against is what
 `commons.systems/disposition-graph/quotes` now describes.
+
+### A third word for the same option, 2026-09-08
+
+`words/2026-09-08/36` states the shape of alignment dialogue orchestration in seven
+steps, and step 3 has an input's arrival re-evaluate the sitting's sequencing rather
+than displace what the sitting is on. That is
+`mid-sitting-input-is-sequenced-not-substituted` said a third time, from a third angle:
+the words of `words/2026-09-08/3` and `words/2026-09-08/18` state the rule, and this
+entry states the mechanism by which the rule is carried out, which is re-evaluation at
+the point of arrival.
+
+Recorded as a `supports` reference and nothing more. The entry adds no option here and
+moves no recommendation; what it adds is weight, and weight is what a `supports` list
+holds. The one thing it does sharpen is what "sequenced" costs: an input that
+re-evaluates the sequencing may re-order work the sitting has already done, which is
+the obligation `words/2026-09-08/22` puts on a sitting under a grant, so this node's
+answer and that refinement are two halves of one rule and a reader of either should see
+the other.
