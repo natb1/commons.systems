@@ -11,6 +11,8 @@ facts:
         supports:
           - words/2026-09-08/27
           - words/2026-09-08/30
+        diverges:
+          - words/2026-09-08/36
       - name: a-thin-skill-and-a-tested-return
         source: ai
         ref: "2026-09-08"
@@ -18,6 +20,7 @@ facts:
           - words/2026-09-08/27
         diverges:
           - words/2026-09-08/30
+          - words/2026-09-08/36
       - name: fragments-and-a-builder
         source: ai
         ref: "2026-09-08"
@@ -40,6 +43,16 @@ facts:
         ref: "2026-09-08"
         status: passed
         reason: "the variance the thirteen briefs of 2026-09-08 actually exhibit is omission and not diversity of frame: one in thirteen stated its error behaviour, three named no model, the write bound was written nine ways with three different enumerations of the forbidden git verbs, and the record's own file format was stated three mutually inconsistent ways of which the version three briefs carried was false; none of those is a variance anyone chose, and Anderson, Shah and Kreminski's homogenization finding defends variance that someone chose"
+      - name: the-brief-carries-an-identity-and-a-reference-and-the-expert-retrieves
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/36
+      - name: an-expert-returns-its-own-choice
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/36
     recommends: a-thin-skill-and-a-tested-return
     boldness: moderate
     against: "The author gave three reasons and this recommendation declines all three of them, on evidence the author has not seen and which the AI selected: the tradition survey that produced the counter-case was convened by the AI, briefed by the AI with a nine-family floor list, and returned nine families tracking the nine it was given, which is the fixation effect Jansson and Smith 1991 predicts, so the strongest counter-evidence in this node's account is itself an instance of the defect it reports and is not independent of the party reporting it. Four of the seven probes would move the recommendation, and it is made at the periagogic movement, where by `growth`'s conduct the ground is not yet established. The thin standard also has a failure mode the rich one does not: a standard that fixes only what a return must satisfy governs nothing about what an expert is told, so every defect the corpus measured in the tradition-facing half of a brief -- the pre-supplied finding, the floor list, the framing that names what the AI hopes will be found -- survives this answer untouched, and the record would have paid for an instrument that fixes the half that was already easy to fix. And the telemetry facet the author's third reason names is bought by any answer that makes a skill and lost by every answer that does not; that premise was verified on 2026-09-08 and holds, which narrows the six to those that make a skill and leaves this recommendation among them, so the third of the author's three reasons is satisfied by this recommendation rather than declined by it, and the opening sentence of this case against overstates by one, which is left standing and named rather than quietly repaired."
@@ -255,6 +268,7 @@ probes:
     source: ai
     raised: 2026-09-08
 depends:
+  - commons.systems/disposition-graph/expert-identity
   - commons.systems/disposition-graph/movements#three-movements-selected-by-diagnosis
   - commons.systems/disposition-graph/unit-skills#a-skill-per-unit-kind
 under:
@@ -740,6 +754,94 @@ lives in the launch and nowhere else. The record fixes the bounds every subagent
 works under and fixes nothing else about an expert's instructions, on the ground
 that an instrument convened to say what the convener has not thought of is
 damaged by a text the convener wrote in advance.
+```
+
+#### the-brief-carries-an-identity-and-a-reference-and-the-expert-retrieves
+
+The brief carries the expert's identity and a reference to the disposition it
+evaluates, and nothing else. The expert fetches for itself the fact in its scope and
+whatever else in the node and its neighbourhood that scope requires, and only what it
+requires.
+
+**AI support.** It answers the question the corpus of 2026-09-08 could not: what a
+brief should contain when the neighbourhood it would have to carry grows with the
+record. `review-cost`'s recommended answer solves the same problem by shrinking what
+is copied -- the neighbourhood in full, every other node as its question alone -- and
+this option solves it by not copying at all, which is strictly cheaper and does not go
+stale between the brief's writing and the expert's reading.
+
+**AI divergence.** It stands against a clause `delegation-bounds-and-sizing` places in
+the ratified-class bounds: a subagent is "given its brief and nothing else". The
+divergence is recorded rather than narrowed away. The reading this record takes is that
+the bound governs writing and not reading -- every limb
+`delegation-bounds-and-sizing` calls irreversible or capture-shaped is about
+committing, editing, working outside the worktree, reporting, or the model on the
+interview, and none is about what a subagent may read -- but a clause the record calls
+a bound is not one the AI narrows silently, so the reading is written here to be ruled
+on and not assumed. Against it stands the property the bound buys: a brief that carries
+its inputs is a brief the author can read to know what the expert saw, and an expert
+that fetches leaves its own account of its reading as the only account there is.
+
+**Content.**
+
+```markdown
+---
+question: What is an expert convened in the alignment dialogue given, and where does that text live?
+form: rule
+under:
+  - commons.systems/disposition-graph/movements
+  - commons.systems/disposition-graph/unit-skills
+---
+
+## Answer
+
+An expert is given, in its brief, its identity and a reference to the disposition it
+evaluates. Everything else it fetches for itself: the fact in its scope, and whatever
+else in that node and its neighbourhood the scope requires, and only what the scope
+requires. The standing text an expert works under lives in a skill, as `unit-skills`
+says a unit kind's text does.
+```
+
+#### an-expert-returns-its-own-choice
+
+An expert's return carries its own choice among the fact's options. With it the return
+carries the options it would add, its relation of support or divergence to each,
+tradition's relation to each, the tradition it could not reach, and its answers to the
+probes aimed at it.
+
+**AI support.** It is the author's, at `words/2026-09-08/36`, and it follows from the
+paradigm: a party convened to evaluate a fact that may not say which option it
+evaluates to has been convened to do the analysis and withhold the conclusion, and the
+record then has to reconstruct from the analysis what the expert already knew.
+
+**AI divergence.** It strikes a clause of the option this fact recommends -- "A return
+carries no verdict, ranks nothing, and recommends nothing" -- and the clause was not
+decoration. It is what keeps a convened party from being a second recommender, which is
+the property `clean-context-review` rests on and `anchoring-and-adjustment` is the
+tradition for. What the record then owes is a replacement guard: with an expert that
+chooses, `against-what-is-an-experts-return-checked` stops being a refinement of this
+node and becomes its central problem, because an unchecked return that carries a choice
+is a recommendation nobody reviewed.
+
+**Content.**
+
+```markdown
+---
+question: What is an expert convened in the alignment dialogue given, and where does that text live?
+form: rule
+under:
+  - commons.systems/disposition-graph/movements
+  - commons.systems/disposition-graph/unit-skills
+---
+
+## Answer
+
+The standing text an expert works under lives in a skill and fixes what a return must
+carry. A return carries the expert's choice among the fact's options; the options it
+would add; its support for or divergence from each; tradition's support for or
+divergence from each; the tradition it could not reach and what stopped the reading;
+its probes, each typed and each addressed to the author or to another expert; and its
+answers to the probes addressed to it.
 ```
 
 ### authority
@@ -1268,3 +1370,62 @@ its pinpoint citations are not in the record: the lookup reported its findings a
 not its pages. Under `readings` a reference carries its source and its locus, and
 this one carries a source and a date. It is a debt on this node, and it is not a
 reading until the pages are in it.
+
+### What `words/2026-09-08/36` does to this node, 2026-09-08
+
+The author stated the shape of alignment dialogue orchestration in seven steps at
+`words/2026-09-08/36`, and step 4 is about this node. The sitting's decomposition unit
+found that of the fifteen questions the entry raises, four are this node's or
+downstream of it, which is why the entry's first movement is recommended here.
+
+Two things the entry decides from outside this node's answer fact, recorded above as
+options. It fixes the brief's content -- an identity and a reference -- and moves the
+fetch to the expert. And it fixes the return's content, including the expert's own
+choice.
+
+The second of those strikes a clause of what this fact recommends. Recorded as a
+divergence on `a-thin-skill-and-a-tested-return` rather than by editing that option,
+because an option keeps its text and carries the case against it; the record does not
+rewrite an option to agree with the words that oppose it. The clause struck is the
+AI's, not the author's: `a-standard-expert-skill` is the author's option and the
+no-verdict clause is the AI's amendment of it, so this is the author overruling the AI,
+which the author may simply do and which needs no further defence than that they have
+done it.
+
+The entry also diverges from the author's own earlier option. `a-standard-expert-skill`,
+from `words/2026-09-08/30`, has the per-launch brief supply "the record files that
+ground the incumbent"; step 4 moves that to the expert. That is the author amending the
+author eight days into the same sitting, and it is recorded as a divergence on the
+author's option so that a reader sees it as a change of mind and not as the AI
+declining a reason.
+
+What entry 36 does not decide, and what this node still owes. The artifact question --
+whether the standing text is a skill, a projection, or per-launch text -- is untouched,
+and `words/2026-09-08/30`'s `where` clause still stands unopposed. The admissibility
+standard for a reading and for a probe is untouched except for the no-verdict clause.
+The `topology` fact is untouched. So the entry decides most of the *what* and none of
+the *where*, which is the half this node was minted for.
+
+Two of the seven probes are sharpened rather than discharged, and the difference
+matters. `retrieval-contract-or-source-of-variance` asks whether a convened expert is
+an instrument you want to return the same thing every time or a second mind you want to
+return what you had not thought of; step 4 chooses retrieval without saying which
+instrument it is building, and retrieval is compatible with both, so what the entry
+settles is who fetches and not what the fetching is for.
+`against-what-is-an-experts-return-checked` asks what a return is checked against; an
+expert that returns a choice makes an unchecked return a second recommendation, which
+is the failure the probe was raised against, so the entry makes the probe harder rather
+than answering it.
+
+A dependency is added. This node's subject is now defined elsewhere: `expert-identity`,
+minted the same day under `movements`, asks what an expert is and what the record holds
+about one between launches, and this node's answer cannot be redrawn before that one is
+answered, because a text handed to a party is described by naming the party. Any further
+drafting of this fact's recommendation before `expert-identity` is dead work.
+
+This node is where the entry's first movement is recommended, on four grounds: its
+recommendation is falsified in part by the author's newest words; it stands at the
+periagogic stage and the entry is periagogic material, turning the question back to
+what an expert is for; it is in `unreached-traditions`' `depends`, so working it
+unblocks the cheapest remaining item; and the two probes the entry sharpens are the two
+that give the author something concrete to answer.
