@@ -74,6 +74,20 @@ probes:
       window in which the record does not hold the author's words exists at all.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      the author answered it on 2026-09-08, in the words at `words/2026-09-08/28`.
+      The rule is admission, and it is admission to the ledger alone: "keeps a
+      quotation only where it bears on a disposition fact" is a rule for what is
+      kept in the disposition quotation store on the disposition ref, and other
+      quotations may be kept for other reasons in other stores, including a
+      compaction-safe session store, either by rule or by the AI's judgement. So
+      the concession this node apologises for is real and the author holds it
+      deliberately rather than as a defect: the ledger stays narrow, and breadth
+      is bought in a store the ledger's rule does not reach. The git-object
+      reading is not taken and is not refuted; what the answer settles is that
+      the ledger's admission rule governs the ledger and nothing else, which is
+      what the probe asked and is enough to close it.
   - id: where-does-an-unpaid-residual-go
     asks: >-
       When the sitting that owed it is gone, who is a reconciliation residual
@@ -145,11 +159,19 @@ probes:
 facts:
   - name: answer
     options:
+      - name: a-compaction-store-the-ai-shapes
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/28
+          - words/2026-09-08/21
       - name: a-file-a-global-rule-fixes
         source: ai
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/21
+        status: passed
+        reason: "the author's refinement of 2026-09-08 delegates the store's implementation and states the requirement as surviving compaction rather than as being found by a later session, so the rule this option fixes a path by is a rule the author struck, and the reason the option gave for fixing it, that a store a session names is a store the next session cannot find, describes a boundary the store no longer crosses"
       - name: harness-session-memory
         source: author
         ref: "2026-09-08"
@@ -163,15 +185,19 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "the author's refinement of 2026-09-08 admits to the ledger only what bears on a disposition fact, so a ledger that takes everything is the position that refinement left"
-    recommends: a-file-a-global-rule-fixes
-    boldness: high
-    against: "The recommendation answers where the bytes sit and not what makes the next context look for them, and those are different problems. A rule projection is loaded into a session's context, but a rule that says a file exists does not make a session that has forgotten the sitting read it, and the failure this store exists to prevent is exactly a session that has forgotten. The harness's tools have the property the recommendation lacks: they are read by the harness rather than by the AI remembering to read them, which is why the author named them. Against that, this answer offers a discipline, and a discipline is what compaction destroys."
+    recommends: a-compaction-store-the-ai-shapes
+    boldness: low
+    against: "The answer records a requirement and delegates the mechanism, which is what the author asked for and is also the shape in which a rule can be satisfied by nothing in particular. Compaction survival is not observable from inside the sitting that needs it: a store the AI judged adequate and that turns out not to have survived is discovered by a session that no longer has the thing it would have compared against, so the delegation hands the AI a choice whose failure it is structurally unable to see. The displaced option was worse in its reason and better in this one respect, that a fixed path is checkable by anyone at any time. What would close the gap is a test the sitting can run rather than a mechanism the rule names, and the record does not have one."
   - name: authority
     options:
       - name: ratified
       - name: delegated
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/28
       - name: deferred
-    recommends: ratified
+    recommends: delegated
     boldness: low
 form: rule
 under:
@@ -179,17 +205,18 @@ under:
 tier: global
 defines:
   - term: staging store
-    gloss: "The one file, `tmp/staging/<date>.md` at the root of the implementation checkout and gitignored, in which a sitting holds the author's words and its own working state until the record can take them."
+    gloss: "The store outside the record and outside version control in which a sitting holds the author's words and its own working state until the record can take them; it must survive compaction, it must survive nothing else, and its shape is the AI's to choose."
 ---
 
 ## Facts
 
 ### answer
 
-The recommendation is `a-file-a-global-rule-fixes`, at high boldness. High because
-the record has no measurement here and the AI is choosing between two mechanisms on
-an argument about which of them a forgetful session finds, which is a claim about the
-future behaviour of sessions and not a thing the record has ever tested.
+The recommendation is `a-compaction-store-the-ai-shapes`, at low boldness. Low
+because the answer is the author's own words of 2026-09-08 and the AI is transcribing
+a delegation rather than choosing under one; what the AI adds is the reasoning that
+connects the requirement to the mechanism's release, and the divergence that says
+what the release costs.
 
 The question exists because the author's refinement of 2026-09-08 created something
 the record had not had. `commons.systems/disposition-graph/quotes` now admits to the
@@ -199,17 +226,29 @@ was named there and never given a mechanism, and the author named a candidate on
 same day and asked for it early, because a sitting that compacts loses whatever only
 its context held.
 
-Why a file whose path a rule fixes, and not the harness's own tools.
-`commons.systems/disposition-graph/session-context` answers what a session loads:
-three projections and nothing else, and anything else a session loads is on the
-frontier as a prune-by-default proposal. The harness's memory is loaded by the
-harness, so on that answer it is a fourth thing, and choosing it would either
-contradict `session-context` or oblige it to grow a term. A file whose path a global
-rule fixes is reached through the rules projection, which is one of the three, so the
-store enters the record's own account of what a session loads rather than beside it.
-It also keeps the record off one vendor's tool, which matters here more than usual:
-the thing being stored is the author's words, and the record's whole claim is that
-the author's words live where the record can see them.
+What changed on 2026-09-08, and why the AI's own first answer was struck. The node
+first recommended `a-file-a-global-rule-fixes`, a path fixed by this rule, on the
+reason that a store a session names is a store the next session cannot find. The
+author's refinement states the requirement instead: the store must survive a
+compaction boundary, and must survive no other — not a session, not a sitting,
+therefore not a network, therefore not version control. That strikes the AI's reason
+rather than contradicting its conclusion. The boundary the reason turned on is one
+the store never crosses, so the argument that a rule must fix the path has nothing
+left to rest on, and with it goes the argument that made the harness's memory a
+fourth thing a session loads: the store is state the sitting writes, not context it
+is given, whatever holds the bytes. The author then delegates the mechanism in terms.
+The AI records the option passed rather than amended because its name states the rule
+the author struck.
+
+Two sentences of the landed answer were falsified and are struck here, and the record
+says so rather than quietly replacing them. The first is the fixed path with its
+reason. The second is that a sitting "resolves them at the next checkpoint rather
+than at the sitting's end, so the window in which the record does not have them is
+one checkpoint wide": the author's fourth bullet stages a word until the sitting is
+finished, so the window is a sitting wide. What survives the strike is the property
+that made the sentence worth writing — the store is write-through, the words are
+written the turn they are said, and nothing is ever held only in a context — because
+what the author moved is when the resolution happens and not when the writing does.
 
 What the option it displaces bought, said before it is displaced. The record's
 incumbent position is `the-record-carries-it-at-the-checkpoint`, and what it bought
@@ -218,11 +257,115 @@ holds that the record is the dialogue's memory and that nothing the author said 
 held only in a context, and under it there is no store to lose because there is
 nothing outside the record to keep. It is on the list, not passed over, and the case
 for it is that this whole question is the cost of the exception the author's
-refinement opened.
+refinement opened. The refinement of 2026-09-08 widens that cost rather than
+narrowing it, since a word now waits a sitting and not a checkpoint, and the author
+holds the wider concession knowingly.
 
 `no-store-and-the-ledger-takes-everything` is passed over rather than argued with:
 the author's refinement of the same day settles it directly, admitting to the ledger
 only what bears on a fact.
+
+#### a-compaction-store-the-ai-shapes
+
+A store outside the record and outside version control whose one requirement is that
+it survive compaction, and whose shape — a local memory, a local file, one store or
+several — is the AI's to choose. The record fixes the requirement and delegates the
+mechanism, which is the author's refinement of 2026-09-08. The store keeps anything
+that could plausibly be an articulation of a disposition fact, staged, until the
+sitting is finished; the ledger's narrower rule governs the ledger alone.
+
+**AI support.** It is what the author said, and what the author said dissolves the
+question the node was minted to decide rather than answering it. The AI had put a
+fixed path against the harness's memory and argued the choice on which a forgetful
+session would find; the author's requirement is compaction survival, which both
+mechanisms meet, and the boundary the AI's reason turned on — a later session finding
+the store — is a boundary the store never crosses, because it does not outlive the
+sitting. With the reason struck the argument has no work left to do, and what remains
+is a requirement the record can state and a mechanism it has no reason to fix. The
+wider admission rule follows the same logic from the other side: a word staged and
+later discarded costs a line, and a word not staged and later needed is gone, so the
+store errs toward keeping and the ledger errs toward narrowness, each where its error
+is cheap.
+
+**AI divergence.** A delegated mechanism is a mechanism no reading can check. The
+displaced option was wrong in its reason and right in one property this one gives up:
+a path fixed by a rule is verifiable by anyone, and "whatever the AI judged adequate"
+is verifiable by nobody, including the session that would need to know. The failure
+mode is silent by construction — a store that did not survive compaction is noticed,
+if at all, by a session that has already lost what it would have compared against —
+so this answer records a requirement it cannot test. The AI also notes that it is the
+beneficiary of the delegation, and that the delegation was given in a parenthesis
+inside a message the author prefaced with not following all of these details.
+
+**Content.**
+
+```markdown
+---
+question: Where does a sitting's own working state live while it is not yet in the record?
+form: rule
+under:
+  - commons.systems/disposition-graph/transience
+tier: global
+defines:
+  - term: staging store
+    gloss: "The store outside the record and outside version control in which a sitting holds the author's words and its own working state until the record can take them; it must survive compaction, it must survive nothing else, and its shape is the AI's to choose."
+---
+
+## Answer
+
+In a store outside the record and outside version control, whose one requirement is
+that it survive compaction. That requirement is narrow, and it is what fixes
+everything else: the sitting's working state must cross a compaction boundary and it
+must cross no other. It does not reach another session or another sitting, so it does
+not cross a network, so it has no business in version control; a local memory or a
+local temporary file is enough. What the store holds is what the sitting has not yet
+been able to put in the record: the author's words whose relation to a disposition
+fact is unresolved, and the sitting's own working state. Nothing in it has any
+authority, it is not on the disposition ref, and it does not outlive the sitting.
+
+The mechanism is the AI's to choose, and different state may be held by different
+tools or in different files as the AI judges best. What this rule fixes is the
+requirement, because a requirement is what a later sitting can be held to, and a
+mechanism is a fact of the harness that will change under the record. Where the AI's
+choice is a file, `tmp/staging/<date>.md` at the root of the implementation checkout
+is the one this record has used, and that is an instance and not the rule. Whatever
+its shape, the store is not a fourth thing a session loads: what a session loads is
+this rule, which is one of the three projections `session-context` allows, and the
+store is state the sitting writes and reads rather than context it is given.
+
+The store's admission rule is not the ledger's, and confusing the two is the error
+this paragraph exists to prevent. The ledger keeps a quotation only where it bears on
+a disposition fact. The store keeps anything that could plausibly be an articulation
+of one, staged, and keeps it staged until the alignment sitting is finished, when the
+relationships between the quotations and the disposition facts are resolved and
+recorded on the ref. The wider admission is deliberate and the asymmetry is the
+reason: staging a word that turns out to have directed the sitting alone costs the
+line it occupies, and failing to stage one that turns out to bear on a fact costs the
+word. Quotations may also be kept in other stores for other reasons, by rule or by
+the AI's judgement; the ledger's rule governs the ledger.
+
+A word leaves the store in one of two directions and never sits there. Where the
+sitting resolves that the words bear on a disposition fact, they are entered in the
+ledger and the store's copy is struck, which is the graduation the quotes node's
+answer names. The strike waits on the landing and not on the writing: a copy is
+struck only where the entry that replaces it is reachable from `origin/disposition`,
+because a checkpoint that writes the entry into a worktree and then fails to land it
+would otherwise strike the only copy there is, and the worktree dies with the
+session. That is the guard the unconfirmed-accumulation node's fold already carries,
+held for the same reason and against the same loss: text that is not on the ref is
+not moved to the history by striking it, it is ended. Where the sitting resolves that
+the words directed the sitting alone, they stay in the store and die with it, and the
+record keeps nothing.
+
+The store is a concession and the record says what it costs. The checkpoint node
+holds that the record is the dialogue's memory and that nothing the author said is
+held only in a context; a store outside the record is exactly that for as long as a
+word sits in it unresolved, and under the author's refinement that is until the
+sitting ends and not until the next checkpoint. What bounds the concession is that
+the store is write-through and not a cache: a sitting writes the author's words to it
+the turn they are said, so what waits is the resolution and never the writing, and no
+word is ever held only in a context.
+```
 
 #### a-file-a-global-rule-fixes
 
@@ -256,7 +399,7 @@ under:
 tier: global
 defines:
   - term: staging store
-    gloss: "The one file, `tmp/staging/<date>.md` at the root of the implementation checkout and gitignored, in which a sitting holds the author's words and its own working state until the record can take them."
+    gloss: "The store outside the record and outside version control in which a sitting holds the author's words and its own working state until the record can take them; it must survive compaction, it must survive nothing else, and its shape is the AI's to choose."
 ---
 
 ## Answer
@@ -433,15 +576,26 @@ From: a-file-a-global-rule-fixes
 
 ### authority
 
-Ratified, on the irreversible limb of `commons.systems/disposition-graph/class-recommendation`'s
-test. What this node decides is where the author's words sit while the record does
-not yet have them, and a word lost from that store is not recoverable: there is no
-second copy, the session that heard it is the thing that failed, and the author would
-have to say it again without knowing they had to. Neither of the other two limbs is
-what carries it. The cost of being wrong is small in work, since changing the
-mechanism is changing a path. It is not capture-shaped, since the store confers no
-authority on anything in it. It is the irreversibility of the loss alone, and that is
-enough.
+Delegated, on the author's words of 2026-09-08, which say in terms that "session
+state implementation is delegated". The AI had recommended ratified on the
+irreversible limb of `commons.systems/disposition-graph/class-recommendation`'s test,
+and the reading is kept here because the author's word does not refute it: a word
+lost from the store is not recoverable, there being no second copy, the session that
+heard it being the thing that failed, and the author having to say it again without
+knowing they had to. Neither of the other two limbs carried it. The cost of being
+wrong is small in work, since changing the mechanism is changing a path; and it is
+not capture-shaped, since the store confers no authority on anything in it.
+
+What the author's delegation does to that reading is divide it. The irreversibility
+is in the requirement and not in the mechanism: what cannot be taken back is losing
+the word, and every mechanism that survives compaction keeps it. So the limb the AI
+found is real and lands on the requirement, which this node states and does not
+delegate, while the mechanism the author released is the part whose error is cheap.
+The AI records this as a recommendation and not as a ruling: the delegation was given
+in a parenthesis, in a message the author prefaced with not following all of these
+details, and against no pinned recommendation, so it is not the act
+`commons.systems/disposition-graph/authority` requires. The author rules or corrects
+it.
 
 ## Account
 
@@ -487,3 +641,48 @@ recommended option in practice and without the rule that would make it findable,
 it is evidence of the shape working and not evidence that the mechanism is right; a
 later session would not know the path, which is the whole of what the recommendation
 adds and the whole of what the case against says it does not add enough of.
+
+### Amended on the author's refinement of 2026-09-08
+
+The author answered the node's own probes with maieutic context rather than with a
+ruling, in `words/2026-09-08/28`, prefaced "I do not follow all of these details".
+Four things followed.
+
+The requirement was restated and the AI's reason for its recommendation was struck.
+The store must survive compaction and must survive nothing else; it does not reach
+another session or sitting, therefore not a network, therefore not version control.
+The recommendation had been `a-file-a-global-rule-fixes`, argued on the ground that a
+store a session names is a store the next session cannot find, and that ground names
+a boundary the store does not cross. The option is passed rather than amended,
+because its name states the rule the author struck, and the recommendation moved to
+`a-compaction-store-the-ai-shapes`. This is the evaluation node's re-raising clause
+running in the ordinary way: the AI lifted a status it wrote, and said what struck
+it.
+
+The mechanism was delegated and the requirement was not. The authority fact's
+recommendation moved from ratified to delegated on the author's parenthesis, and the
+reading under it divides the AI's original irreversibility finding: the irreversible
+thing is losing the word, which is the requirement, and the mechanism's error is
+cheap. The move is recorded as a recommendation and not as a ruling, because the
+author's words answered no pinned recommendation and `authority` requires that they
+do.
+
+Two probes were discharged. `is-the-ledger-rule-admission-or-citation` is answered:
+the ledger's rule is admission, and it governs the ledger alone, other stores being
+free to keep other quotations by rule or by the AI's judgement. The concession the
+node apologises for is therefore held deliberately by the author rather than
+tolerated as a defect. The object-store reading that probe raised is neither taken
+nor refuted, and is left on the probe for whoever needs it.
+
+One landed sentence was falsified and the strike is recorded rather than performed
+quietly. The answer had said a sitting "resolves them at the next checkpoint rather
+than at the sitting's end, so the window in which the record does not have them is
+one checkpoint wide". The author's fourth bullet stages a word until the sitting is
+finished, so the window is a sitting wide and the record's exposure is larger than
+the sentence claimed. What survives is the write-through property, since what moved
+is when the resolution happens and not when the writing does.
+
+This node is `tier: global`, so this amendment stales `.claude/rules/session-state.md`
+on the implementation ref. The two land on different refs and nothing about landing
+the amendment regenerates the projection; the regeneration is named in the sitting's
+report and lands in its own commit.

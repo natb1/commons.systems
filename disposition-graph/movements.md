@@ -52,6 +52,29 @@ probes:
       It does not move the four clauses the author gave on the two movements.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      the author answered it on 2026-09-08, in the words at `words/2026-09-08/29`.
+      A round ends on shared grounding in its inputs, "a common understanding of
+      tradition and recorded graph state", and not on agreement in the
+      conclusion, so the probe is answered by refusing its premise rather than by
+      meeting it: the right to end the round does not pass from the checking
+      party to the checked one, because agreement was never the terminator.
+      Holding common ground "does not necessarily mean author implied disposition
+      matches AI recommendation exactly"; divergence is a terminal state the
+      record keeps, the parties being free to hold alternative readings of a
+      tradition, or alternative disposition to keep each side internally
+      consistent, as agents with different principles, whose principles are
+      ideally recorded for the author and may be opaque to the AI. Persuasion is
+      typed rather than forbidden: presenting a tradition the author did not know
+      of, or an internal contradiction between their implied disposition and the
+      recorded graph, is what the author expects of periagogic dialogue, while
+      persuasion by emotional manipulation is not admissible. Two things the
+      answer leaves the record, neither of which reopens this probe: who
+      adjudicates admissibility, the party making a move not being the party that
+      judges it; and the author's own question back of the same day, whether this
+      disposition on termination is itself consistent with tradition, which is
+      open and is the object of a reading.
   - id: who-convenes-the-experts
     asks: >-
       Who chooses which tradition families are convened and writes their
