@@ -784,22 +784,26 @@ that fetches leaves its own account of its reading as the only account there is.
 
 **Content.**
 
-```markdown
----
-question: What is an expert convened in the alignment dialogue given, and where does that text live?
-form: rule
-under:
-  - commons.systems/disposition-graph/movements
-  - commons.systems/disposition-graph/unit-skills
----
+From: a-thin-skill-and-a-tested-return
 
-## Answer
-
-An expert is given, in its brief, its identity and a reference to the disposition it
-evaluates. Everything else it fetches for itself: the fact in its scope, and whatever
-else in that node and its neighbourhood the scope requires, and only what the scope
-requires. The standing text an expert works under lives in a skill, as `unit-skills`
-says a unit kind's text does.
+```diff
+@@ -12,9 +12,13 @@
+ ---
+ ## Answer
+ An expert is given a per-launch brief and one durable standard, and the standard
+-lives in a skill of its own. The standard fixes what a return must satisfy and
+-nothing else. A reading names its tradition and a locus a third party can check,
+-and a citation that cannot be verified is struck rather than softened. A probe is
++lives in a skill of its own. The brief carries the expert's identity and a
++reference to the disposition it evaluates, and nothing else; the expert fetches
++for itself the fact in its scope, and whatever else in that node and its
++neighbourhood the scope requires, and only what the scope requires. The standard
++fixes what a return must satisfy and nothing else. A reading names its tradition
++and a locus a third party can check, and a citation that cannot be verified is
++struck rather than softened. A probe is
+ put open and never as a choice between drafted answers, is marked periagogic
+ where it turns the reader back to the ground of the question and maieutic where
+ it draws out what the author intends and has not articulated, says what an answer
 ```
 
 #### an-expert-returns-its-own-choice
@@ -825,23 +829,21 @@ is a recommendation nobody reviewed.
 
 **Content.**
 
-```markdown
----
-question: What is an expert convened in the alignment dialogue given, and where does that text live?
-form: rule
-under:
-  - commons.systems/disposition-graph/movements
-  - commons.systems/disposition-graph/unit-skills
----
+From: a-thin-skill-and-a-tested-return
 
-## Answer
-
-The standing text an expert works under lives in a skill and fixes what a return must
-carry. A return carries the expert's choice among the fact's options; the options it
-would add; its support for or divergence from each; tradition's support for or
-divergence from each; the tradition it could not reach and what stopped the reading;
-its probes, each typed and each addressed to the author or to another expert; and its
-answers to the probes addressed to it.
+```diff
+@@ -19,7 +19,10 @@
+ where it turns the reader back to the ground of the question and maieutic where
+ it draws out what the author intends and has not articulated, says what an answer
+ would settle, and says why the record cannot answer it from what it holds. A
+-return carries no verdict, ranks nothing, and recommends nothing. The unit's
++return carries the expert's own choice among the fact's options, the options it
++would add, its support for or divergence from each, tradition's support for or
++divergence from each, the tradition it could not reach and what stopped the
++reading, and its answers to the probes addressed to it. The unit's
+ bounds are `delegation`'s and are stated once here rather than restated per
+ launch: it writes only the files its brief names, runs no state-changing version
+ control, edits no node, works only in the worktree it was given, reports what it
 ```
 
 ### authority
@@ -1429,3 +1431,24 @@ periagogic stage and the entry is periagogic material, turning the question back
 what an expert is for; it is in `unreached-traditions`' `depends`, so working it
 unblocks the cheapest remaining item; and the two probes the entry sharpens are the two
 that give the author something concrete to answer.
+
+### The two options' content restated as named changes, 2026-09-08
+
+Both options first carried their content as a whole fence stating only the clause each
+changes. That is wrong in a way worth recording rather than silently fixing: a whole
+fence is the node as it would stand under the option, so a fence that repeats one
+clause reads as an option that strikes every clause it omits -- the admissibility
+standard for a reading, the unit's bounds, and the paragraph naming what the standard
+deliberately does not fix. Neither option touches any of those. Both are now named
+changes against `a-thin-skill-and-a-tested-return`, which state the change and inherit
+the rest, and the hunks were computed from that option's resolved content rather than
+written by hand.
+
+One clause of the first drafting is dropped in the restatement and not by oversight.
+The whole fence for `an-expert-returns-its-own-choice` had the return carry "its
+probes, each typed and each addressed to the author or to another expert". Typing a
+probe and addressing it are `author-questions`' encoding, recorded there as the option
+`a-probe-carries-a-target-and-a-type`; what belongs here is that a return carries its
+probes, which the base option already says, and not what a probe's fields are. Keeping
+it in both places would have put one design in two nodes' answers, which is the seam
+`prose-and-structure` exists to prevent.
