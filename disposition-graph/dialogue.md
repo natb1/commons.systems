@@ -266,6 +266,8 @@ facts:
       - name: probes-in-the-enumeration
         source: commons.systems/disposition-graph/author-questions
         ref: "2026-09-05"
+        status: passed
+        reason: superseded by `probes-are-a-part-that-outlives-the-dialogue`, which carries its first half and reverses its second -- it asked that the validator paragraph require a stage of `probes` as of every other part, which was right under the rule the author struck at `words/2026-09-08/32` and is false once a probe outlives the recording that removes the stage -- and its content was a migration stub carrying no amended enumeration
       - name: dialogue-glosses-the-four-fact-names
         source: commons.systems/disposition-graph/how-a-fact-is-headed
         ref: "2026-09-07"
@@ -300,7 +302,12 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/1
-    recommends: a-pin-covers-what-binds-the-node
+      - name: probes-are-a-part-that-outlives-the-dialogue
+        source: commons.systems/disposition-graph/author-questions
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/32
+    recommends: probes-are-a-part-that-outlives-the-dialogue
     boldness: moderate
     against: "It takes every surface on which the author checks the AI and makes it something the AI derives — the answer resolved through hunks against another option, the author's own words reached by `supports` and `diverges` references the AI files, the confirmed label computed — and it composes the encoding in force, five clauses folded into it earlier, the per-option content, the ledger, the removal of four sections and a six-key survey block into one row whose bundling the AI chose, so a confirmation confers together what the author examined and what they did not. And the pin it now defines leaves a rival recorded after a reading on the page at the ruling with no reader having set it against the record, and lets the AI move a pin by a status it writes while a rival it records moves nothing."
   - name: authority
@@ -3047,6 +3054,136 @@ From: the-survey-block-carries-what-the-next-survey-selects-on
  The projections that show a node with a confirmed choice, the browser and the alignment page, show that choice first, marked confirmed, and beneath it the recommendation, the other options with their status, and, on every option, the three accumulations headed support or divergence; and they say that the confirmed choice keeps its authority until the author rules for another. Where no option carries a confirmed ruling nothing is confirmed, and a projection that puts an unconfirmed text in that place is showing the author the AI's draft where their own choice belongs.
 ```
 
+#### probes-are-a-part-that-outlives-the-dialogue
+
+The enumeration of the dialogue's parts gains `probes`, and the rule that every part is removed at the recording gains its one exception: the probes stay, because a probe the author has not answered is not dead when the node is confirmed, and its answer may still move a recommendation on a fact already ruled. With it the validator's stage rule gains the matching exception, so a node carrying probes carries a stage while a dialogue is live on it and carries none once the recording has removed the stage, and a confirmed node still carrying an open probe is read rather than refused. Sourced to `author-questions`, whose answer requires this amendment by name, and grounded in the author's words at `words/2026-09-08/32`.
+
+**AI support.** This node enumerates the parts of the dialogue's state, and the
+word `probes` does not occur once in the text this option amends, while
+`author-questions`, which sits under this node, puts the field there in terms:
+"In the dialogue state, as `probes`, one list on the node beside `stage`,
+`review` and `depends`." So the encoding a session works from is composed from
+two answers, and the fourth requirement this node sets on its own state, that
+what a ruling or a projection needs is in the record in one place and none of it
+is left to be inferred, is broken by this node against itself. The record has
+caught the gap twice and put the repair where this node's ruler does not meet it:
+the option `probes-in-the-enumeration`, raised by the second clean-context
+reading of `author-questions` on 2026-09-05, and a sentence of `recording`'s
+answer reconciling two nodes from a third. An amendment recorded on this fact is
+what puts the change where the rule is, which is what `author-questions` asks for
+when it names this node among the four amendments its answer requires; its
+argument for the field and for its survival is made there and is not remade here.
+
+What the author's words of 2026-09-08 require is more than a name added to a
+list. At `words/2026-09-08/32` they are that "Probes persist after confirmation
+and author may continue to answer which may result in a change of AI
+recommendation on confirmed disposition fact." A part that survives the recording
+is a part this node's fold does not describe: the fold names the stage, the
+review, the dependencies and the account as going and the facts as staying, and a
+part that stays while being none of the facts is not in the sentence at all. This
+is why the older option will not serve. `probes-in-the-enumeration` was drafted
+against the rule the author struck and says the validator "requires a stage of it
+as it does of the others"; under the author's words that clause is now false, so
+the enumeration cannot simply gain the name. It gains the name and the exception
+in one act, which is the whole of what this option does.
+
+The exception belongs in the reader's own rule because the rule it excepts is not
+prose. It is materialized: `packages/disposition/read.mjs` refuses any node that
+carries `probes` and no `stage`, on the message that `review`, `depends`,
+`probes` and the account are parts of the dialogue and require a stage, under a
+comment stating the very doctrine the author's words strike, that what the
+recording removes is the stage, the review, the dependencies and the account. A
+confirmed node carrying one open probe is exactly that node, so under the rule as
+it stands the central promise of the author's words, that they may go on
+answering after the confirmation, is a parse error. A reader told the exception in
+the rule reads such a node; a reader left to infer it from a child's answer
+rejects it, and the rejection is the reader's and not the record's. The parser
+reads this node's rule and no other, which is the reason the exception is stated
+here rather than left to be read together with `author-questions` as `recording`
+today reads it.
+
+**AI divergence.** The strongest objection is that this option answers a
+classification question with an exception. What makes a part dialogue state on
+this node is that the recording removes it: that is the reason the answer gives
+for `depends` in terms, that it "is dialogue state and not one of those, because
+it holds only while both questions are open and is removed with the rest of the
+dialogue at the recording", and it is the test the reader implements. A field
+written with the dialogue and not removed with it fails that test, and a rule
+whose one criterion a member fails is not a rule with an exception but a rule
+with a member in the wrong class. On that reading the honest repair is the one
+`author-questions`' own divergence names and declines to take: probes were never
+dialogue state, they belong among the parts a node keeps, and this node and
+`recording` would be amended because the classification changed rather than
+because one field was carved out. That repair leaves the parser one rule with no
+exception in it; this option leaves it one rule with one exception, which is the
+residue the record's greenfield lens says to redraw rather than patch.
+
+The cost is not the exception but a rule left with no reason. Strike the removal
+test and nothing states what makes a key dialogue state: `facts` is written with
+the dialogue, survives the recording and is not dialogue state; `probes` would be
+written with the dialogue, survive the recording and be dialogue state; and the
+amended text does not say what separates them. It gestures at one thing, that the
+other parts are dead when the ruling comes and a probe is not, but dead is a
+judgment about what a part holds and not a property of the encoding, and no
+instrument can read it. A later session asking whether some new key is dialogue
+state is left, after this amendment, with no test to apply and a precedent for
+adding a clause instead.
+
+The exception is checkable, and only in the direction that removes a check. The
+reader can stop refusing a node that carries `probes` and no `stage`, which is one
+condition dropped from one line. Nothing then checks that a stage-less node's
+probes are ones a recording left rather than ones a session wrote onto a confirmed
+node outside any dialogue, and nothing checks that a probe surviving a recording is
+ever seen again: the count rides the stage chip, the recording removes the stage,
+and `author-questions` names that gap and hands it to `alignment-page` rather than
+closing it. So this option writes into this node's validator paragraph a clause
+whose whole effect on the instrument is subtraction, and the thing it protects, a
+probe outliving the node's last display, is protected by nothing else.
+
+Nothing in the graph contradicts the amendment, and the search is worth recording
+because it is thin rather than because it is reassuring:
+`unconfirmed-accumulation` already counts `probes` among what a node in dialogue
+carries and folds none of them; `recording` carries the contradiction in the open
+and is the fourth amendment `author-questions` names; `model`'s counter-argument
+names `probes` as stored dialogue state and is untouched. What the search found
+instead is a rival on this same fact. `probes-in-the-enumeration` stands here
+already, sourced to `author-questions` at 2026-09-05, asking for half of this
+change and the opposite of the other half. This option supersedes it and does not
+dispose of it, and a reader may hold that a fact carrying two options for one
+change, one of them written against a rule the author has struck, is the variance
+in encoding the author's words of 2026-09-08 were about.
+
+**Content.**
+
+From: a-pin-covers-what-binds-the-node
+
+```diff
+@@ -28,7 +28,7 @@
+ ---
+ ## Answer
+ 
+-Its question, its fields, its facts with their options and the content each option carries, and its answer, which is the resolved content of the option labelled confirmed; and, while a dialogue is active on it, the dialogue state. A dialogue is active on every node of the alignment frontier: every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The class is derived from the rulings on the facts, as the authority node says, and a confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. At the recording the dialogue folds: the stage, the review, the dependencies and the account go, and the facts stay with their options, their contents, their recommendation, their readings, the references to the author's words their options carry, and the rulings the author gave, so that a later session meets what was considered and why before proposing it again. Three requirements fix what the state must be: it must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the frontier, and, reading a node that already has an answer, whether options are pending on it and where each came from. A fourth follows from those three and governs every part below: what a ruling or a projection needs is in the record, in one place, and none of it is supplied by a projection's own text, held in a buffer, or left to be inferred from the absence of a field. It has these parts, each holding only what cannot be re-derived.
++Its question, its fields, its facts with their options and the content each option carries, and its answer, which is the resolved content of the option labelled confirmed; and, while a dialogue is active on it, the dialogue state. A dialogue is active on every node of the alignment frontier: every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The class is derived from the rulings on the facts, as the authority node says, and a confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. At the recording the dialogue folds: the stage, the review, the dependencies and the account go, and the facts stay with their options, their contents, their recommendation, their readings, the references to the author's words their options carry, and the rulings the author gave, so that a later session meets what was considered and why before proposing it again; and the probes stay with them, alone among the parts of the dialogue's own state, because a probe the author has not answered is not dead when the node is confirmed and its answer may still move a recommendation on a fact already ruled. Three requirements fix what the state must be: it must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the frontier, and, reading a node that already has an answer, whether options are pending on it and where each came from. A fourth follows from those three and governs every part below: what a ruling or a projection needs is in the record, in one place, and none of it is supplied by a projection's own text, held in a buffer, or left to be inferred from the absence of a field. It has these parts, each holding only what cannot be re-derived.
+ 
+ One rule governs where a decision lives, and it is the node node's and not a new one. A decision the author is to rule on separately is a question, and a question is a node: "If a text answers two questions, it is two nodes." So a text carrying several such decisions is decomposed into children, not into an inner structure that would repeat inside the node what the node already is. The record already provides for the children of an open question, since "a reading, a refinement, or any other node may sit under an open question, and does not have to wait for the question to be answered", and it already makes the result legible, since "a node's ceiling is its nearest ratified ancestor", so a ratified child under an unruled parent is exactly a decision the author has confirmed inside a question they have not. What remains on the node itself are the decisions that are not questions under it but facts about its answer, and those are the `facts` below.
+ 
+@@ -56,11 +56,13 @@
+ 
+ `review`, the state of the two readings the clean-context review divides into, as that node's answer describes them. Of this draft: `verdict`, forward or kickback; `strength`, of the counter-argument, strong, moderate, weak, or none; `date`; `of`, the pin of the recommendation the reviewer read; `against`, the counter-argument it returned, which the projections show on the recommended option's row in place of the case the AI wrote there; and `commit`, the graph commit that reading read at, which names the tree the pin was taken from so that a re-reading can diff the text the last reading pinned against the node as it now stands. The first four are written together or not at all, and `against` and `commit` are optional beside them, a reading being complete without either and a reading taken before those fields existed carrying neither. Of the frontier: `survey`, its `date`; its `of`, the same pin; its `commit`, the graph commit the survey read at; its `text`, the hashes of the five sections the survey's validations read; its `findings`, the register of what the last survey left open on this node, each with the support it rests on and the condition on which it is discharged; and its `pairs`, the pairs that survey read which touch this node, each with the key it was drawn on; and no verdict, since a survey judges the frontier's consistency with itself and kicks back the nodes a finding names rather than forwarding one; it may stand alone on a node the survey judged before that node's draft review ran. Which five sections the hashes cover, what the register carries, and what a key is are the survey-selection node's, whose terms this answer uses and does not restate; what this answer fixes is that the block has somewhere to put them, since a survey that must walk history to find what it last read is a pin held outside the record. When each pin is written is the review's own step and the clean-context-review node's. A node reaches the ruling stage on a forward verdict; that both pins name the recommendation as it stands is the node's readiness, derived and shown by the projections, and no ruling is recorded while either reading is owed.
+ 
+-`depends`, the open questions whose rulings this one waits on, as data: the ids of nodes still on the frontier whose rulings must come before this node's, or a node id and an option on its answer fact, written as the id and the option's name, so the page can order the author's queue, show what a ruling here would unblock, and refuse to put a question before the one it rests on. It is also what carries coherence between decisions, within a subtree as between subtrees, so no separate exclusion field is minted. A dependency runs one way: entries that close a loop put each question behind the other and no order can place either, so a loop is a finding and one side of it is dropped. The inverse, what this question feeds, is derived from it and never stored, as is the rest of the node's position in the frontier: rank, order, and the ancestry, which `under`, `after`, `order` and `cites` already carry as data for the answered graph. `depends` is dialogue state and not one of those, because it holds only while both questions are open and is removed with the rest of the dialogue at the recording.
++`depends`, the open questions whose rulings this one waits on, as data: the ids of nodes still on the frontier whose rulings must come before this node's, or a node id and an option on its answer fact, written as the id and the option's name, so the page can order the author's queue, show what a ruling here would unblock, and refuse to put a question before the one it rests on. It is also what carries coherence between decisions, within a subtree as between subtrees, so no separate exclusion field is minted. A dependency runs one way: entries that close a loop put each question behind the other and no order can place either, so a loop is a finding and one side of it is dropped. The inverse, what this question feeds, is derived from it and never stored, as is the rest of the node's position in the frontier: rank, order, and the ancestry, which `under`, `after`, `order` and `cites` already carry as data for the answered graph. `depends` is dialogue state and not one of those, because it holds only while both questions are open and is removed at the recording with the stage, the review and the account.
+ 
++`probes`, the questions the AI needs the author to answer before it can recommend, as data: one list on the node, beside `stage`, `review` and `depends`. What a probe is, what an entry carries, the test that admits one, where it is collected and how it is discharged are the author-questions node's, whose terms this answer uses and does not restate; what this answer fixes is that the field is a part of the dialogue's state and stands among the parts, since a part enumerated on one node and not on the node that enumerates the parts is an encoding the reader must compose from two answers. It is the one part the recording does not remove. The others go because the ruling makes them dead, a stage with nothing left to stage, a review of a text already ruled on, a dependency already discharged; a probe is not dead when the node is confirmed, being a question the author has not answered, and its answer may still move a recommendation on a fact already ruled, which returns the node to the author by the machinery the authority node already has. So the fold above leaves the probes where they are and the validator below requires no stage of them, and the author-questions node carries the reason at length.
++
+ `## Account`, the AI's account in prose: the evidence, the findings, the reasoning behind the recommendation of each fact, the review's findings and its counter-argument with the session's reply, and what is open for the author. It is not a proposal and does not carry that name: a proposal is the state the authority node defines.
+ 
+-The validator holds the parts together. A stage on every node no ruling grants, on every deferred node, and on every node whose recommendation has moved since its ruling, and every part of the dialogue, the review, the dependencies and the account, requiring one. From the review stage on, facts, with every fact recommending one of its own options, a boldness beside it, and the reason for that recommendation written in the fact's own `###` subsection; and the answer fact and the authority fact wherever a staged node carries facts. On the answer fact from the review stage on, every option carrying its content in one of the two forms, each whole content parsing as a node, answering the same question, and carrying none of the node's own keys nor a `## Facts` section, each named change naming an option of the same fact, the resolution acyclic and resolving through no name no option carries, every hunk applying exactly, and every `supports` and `diverges` reference resolving to an entry of the ledger that exists. The facts' names from the reserved four with the answer first, each option's name unique on its fact and a slug on the answer fact, an answer option carrying its source and its ref, the two vocabulary facts offering only their own vocabulary, a `status` that is `passed` with its `reason` on an option that is neither recommended nor ruled, at most one ruling per fact, and no key naming the confirmed option, that label being derived from the rulings and stored nowhere. The `## Facts` subsections matching the facts in name and order, with one `####` under a per-node fact for every option of that fact, the confirmed one included, and none at all under a vocabulary fact, each `####` carrying its sentence, then its `**AI support.**`, then its `**AI divergence.**`, then, on the answer fact, its content, in that order. The review's four required draft keys together or not at all, with `against` and `commit` optional beside them and the survey block standing alone. A forward verdict at the ruling stage. No `## Answer`, `## Recommendation`, `## Rationale` or `## Disposition` section on any node file. Every `depends` entry resolving to a node that still carries a stage, and to an option on its answer fact where one is named, with no entry that closes a loop. And every reading's `bears` entry resolving to a fact and an option of the node it names.
++The validator holds the parts together. A stage on every node no ruling grants, on every deferred node, and on every node whose recommendation has moved since its ruling, and every part of the dialogue but one, the review, the dependencies and the account, requiring one; the probes requiring none, being the part that outlives the recording, so that a node carrying them carries a stage while a dialogue is live on it and carries none once the recording has removed the stage, and a confirmed node still carrying an open probe is read rather than refused. From the review stage on, facts, with every fact recommending one of its own options, a boldness beside it, and the reason for that recommendation written in the fact's own `###` subsection; and the answer fact and the authority fact wherever a staged node carries facts. On the answer fact from the review stage on, every option carrying its content in one of the two forms, each whole content parsing as a node, answering the same question, and carrying none of the node's own keys nor a `## Facts` section, each named change naming an option of the same fact, the resolution acyclic and resolving through no name no option carries, every hunk applying exactly, and every `supports` and `diverges` reference resolving to an entry of the ledger that exists. The facts' names from the reserved four with the answer first, each option's name unique on its fact and a slug on the answer fact, an answer option carrying its source and its ref, the two vocabulary facts offering only their own vocabulary, a `status` that is `passed` with its `reason` on an option that is neither recommended nor ruled, at most one ruling per fact, and no key naming the confirmed option, that label being derived from the rulings and stored nowhere. The `## Facts` subsections matching the facts in name and order, with one `####` under a per-node fact for every option of that fact, the confirmed one included, and none at all under a vocabulary fact, each `####` carrying its sentence, then its `**AI support.**`, then its `**AI divergence.**`, then, on the answer fact, its content, in that order. The review's four required draft keys together or not at all, with `against` and `commit` optional beside them and the survey block standing alone. A forward verdict at the ruling stage. No `## Answer`, `## Recommendation`, `## Rationale` or `## Disposition` section on any node file. Every `depends` entry resolving to a node that still carries a stage, and to an option on its answer fact where one is named, with no entry that closes a loop. And every reading's `bears` entry resolving to a fact and an option of the node it names.
+ 
+ What the instrument holds of that at implementation commit `feaaac1b`, and what it is owed, named here so that the debt is reconciled and not discovered. It holds the two hard pieces: `packages/disposition/patch.mjs`, which parses hunks, applies them strictly with no fuzz and no offset search, and produces them by diffing two resolved texts; and `packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry, and reports the entries no option references. Neither is wired into the reader, and eight things are owed there. The option keys `content`, `supports` and `diverges`, where `OPTION_KEYS` is `name`, `source`, `ref`, `status`, `reason` and `ruling`. The survey block's `commit`, `text`, `findings` and `pairs`, where the survey keys are `date` and `of`. The resolution of an option's content and the cycle check over it, the reader refusing a cycle for `under` alone today. A `depends` entry that closes a loop, refused for `under` and not there. `stands` struck from the fact keys and the confirmed label derived in its place. The four section names struck from the section order, which still lists Disposition, Answer, Rationale and Recommendation. The answer fact and the fact's own reason required from the review stage on, beside the authority fact the reader already requires. And the `####` requirement inverted, since the reader today exempts the option `stands` names from carrying one. What the record owes beside the instrument, measured at graph commit `93644144` over its hundred and fifty nodes: a hundred and five options on answer facts carry no subsection, and every one of them is the option `stands` names, so the exemption and the debt are the same hundred and five; eighty-six facts recommend with no reason recorded, fifty-two of them at the review or the ruling stage; two hundred and four recommend with no case against, sixty-eight of them at those stages; a hundred and thirty-four node files carry a `## Answer` and a `## Rationale`, seventy-four a `## Disposition`, and forty-four a `## Recommendation` fence; and not one node carries a single ruling, so nothing anywhere in this record is confirmed today and every projection that shows a text in the confirmed place is showing the AI's draft.
+ 
+```
 ### authority
 
 Ratified. This node fixes what every node in the record carries and what every
@@ -3191,3 +3328,52 @@ reparent and a fold each name a destination that only the node can state.
 `commons.systems/disposition-graph/graph-topology`'s recommended answer is where
 that widening is decided and argued; this entry records that the term here
 followed it, under the author's grant of 2026-09-08.
+
+### The enumeration gains the part that outlives it, 2026-09-08
+
+`probes-are-a-part-that-outlives-the-dialogue` is recorded on the answer fact and the recommendation moves to it, from
+`a-pin-covers-what-binds-the-node`, whose whole substance it keeps: the option is a
+named change against that one, two hunks, everything outside the changed spans
+byte-identical, and the word `probe` occurring nowhere in the base and eight times in
+the target. The unit verified `applyStrict(base, diff) === target` and then, separately,
+that the option parses through the real reader when spliced in and resolves to the same
+target. Boldness stays moderate.
+
+The amendment is the one `author-questions` requires by name and is grounded where that
+node is, in the author's words at `words/2026-09-08/32`. Three changes: the enumeration
+gains `probes` as a part, delegating what a probe is, carries, admits and discharges to
+`author-questions` and fixing only that it is a part and where it stands; the fold
+sentence keeps every word and gains the clause that the probes stay with the node; and
+the validator's stage rule gains the matching exception. One further repair was forced
+and is named rather than folded in silently: `depends`' closing clause said it is
+removed "with the rest of the dialogue" at the recording, which is a false universal
+once one part is not removed, and it is the very phrase `author-questions` quotes, so it
+is narrowed to name the parts that actually go.
+
+The exception is load-bearing and not decorative, which the drafting established against
+this record's own guess. `packages/disposition/read.mjs` computes whether a node carries
+a dialogue from `review || depends || probes || Account` and refuses a stage-less node
+that does, so a confirmed node with one open probe is a parse error today, under a
+comment asserting the doctrine the author struck. The amendment falsifies materialized
+implementation, and that is a reconciliation item on the implementation ref rather than
+a thing this node can fix.
+
+The strongest argument against is in the option's divergence and is not answered here.
+The membership test for dialogue state on this node *is* removal at the recording; a
+field that fails it is not an exception to the rule but a member in the wrong class, and
+once the removal test is struck nothing states what makes a key dialogue state at all,
+since `facts` is written with the dialogue, survives the recording, and is not dialogue
+state. The honest alternative is to move probes out of dialogue state altogether. That
+path is not taken here because it is `author-questions`' to take -- that node owns where
+a probe lives -- and it has already recorded and declined it in its own divergence; a
+child may not decide its parent's question by amending itself. The objection is
+therefore inherited undischarged, and it is a reason to re-open `author-questions`' home
+question rather than a defect of this option.
+
+`probes-in-the-enumeration`, standing on this fact since 2026-09-05 and sourced to the
+same node, is passed over rather than dropped. It asked for the enumeration change and
+for the opposite of the validator change, requiring a stage of `probes` as of every other
+part; that was right under the rule the author struck and is false once a probe outlives
+the recording that removes the stage. Its content was a migration stub carrying no
+amended enumeration, so nothing of it is lost. Two live options for one change on one
+fact would be the variance in encoding the author's words of the same day were about.
