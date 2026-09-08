@@ -1552,6 +1552,55 @@ describe("apply.mjs: survey, read pins", () => {
     );
   });
 
+  test("a read node carrying a stale judged 'of' (moved since it was judged) takes a read pin and a frontier finding cleanly, and the stale 'of' survives untouched", async () => {
+    const rootDir = await freshFrontierFixture("survey-read-stale-of-");
+    const file = nodePath(rootDir, "survey-pinned");
+    const before = await readFile(file, "utf8");
+    // A hash that does not equal survey-pinned's current recommendation
+    // hash: this stands in for the ordinary case where the node's
+    // recommendation moved after an earlier survey judged it, so the pin's
+    // `of` is stale by design (a read pin never satisfies an owed survey).
+    // Not all-digit: an all-digit sha in YAML flow scalar parses as an
+    // integer, not a string (yaml-all-digit-sha-parses-as-integer).
+    const staleOf = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+    const withStaleOf = before.replace(
+      "    of: 556a7fe535f582386cc3cdaacaad2c7f0b507539\n",
+      `    of: ${staleOf}\n`,
+    );
+    assert.notEqual(withStaleOf, before, "fixture precondition: the survey block matched");
+    await writeFile(file, withStaleOf);
+
+    const graph = await readGraph(rootDir);
+    const pinned = graph.nodes.find((n) => n.id === SURVEY_PINNED);
+    assert.notEqual(pinned.recommendationHash, staleOf, "fixture precondition: the stale 'of' does not match the node's current recommendation");
+    const pinnedText = sectionHashes(pinned, graph.words);
+
+    const pins = await pinsFor(rootDir);
+    pins.read = [{ id: SURVEY_PINNED, text: pinnedText }];
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        frontier: [{ kind: "vocabulary", nodes: [SURVEY_PINNED], finding: "x", proposal: "y", stages: {} }],
+      }),
+      replies: {},
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.ok(
+      !result.report.some((l) => l.includes("internal error")),
+      `no internal error reported: ${result.report.join(" | ")}`,
+    );
+
+    const pinnedAfter = await parseAt(rootDir, "survey-pinned", SURVEY_PINNED);
+    assert.equal(pinnedAfter.review.survey.of, staleOf, "the stale 'of' is kept, unmoved by this edit");
+    assert.equal(pinnedAfter.review.survey.date, SURVEY_DATE, "the read pin's date still refreshes the block");
+    assert.ok(
+      result.report.some((l) => l.startsWith(`${SURVEY_PINNED}: read pin (judged pin kept)`)),
+      `report should note the judged pin was kept: ${result.report.join(" | ")}`,
+    );
+  });
+
   test("a read entry whose section hashes have moved is skipped and named in the report, and the node is left untouched", async () => {
     const rootDir = await freshFrontierFixture("survey-read-moved-");
     const before = await readFile(nodePath(rootDir, "answered-ratified"), "utf8");

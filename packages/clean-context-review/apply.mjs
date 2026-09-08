@@ -1810,14 +1810,29 @@ async function planTouchedNode(id, t, ctx) {
   if (parsedAfter.standingHash !== parsedBefore.standingHash) {
     return { id, problems: [`${id}: internal error -- the standing hash changed by the edit (${parsedBefore.standingHash} -> ${parsedAfter.standingHash}); this script writes dialogue state and the account only`] };
   }
-  // A read pin (`surveyPin.of` null) pins no recommendation and has none to
-  // check here; only a judged pin's `of` is checked against the freshly
-  // parsed recommendation hash.
-  if (surveyPin !== null && surveyPin.of !== null && surveyPin.of !== undefined && parsedAfter.recommendationHash !== surveyPin.of) {
-    if (newOptions.length > 0) {
-      notes.push(`${id}: recording option${newOptions.length > 1 ? "s" : ""} ${newOptions.map((a) => `'${a.name}'`).join(", ")} moved the recommendation hash (${surveyPin.of} -> ${parsedAfter.recommendationHash}), because the content encoding hashes every option; the node stands as moved past its survey pin and is judged again by the next survey`);
-    } else {
-      return { id, problems: [`${id}: internal error -- the edit moved the recommendation hash (${surveyPin.of} -> ${parsedAfter.recommendationHash}); the survey's pin must name the recommendation as it stands`] };
+  // This guard's job is "this edit must not move the recommendation hash",
+  // and what it compares against depends on whether this node was judged
+  // this run. For a node judged this run (`t.nodeEntry`), the pin's `of` is
+  // this run's own stamp of the recommendation, so the freshly parsed hash
+  // must still equal it. For a node this survey merely read, `surveyPin.of`
+  // may be an already-judged pin's `of` kept from an earlier survey
+  // (labelled "read pin (judged pin kept)" above) -- by design stale
+  // against the node's current recommendation, since a read pin never
+  // satisfies an owed survey and the frontier shows the node as moved past
+  // it. Checking a read node's freshly parsed hash against that stale `of`
+  // would fire on drift the survey never touched; what this edit itself
+  // must not move is checked against `parsedBefore`'s hash instead. A plain
+  // read pin (`surveyPin.of` null) pins no recommendation and has none to
+  // check either way.
+  if (surveyPin !== null && surveyPin.of !== null && surveyPin.of !== undefined) {
+    const judgedThisRun = Boolean(t.nodeEntry);
+    const fromHash = judgedThisRun ? surveyPin.of : parsedBefore.recommendationHash;
+    if (parsedAfter.recommendationHash !== fromHash) {
+      if (newOptions.length > 0) {
+        notes.push(`${id}: recording option${newOptions.length > 1 ? "s" : ""} ${newOptions.map((a) => `'${a.name}'`).join(", ")} moved the recommendation hash (${fromHash} -> ${parsedAfter.recommendationHash}), because the content encoding hashes every option; the node stands as moved past its survey pin and is judged again by the next survey`);
+      } else {
+        return { id, problems: [`${id}: internal error -- the edit moved the recommendation hash (${fromHash} -> ${parsedAfter.recommendationHash}); the survey's pin must name the recommendation as it stands`] };
+      }
     }
   }
 
