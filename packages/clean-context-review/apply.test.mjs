@@ -921,6 +921,8 @@ const EXISTING_PROBE_BLOCK = [
   "    discharges: Whether the periagogic movement here targets the disposition text or the answer fact.",
   "    source: review",
   '    raised: "2026-08-01"',
+  "    target: author",
+  "    type: periagogic",
 ].join("\n");
 function withExistingProbe(text) {
   const withBlock = text.replace(/^facts:\n/m, `${EXISTING_PROBE_BLOCK}\nfacts:\n`);
@@ -933,6 +935,8 @@ function onePropoundedProbe(extra = {}) {
     asks: "Does this recommendation cover the case the author raised, or a narrower one?",
     why: "The disposition names the case but the answer does not say which reading it takes.",
     discharges: "Whether the standing option or a narrower one is what the node recommends.",
+    target: "author",
+    type: "periagogic",
     fact: null,
     ...extra,
   }];
@@ -1130,6 +1134,8 @@ describe("apply.mjs: draft, probes", () => {
           asks: "What does the ground mean here?",
           why: "A second look at the same passage finds a second gap the first probe did not cover.",
           discharges: "Whether 'the ground' in this sentence means the disposition or the account.",
+          target: "author",
+          type: "periagogic",
           fact: null,
         }],
         counter_argument: null,
@@ -1148,6 +1154,65 @@ describe("apply.mjs: draft, probes", () => {
     assert.equal(parsed.probes[1].id, "what-does-the-ground-mean-here-2", "the collision is disambiguated rather than refused or overwriting the first");
     assert.equal(parsed.probes[1].raised, "2026-09-05");
     assert.ok(before.includes("id: what-does-the-ground-mean-here\n"), "fixture precondition unchanged");
+  });
+
+  test("a returned probe with no target lands with target: author, the review's default", async () => {
+    const rootDir = await freshFixture("probe-default-target-");
+    const file = reviewNodePath(rootDir);
+
+    const noTarget = onePropoundedProbe();
+    delete noTarget[0].target;
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: REVIEW_NODE,
+        verdict: "kickback",
+        kickback_stage: "maieutic",
+        findings: ["Answer: ambiguous about which case is covered."],
+        probes: noTarget,
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: { [REVIEW_NODE]: "Reviewed." },
+      date: DATE,
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const after = await readFile(file, "utf8");
+    const parsed = parseNode(after, { id: REVIEW_NODE, graph: "main", slug: "review-node", path: file });
+    assert.equal(parsed.probes.length, 1);
+    assert.equal(parsed.probes[0].target, "author", "a reading's probe with no target is put to the author by default");
+  });
+
+  test("a rendered probe entry carries its keys in PROBE_KEYS order: id, asks, why, discharges, source, raised, target, type, then fact", async () => {
+    const rootDir = await freshFixture("probe-key-order-");
+    const file = reviewNodePath(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: REVIEW_NODE,
+        verdict: "kickback",
+        kickback_stage: "maieutic",
+        findings: ["Answer: ambiguous about which case is covered."],
+        probes: onePropoundedProbe({ fact: "answer" }),
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: { [REVIEW_NODE]: "Reviewed." },
+      date: DATE,
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const after = await readFile(file, "utf8");
+    assert.match(
+      after,
+      / {2}- id: [a-z0-9][a-z0-9-]*\n {4}asks: ".*"\n {4}why: ".*"\n {4}discharges: ".*"\n {4}source: review\n {4}raised: "2026-09-03"\n {4}target: author\n {4}type: periagogic\n {4}fact: answer/,
+      "id, asks, why, discharges, source, raised, target, type, fact -- the reader's own PROBE_KEYS order",
+    );
   });
 });
 
@@ -1214,6 +1279,61 @@ describe("apply.mjs: draft refusals write nothing", () => {
       }),
       /'nodes' and 'frontier' belong to the survey/,
     );
+  });
+
+  test("a draft returning a probe with no type is refused, naming the shape problem", async () => {
+    const rootDir = await freshFixture("probe-no-type-");
+    const file = reviewNodePath(rootDir);
+    const before = await readFile(file, "utf8");
+
+    const noType = onePropoundedProbe();
+    delete noType[0].type;
+
+    await assert.rejects(
+      () => applyReviews({
+        rootDir,
+        input: {
+          scope: "draft",
+          id: REVIEW_NODE,
+          verdict: "kickback",
+          kickback_stage: "maieutic",
+          findings: ["Answer: ambiguous about which case is covered."],
+          probes: noType,
+          counter_argument: null,
+          strength: "none",
+        },
+        replies: { [REVIEW_NODE]: "Reviewed." },
+        date: DATE,
+      }),
+      /probes\[0\] carries no type/,
+    );
+    assert.equal(await readFile(file, "utf8"), before);
+  });
+
+  test("a draft returning a probe with an unknown type is refused, naming the shape problem", async () => {
+    const rootDir = await freshFixture("probe-unknown-type-");
+    const file = reviewNodePath(rootDir);
+    const before = await readFile(file, "utf8");
+
+    await assert.rejects(
+      () => applyReviews({
+        rootDir,
+        input: {
+          scope: "draft",
+          id: REVIEW_NODE,
+          verdict: "kickback",
+          kickback_stage: "maieutic",
+          findings: ["Answer: ambiguous about which case is covered."],
+          probes: onePropoundedProbe({ type: "socratic" }),
+          counter_argument: null,
+          strength: "none",
+        },
+        replies: { [REVIEW_NODE]: "Reviewed." },
+        date: DATE,
+      }),
+      /probes\[0\] carries an unknown type 'socratic'/,
+    );
+    assert.equal(await readFile(file, "utf8"), before);
   });
 });
 
@@ -1899,6 +2019,8 @@ describe("apply.mjs: survey, probes", () => {
           asks: "Does 'standing' cover the narrower case as well as the general one?",
           why: "Neither the disposition nor the account says whether the narrower case was considered.",
           discharges: "Whether 'standing' alone is enough or a second option belongs beside it.",
+          target: "author",
+          type: "periagogic",
           fact: "answer",
         }],
       }),
@@ -1930,6 +2052,8 @@ describe("apply.mjs: survey, probes", () => {
           asks: "Does the whole-thing option still answer the case the disposition raised?",
           why: "The account's earlier round did not address the split the disposition describes.",
           discharges: "Whether 'whole-thing' stands as the recommendation or needs a further split.",
+          target: "author",
+          type: "periagogic",
           fact: null,
         }],
       }),
@@ -1956,6 +2080,8 @@ describe("apply.mjs: survey, probes", () => {
           asks: "Same as above -- does 'standing' cover the narrower case?",
           why: "As above.",
           discharges: "As above.",
+          target: "author",
+          type: "periagogic",
         }],
       }),
       overrides: { [REVIEW_A]: "ruling" },
@@ -1979,6 +2105,8 @@ describe("apply.mjs: survey, probes", () => {
           asks: "Is the 'narrower' option meant to replace 'standing' or to sit beside it?",
           why: "The account does not say whether the two options are mutually exclusive.",
           discharges: "Whether 'narrower' stays an alternative or becomes the recommendation.",
+          target: "author",
+          type: "maieutic",
         }],
       }),
       overrides: { [REVIEW_B]: "periagogic" },
@@ -2004,6 +2132,8 @@ describe("apply.mjs: survey, probes", () => {
           asks: "Is the ground here the disposition's or the account's?",
           why: "Neither section says which one the periagoge is meant to settle.",
           discharges: "Which text the periagogic movement is meant to redraw.",
+          target: "author",
+          type: "periagogic",
         }],
       }),
       overrides: { [PERIAGOGIC_NODE]: "maieutic" },
@@ -2048,6 +2178,8 @@ describe("apply.mjs: survey, probes", () => {
           asks: "What does the ground mean here?",
           why: "A second look at the same passage finds a second gap the first probe did not cover.",
           discharges: "Whether 'the ground' in this sentence means the disposition or the account.",
+          target: "author",
+          type: "periagogic",
         }],
       }),
       replies: allJudgedReplies(),
@@ -2078,6 +2210,8 @@ describe("apply.mjs: survey, probes", () => {
           asks: "Does the narrower option still make sense after the edit?",
           why: "The survey read this node before the edit that moved its recommendation.",
           discharges: "Whether 'narrower' still belongs on the table.",
+          target: "author",
+          type: "periagogic",
         }],
       }),
       replies: allJudgedReplies(),
@@ -2099,7 +2233,7 @@ describe("apply.mjs: survey, probes", () => {
       () => applyReviews({
         rootDir,
         pins,
-        input: surveyInput({ probes: [{ node: "clean-context-review.test/main/nope", asks: "x", why: "y", discharges: "z" }] }),
+        input: surveyInput({ probes: [{ node: "clean-context-review.test/main/nope", asks: "x", why: "y", discharges: "z", target: "author", type: "periagogic" }] }),
         replies: {},
       }),
       /probes\[0\]: 'node' must name a node/,

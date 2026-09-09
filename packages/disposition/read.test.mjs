@@ -36,8 +36,8 @@ import {
 import { glossary, optionText } from './derive.mjs';
 import {
   answerText, carriedText, confirmedOption, defineTerms, deriveMechanicalFindings, nodeEncoding,
-  parseNode, parseOptionSubsection, readGraph, readyToRule, resolveOptionContent, surveyJudges,
-  surveyOwed, surveyStale,
+  parseNode, parseOptionSubsection, PROBE_KEYS, PROBE_TYPES, readGraph, readyToRule,
+  resolveOptionContent, surveyJudges, surveyOwed, surveyStale,
 } from './read.mjs';
 import { validate } from './validate.mjs';
 
@@ -1146,6 +1146,8 @@ describe('parseNode: probes', () => {
     discharges: 'the cap recommendation',
     source: 'ai',
     raised: '2026-09-04',
+    target: 'author',
+    type: 'periagogic',
   };
   // One probe's fields as YAML lines under 'probes:', in insertion order --
   // so a required key can be tested by omitting it from the object passed in.
@@ -1212,12 +1214,16 @@ describe('parseNode: probes', () => {
       '    discharges: First discharge.',
       '    source: ai',
       '    raised: 2026-09-04',
+      '    target: author',
+      '    type: periagogic',
       '  - id: same-id',
       '    asks: Second question?',
       '    why: Second why.',
       '    discharges: Second discharge.',
       '    source: review',
       '    raised: 2026-09-04',
+      '    target: author',
+      '    type: periagogic',
     ]);
     assert.throws(() => parseNode(text, loc), /'probes\[1\]\.id' duplicates another probe's id 'same-id'/);
   });
@@ -1225,6 +1231,34 @@ describe('parseNode: probes', () => {
   test("a probe with a bad 'raised' date is a problem", () => {
     const text = answered(probeYaml({ ...PROBE_BASE, raised: '09-04-2026' }));
     assert.throws(() => parseNode(text, loc), /'probes\[0\]\.raised' must be a YYYY-MM-DD date string/);
+  });
+
+  test("a probe with a non-default 'target' and 'type' parses", () => {
+    const n = parseNode(answered(probeYaml({ ...PROBE_BASE, target: 'some-expert', type: 'maieutic' })), loc);
+    assert.equal(n.probes[0].target, 'some-expert');
+    assert.equal(n.probes[0].type, 'maieutic');
+  });
+
+  test("a probe missing 'target' is a problem", () => {
+    const fields = { ...PROBE_BASE };
+    delete fields.target;
+    assert.throws(() => parseNode(answered(probeYaml(fields)), loc), /probe 'cap-still-right' carries no target/);
+  });
+
+  test("a probe missing 'type' is a problem", () => {
+    const fields = { ...PROBE_BASE };
+    delete fields.type;
+    assert.throws(() => parseNode(answered(probeYaml(fields)), loc), /probe 'cap-still-right' carries no type/);
+  });
+
+  test("a probe 'type' outside PROBE_TYPES is a problem", () => {
+    const text = answered(probeYaml({ ...PROBE_BASE, type: 'bogus' }));
+    assert.throws(() => parseNode(text, loc), /probe 'cap-still-right' carries an unknown type 'bogus'/);
+  });
+
+  test('PROBE_KEYS and PROBE_TYPES carry the recommended vocabulary', () => {
+    assert.deepEqual(PROBE_KEYS, ['id', 'asks', 'why', 'discharges', 'source', 'raised', 'target', 'type', 'fact', 'status', 'reason']);
+    assert.deepEqual(PROBE_TYPES, ['periagogic', 'maieutic']);
   });
 
   test("a probe 'fact' outside FACT_NAMES is a problem", () => {
@@ -1252,6 +1286,8 @@ describe('parseNode: probes', () => {
         `    discharges: Discharge ${i}.`,
         '    source: ai',
         '    raised: 2026-09-04',
+        '    target: author',
+        '    type: periagogic',
       );
     }
     const n = parseNode(answered(lines), loc);

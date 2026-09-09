@@ -200,10 +200,16 @@ export const SHIM_KEYS = ['artifact', 'liquidation', 'declared', 'for'];
 // can recommend, whose answer is not itself a disposition
 // (commons.systems/disposition-graph/dialogue). `fact` names the decision it
 // bears on where it bears on one, and is absent where it bears on the node's
-// ground; `status` and `reason` are absent while it stands open and both
-// present once it is discharged, in the shape an option's `passed`/`reason`
-// pair already has.
-export const PROBE_KEYS = ['id', 'asks', 'why', 'discharges', 'source', 'raised', 'fact', 'status', 'reason'];
+// ground; `target` names the party the probe is put to, `author`, `ai` where
+// the author put it to the AI, or another expert's identity, and `type` is
+// `periagogic` or `maieutic`, set by
+// whichever party raised the probe and never derived from the node's stage
+// or from the probe's `fact`
+// (commons.systems/disposition-graph/author-questions,
+// `a-probe-carries-a-target-and-a-type`); `status` and `reason` are absent
+// while it stands open and both present once it is discharged, in the shape
+// an option's `passed`/`reason` pair already has.
+export const PROBE_KEYS = ['id', 'asks', 'why', 'discharges', 'source', 'raised', 'target', 'type', 'fact', 'status', 'reason'];
 // A `defines` entry is a bare term or a term with the gloss a projection
 // shows wherever a vocabulary fact offers that term as an option: what
 // confirming that choice would mean, written once, on the node that defines
@@ -253,6 +259,14 @@ const PROBE_KEY_SET = new Set(PROBE_KEYS);
 // shape OPTION_STATUSES already has for an option's 'passed'.
 const PROBE_STATUSES = ['discharged'];
 const PROBE_STATUS_SET = new Set(PROBE_STATUSES);
+// The two types a probe may carry, set by whichever party raised it and
+// never derived from the node's stage or from the probe's `fact`
+// (commons.systems/disposition-graph/author-questions,
+// `a-probe-carries-a-target-and-a-type`): `periagogic` where the probe
+// turns the reader back to the ground of the question, `maieutic` where it
+// draws out what the author intends and has not articulated.
+export const PROBE_TYPES = ['periagogic', 'maieutic'];
+const PROBE_TYPE_SET = new Set(PROBE_TYPES);
 const REVIEW_SURVEY_KEY_SET = new Set(REVIEW_SURVEY_KEYS);
 
 // The five sections a survey's `text` pin names -- brief.mjs's own
@@ -1916,22 +1930,27 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     }
   }
 
-  // probes: a list of {id, asks, why, discharges, source, raised, and
-  // optional fact, status, reason}, modelled on shims above. The reader
-  // checks only the shape of a probe. There is no cap on how many stand open
-  // -- the author struck it at words/2026-09-08/32 -- and no count was ever
-  // checked here, since an attention rule must never turn into a parse error
-  // (commons.systems/disposition-graph/dialogue).
+  // probes: a list of {id, asks, why, discharges, source, raised, target,
+  // type, and optional fact, status, reason}, modelled on shims above. The
+  // reader checks only the shape of a probe -- target for presence only
+  // (author, ai, or another expert's identity, not yet an enumerable
+  // vocabulary)
+  // and type against PROBE_TYPES, and neither is derived from anything else
+  // on the node (commons.systems/disposition-graph/author-questions,
+  // `a-probe-carries-a-target-and-a-type`). There is no cap on how many
+  // stand open -- the author struck it at words/2026-09-08/32 -- and no
+  // count was ever checked here, since an attention rule must never turn
+  // into a parse error (commons.systems/disposition-graph/dialogue).
   let probes = [];
   if (!isAbsent(fm.probes)) {
     if (!Array.isArray(fm.probes)) {
-      problems.push("'probes' must be a list of {id, asks, why, discharges, source, raised, and optional fact, status, reason}");
+      problems.push("'probes' must be a list of {id, asks, why, discharges, source, raised, target, type, and optional fact, status, reason}");
     } else {
       const seenProbeIds = new Set();
       probes = fm.probes
         .map((entry, i) => {
           if (!isPlainObject(entry)) {
-            problems.push(`'probes[${i}]' must be a mapping with id, asks, why, discharges, source, raised`);
+            problems.push(`'probes[${i}]' must be a mapping with id, asks, why, discharges, source, raised, target, type`);
             return null;
           }
           for (const k of Object.keys(entry)) {
@@ -1967,6 +1986,17 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
             problems.push(`'probes[${i}].raised' must be a YYYY-MM-DD date string`);
             entryOk = false;
           }
+          if (!isNonEmptyString(entry.target)) {
+            problems.push(`probe '${entry.id}' carries no target`);
+            entryOk = false;
+          }
+          if (isAbsent(entry.type)) {
+            problems.push(`probe '${entry.id}' carries no type`);
+            entryOk = false;
+          } else if (!PROBE_TYPE_SET.has(entry.type)) {
+            problems.push(`probe '${entry.id}' carries an unknown type '${entry.type}'`);
+            entryOk = false;
+          }
           if (!isAbsent(entry.fact) && !FACT_NAME_SET.has(entry.fact)) {
             problems.push(`'probes[${i}].fact' must be one of: ${FACT_NAMES.join(', ')}`);
             entryOk = false;
@@ -1997,6 +2027,8 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
               discharges: entry.discharges,
               source: entry.source,
               raised: entry.raised,
+              target: entry.target,
+              type: entry.type,
               fact: isAbsent(entry.fact) ? null : entry.fact,
               status: isAbsent(entry.status) ? null : entry.status,
               reason: isAbsent(entry.reason) ? null : entry.reason,

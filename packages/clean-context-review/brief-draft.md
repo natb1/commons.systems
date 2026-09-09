@@ -116,6 +116,8 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
       "asks": "<the question in one line, put open and never as a choice between drafted answers>",
       "why": "<why the record cannot answer it, naming the locus you read and what it leaves open>",
       "discharges": "<what an answer would settle and which recommendation on this node it would move>",
+      "target": "<the party the probe is put to; omit for author, the ordinary case>",
+      "type": "periagogic" | "maieutic",
       "fact": "answer" | "authority" | "topology" | "persistence" | null
     }
   ],
@@ -126,7 +128,7 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
 }
 ```
 
-`scope` is exactly `"draft"` and `id` is exactly `{{id}}`: the apply step reads the reading from them and refuses a file that names neither. `kickback_stage` is null on a forward and required on a kickback. `probes` is the probes this reading raises on `{{id}}`, `[]` where you found none, which is the ordinary result; `fact` is null where the probe bears on the node's ground rather than on one decision, and the entries are ordered by what a `discharges` would move, the most first. `id`, `source` and `raised` are the applying step's and never yours. A non-empty `probes` and a `forward` verdict cannot both stand: write `kickback`. `strength` is your assessment of the counter-argument; `none` with `counter_argument` null when you found none worth the author's time. Check that the file parses (`node -e` with `JSON.parse` on it) before you finish.
+`scope` is exactly `"draft"` and `id` is exactly `{{id}}`: the apply step reads the reading from them and refuses a file that names neither. `kickback_stage` is null on a forward and required on a kickback. `probes` is the probes this reading raises on `{{id}}`, `[]` where you found none, which is the ordinary result; `fact` is null where the probe bears on the node's ground rather than on one decision, and the entries are ordered by what a `discharges` would move, the most first. `id`, `source` and `raised` are the applying step's and never yours. `type` is required and is the reading's own: `periagogic` where the probe asks what the record says or whether the author has read what it says, `maieutic` where it asks what the author means or intends to bind. `target` is optional and names the party the probe is put to, defaulting to `author` when left out. A non-empty `probes` and a `forward` verdict cannot both stand: write `kickback`. `strength` is your assessment of the counter-argument; `none` with `counter_argument` null when you found none worth the author's time. Check that the file parses (`node -e` with `JSON.parse` on it) before you finish.
 
 ## Report
 

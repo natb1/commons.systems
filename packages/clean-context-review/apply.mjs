@@ -19,8 +19,8 @@
 // The reading is read from the input's own `scope`, and nothing else:
 //
 //   {scope: "draft", id, date, verdict, kickback_stage, findings[],
-//    probes: [{asks, why, discharges, fact}], facts_check, viability,
-//    counter_argument, strength}
+//    probes: [{asks, why, discharges, target, type, fact}], facts_check,
+//    viability, counter_argument, strength}
 // the review of one draft. One node, at the review stage: '### Clean-context
 // review, <date>' on its account, `stage: ruling` on a forward or the named
 // stage on a kickback, and the four draft keys of `review` pinned to
@@ -36,7 +36,7 @@
 //
 //   {scope: "survey", commit, date, nodes: [{id, findings, ...}],
 //    frontier: [finding],
-//    probes: [{node, asks, why, discharges, fact}],
+//    probes: [{node, asks, why, discharges, target, type, fact}],
 //    subtree_divergences: [divergence]}
 // the survey of the frontier. Serialized by its pin and by no lock: the
 // sidecar `survey.pins.json`, written beside the brief by brief.mjs, holds
@@ -70,7 +70,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
-import { readGraph, parseNode, FACT_NAMES, REVIEW_SURVEY_KEYS } from "@commons.systems/disposition/read.mjs";
+import { readGraph, parseNode, FACT_NAMES, PROBE_TYPES, REVIEW_SURVEY_KEYS } from "@commons.systems/disposition/read.mjs";
 import { graphCommit, SECTION_HASH_KEYS, movedSections, sectionHashes } from "./brief.mjs";
 
 const STAGE_ORDER = ["periagogic", "maieutic", "review", "ruling"];
@@ -627,10 +627,11 @@ function upsertAnswerOptions(fmLines, options, date) {
 // ------------------------------------------------------------------ probes
 //
 // author-questions: a probe carries `id`, `asks`, `why`, `discharges`,
-// `source` and `raised` while it stands open. The reading supplies `asks`,
-// `why`, `discharges` and an optional `fact`; this script supplies the rest
-// -- `id`, a slug it derives and makes unique on the node, `source` (always
-// `review`, from either reading), and `raised` (the apply's date).
+// `source`, `raised`, `target`, and `type` while it stands open. The reading
+// supplies `asks`, `why`, `discharges`, `type`, an optional `target` (default
+// `author`), and an optional `fact`; this script supplies the rest -- `id`, a
+// slug it derives and makes unique on the node, `source` (always `review`,
+// from either reading), and `raised` (the apply's date).
 
 /**
  * A slug for a newly raised probe's `id`, derived from `asks` and shaped to
@@ -658,17 +659,29 @@ function uniqueProbeId(base, used) {
 }
 
 /**
- * The reading's raw probes (`asks`, `why`, `discharges`, optional `fact`)
- * turned into full entries ready to splice into `probes:`: `id` derived from
- * `asks` and made unique among `existingProbes`' ids and each other, `source`
- * and `raised` supplied by the caller.
+ * The reading's raw probes (`asks`, `why`, `discharges`, `type`, optional
+ * `target`, optional `fact`) turned into full entries ready to splice into
+ * `probes:`: `id` derived from `asks` and made unique among `existingProbes`'
+ * ids and each other, `source` and `raised` supplied by the caller, `target`
+ * defaulted to `"author"` when the reading left it out, and `type` carried
+ * through as given.
  */
 function assignProbeIds(existingProbes, rawEntries, { source, raised }) {
   const used = new Set((existingProbes || []).map((p) => p.id));
   return (rawEntries || []).map((p) => {
     const id = uniqueProbeId(slugifyProbeId(p.asks), used);
     used.add(id);
-    return { id, asks: p.asks, why: p.why, discharges: p.discharges, source, raised, fact: p.fact ?? null };
+    return {
+      id,
+      asks: p.asks,
+      why: p.why,
+      discharges: p.discharges,
+      source,
+      raised,
+      target: p.target ?? "author",
+      type: p.type,
+      fact: p.fact ?? null,
+    };
   });
 }
 
@@ -698,13 +711,14 @@ function stageForOpenProbe(currentStage, wantsPeriagogic) {
 /**
  * One probe entry appended to `probes:`, in the order the reader's parse
  * block expects (`PROBE_KEYS`): `id`, `asks`, `why`, `discharges`, `source`,
- * `raised`, and `fact` when it names one. `id` and `source` are short
- * vocabulary words and need no quoting; the free-text fields are JSON-quoted,
- * which is a valid single-line YAML double-quoted scalar and round-trips
- * through any colon or quote mark the text carries; `raised` is a date,
- * quoted as `renderOptionEntry`'s `ref` already is so it stays a string.
+ * `raised`, `target`, `type`, and `fact` when it names one. `id`, `source`,
+ * `target`, and `type` are short vocabulary words and need no quoting; the
+ * free-text fields are JSON-quoted, which is a valid single-line YAML
+ * double-quoted scalar and round-trips through any colon or quote mark the
+ * text carries; `raised` is a date, quoted as `renderOptionEntry`'s `ref`
+ * already is so it stays a string.
  */
-function renderProbeEntry({ id, asks, why, discharges, source, raised, fact }, indent) {
+function renderProbeEntry({ id, asks, why, discharges, source, raised, target, type, fact }, indent) {
   const lines = [
     `${indent}- id: ${id}`,
     `${indent}  asks: ${JSON.stringify(asks)}`,
@@ -712,6 +726,8 @@ function renderProbeEntry({ id, asks, why, discharges, source, raised, fact }, i
     `${indent}  discharges: ${JSON.stringify(discharges)}`,
     `${indent}  source: ${source}`,
     `${indent}  raised: "${raised}"`,
+    `${indent}  target: ${target}`,
+    `${indent}  type: ${type}`,
   ];
   if (fact) lines.push(`${indent}  fact: ${fact}`);
   return lines;
@@ -736,10 +752,10 @@ function renderProbeEntry({ id, asks, why, discharges, source, raised, fact }, i
  * `review`, `depends`, `probes`.
  *
  * `probesAdd` entries (each already carrying `id`, `asks`, `why`,
- * `discharges`, `source`, `raised`, and optional `fact` -- `assignProbeIds`'s
- * shape) are appended to `probes`, creating the list when absent, at the
- * frontmatter's very end (the reader's key order puts `probes` after
- * `depends`, last of all).
+ * `discharges`, `source`, `raised`, `target`, `type`, and optional `fact` --
+ * `assignProbeIds`'s shape) are appended to `probes`, creating the list when
+ * absent, at the frontmatter's very end (the reader's key order puts
+ * `probes` after `depends`, last of all).
  */
 function upsertDialogueFields(rawText, { stage, reviewLines, options = [], date = null, dependsAdd = [], probesAdd = [] }) {
   const { fmLines: originalFm, bodyLines } = splitRaw(rawText);
@@ -1059,20 +1075,30 @@ function pinFailureMessage(err) {
 
 /**
  * Shape-check one raw probe entry from a reading (`asks`, `why`,
- * `discharges`, optional `fact`) -- the shape both `brief-draft.md` and
- * `brief-survey.md` ask the reading for, before `assignProbeIds` supplies
- * `id`, `source` and `raised`. No count of open probes is checked here, and
- * since `words/2026-09-08/32` struck the cap of three there is no count left
- * to check anywhere (author-questions).
+ * `discharges`, `type`, optional `target`, optional `fact`) -- the shape
+ * both `brief-draft.md` and `brief-survey.md` ask the reading for, before
+ * `assignProbeIds` supplies `id`, `source`, `raised`, and a default `target`
+ * of `"author"` when the reading left it out. `type` must be one of
+ * `PROBE_TYPES`; `target`, when given, must be a non-empty string. No count
+ * of open probes is checked here, and since `words/2026-09-08/32` struck the
+ * cap of three there is no count left to check anywhere (author-questions).
  */
 function pushProbeProblems(problems, p, label) {
   if (!p || typeof p !== "object" || Array.isArray(p)) {
-    problems.push(`${label} must be a mapping with asks, why, discharges, and optional fact`);
+    problems.push(`${label} must be a mapping with asks, why, discharges, type, and optional target and fact`);
     return;
   }
   if (!isNonEmptyString(p.asks)) problems.push(`${label}.asks is required and must be a non-empty string`);
   if (!isNonEmptyString(p.why)) problems.push(`${label}.why is required and must be a non-empty string`);
   if (!isNonEmptyString(p.discharges)) problems.push(`${label}.discharges is required and must be a non-empty string`);
+  if (p.target !== undefined && p.target !== null && !isNonEmptyString(p.target)) {
+    problems.push(`${label}.target must be a non-empty string`);
+  }
+  if (p.type === undefined || p.type === null) {
+    problems.push(`${label} carries no type`);
+  } else if (!PROBE_TYPES.includes(p.type)) {
+    problems.push(`${label} carries an unknown type '${p.type}'`);
+  }
   if (p.fact !== undefined && p.fact !== null && !FACT_NAMES.includes(p.fact)) {
     problems.push(`${label}.fact must be one of: ${FACT_NAMES.join(", ")}`);
   }
@@ -1104,7 +1130,7 @@ function validateDraft(input, { replies }) {
   }
   if (input.probes !== undefined && input.probes !== null) {
     if (!Array.isArray(input.probes)) {
-      problems.push(`${input.id}: 'probes' must be a list of {asks, why, discharges, and optional fact}`);
+      problems.push(`${input.id}: 'probes' must be a list of {asks, why, discharges, type, and optional target and fact}`);
     } else {
       input.probes.forEach((p, i) => pushProbeProblems(problems, p, `${input.id}: probes[${i}]`));
     }
@@ -1584,12 +1610,12 @@ function validateSurvey(input, graph, { replies, overrides, pins }) {
   // able to reach a node the survey did not judge, the same way a 'frontier'
   // finding already can (author-questions, brief-survey.md's output schema).
   if (input.probes !== undefined && input.probes !== null && !Array.isArray(input.probes)) {
-    problems.push("'probes' must be a list of {node, asks, why, discharges, and optional fact}");
+    problems.push("'probes' must be a list of {node, asks, why, discharges, type, and optional target and fact}");
   } else {
     (Array.isArray(input.probes) ? input.probes : []).forEach((p, i) => {
       const label = `probes[${i}]`;
       if (!p || typeof p !== "object" || Array.isArray(p)) {
-        problems.push(`${label} must be a mapping with node, asks, why, discharges, and optional fact`);
+        problems.push(`${label} must be a mapping with node, asks, why, discharges, type, and optional target and fact`);
         return;
       }
       if (!isNonEmptyString(p.node) || !nodesById.has(p.node)) {

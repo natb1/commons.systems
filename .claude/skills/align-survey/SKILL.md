@@ -215,7 +215,11 @@ questions it needs the author to answer before a recommendation can be
 grounded, each naming the node it is raised on and carrying what it `asks`,
 `why` the record cannot answer it, `discharges`, what an answer would settle
 and which recommendation it would move, and the `fact` it bears on where it
-bears on one. Three limbs admit a probe and all must hold — the record does
+bears on one. Each also carries a `type`, `periagogic` where it asks what the
+record says or whether the author has read what it says, `maieutic` where it
+asks what the author means or intends to bind. A `target` names the party the
+probe is put to and is optional, defaulting to `author` when the reading
+leaves it out, since a review puts its probes to the author. Three limbs admit a probe and all must hold — the record does
 not answer it and the reader has looked, the answer would move a
 recommendation on the node it names, and the answer is not itself a
 disposition, a question of that last kind being a node and going to the merge
@@ -428,8 +432,10 @@ as a finding of nothing.
      opens its dialogue — a stage-less node no entry names a stage for is
      refused, not guessed at;
    - splices each probe the session let stand into its node's `probes`, with
-     the `id` the apply derives, `source: review`, and the reading's date as
-     `raised`, and derives that node's stage from the probes before any
+     the `id` the apply derives, `source: review`, the reading's date as
+     `raised`, and `target` defaulted to `author` where the reading left it
+     out (`type` is always the reading's own), and derives that node's stage
+     from the probes before any
      finding's: a node that will carry an open probe after the run goes to the
      `maieutic` stage, or to `periagogic` where that is the earliest stage the
      run names for it, and never forward of where it stands

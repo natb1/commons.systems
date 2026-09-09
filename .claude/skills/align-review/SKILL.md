@@ -198,7 +198,12 @@ It returns the probes it raises on that node too (`author-questions`): the
 questions it needs the author to answer before the recommendation can be
 grounded, each with what it `asks`, `why` the record cannot answer it,
 `discharges`, what an answer would settle and which recommendation it would
-move, and the `fact` it bears on where it bears on one. Three limbs admit a
+move, and the `fact` it bears on where it bears on one. Each also carries a
+`type`, `periagogic` where it asks what the record says or whether the author
+has read what it says, `maieutic` where it asks what the author means or
+intends to bind. A `target` names the party the probe is put to and is
+optional, defaulting to `author` when the reading leaves it out, since a
+review puts its probes to the author. Three limbs admit a
 probe and all must hold — the record does not answer it and the reader has
 looked, the answer would move a recommendation on this node, and the answer is
 not itself a disposition, a question of that last kind being a node and going
@@ -392,8 +397,10 @@ dies of its own context returns nothing and is paid for twice.
    longer holds viable is marked passed over with its reason and stays on the
    list, and a viable option the reader named is added with the prose it gave
    (`prose-and-structure`). Each probe the session let stand is spliced into
-   the node's `probes` with the `id` the apply derives, `source: review`, and
-   the date as `raised`, and the stage is derived from the probes before the
+   the node's `probes` with the `id` the apply derives, `source: review`, the
+   date as `raised`, and `target` defaulted to `author` where the reading left
+   it out; `type` is always the reading's own. The stage is derived from the
+   probes before the
    verdict is read: a node that will carry an open probe after the apply goes
    to the `maieutic` stage, or to `periagogic` where that is the stage named,
    and never to `ruling` (`author-questions`). An override wins on the stage,

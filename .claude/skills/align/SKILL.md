@@ -473,7 +473,12 @@ skill only when the session starts in the checkout that carries it.
   naming the locus the AI read and what that locus leaves open,
   `discharges`, what an answer would settle and which recommendation it
   would move, which is also the ordering, its `source` in the vocabulary
-  an option's source carries, and `raised`, the date; a probe discharged
+  an option's source carries, `raised`, the date, `target`, the party it is
+  put to, `author`, `ai` where the author put it to the AI, or another
+  expert's identity, and `type`, `periagogic` where it asks what the record
+  says or whether the author has read what it says and `maieutic` where it
+  asks what the author means or intends to bind, set by the party that
+  raised it; a probe discharged
   stays on the list with `status: discharged` and the `reason`, in the
   shape a passed option's status and reason have, the two reasons being
   that the author answered it, the reason naming their words' address in
