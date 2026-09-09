@@ -23,7 +23,30 @@ disposition would change it, so a sitting leaves behind no work its own later
 findings have overtaken. Its one bar is confirmed ratified disposition, which
 reconciliation may not contradict; during bootstrap nothing is ratified, so the
 bar is presently empty, which the record says rather than leaving a reader to
-find out. Nothing else acts by right: a
+find out. What it acts on is a positive condition and not only the absence of
+that bar: bootstrap reconciliation acts on the convergence of the author's
+choice with the AI's recommendation, as the author fixed it at
+`words/2026-09-08/39`, the choice being the unconfirmed mark
+`what-an-option-row-carries` puts on an option and never a confirmation, and the
+recommendation being the AI's, which integrates the choices of any experts
+convened on the fact without requiring that those experts agree. Three things
+follow that the clause would otherwise be read without. A grant is how the
+author's choice reaches a node where the record holds none, which is why a grant
+is given per sitting in the author's own words and is never assumed, never read
+off the announcement of one, and never carried forward: it is not a permission
+to act on the AI's recommendation alone, it is the author supplying the term the
+convergence would otherwise be missing. Where the author's choice is not
+independently recorded but read back from the record by the same party that
+holds the recommendation, the convergence is constructed and not observed, and
+`deferring-on-a-probe` is the mechanism that does exactly that; the bound this
+rule puts on it is that a choice so assembled names the recorded disposition it
+was read from, so that the author can see what was read and overturn it, because
+a convergence neither party can point at is not one. And the record cannot
+exhibit the first term today at all, since `recording`'s ruling responses are
+`confirm` and `edit` and neither writes a choice the author has made and not
+confirmed, so this clause states a rule whose encoding is owed, and says so here
+rather than leaving a reader to find that its central term is unrepresentable.
+Nothing else acts by right: a
 recommendation on an unanswered node is a draft and grounds no work, and a class
 the AI writes for itself is not a grant.
 

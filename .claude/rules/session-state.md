@@ -11,6 +11,20 @@ been able to put in the record: the author's words whose relation to a dispositi
 fact is unresolved, and the sitting's own working state. Nothing in it has any
 authority, it is not on the disposition ref, and it does not outlive the sitting.
 
+The store is a recovery log and not a diary, and the one failure it recovers from is
+compaction. Every other way a sitting can end, killed, crashed, or stopped by an
+error, is the harness's to handle, and the store owes such an ending nothing. It is
+read on the far side of a compaction by the sitting that wrote it, so it carries no
+sitting identity, needs no liveness test and no sweeper, and no later sitting is
+obliged to look for one left behind; a store whose sitting died is not a thing the
+record recovers, it is a thing the record never had. The crash-only reading, that a
+recovery path taken only on an orderly exit is wrong when it is finally needed, is
+answered here rather than adopted: compaction is not a crash. It is a scheduled event
+inside a sitting that continues across it, so this store lies on the ordinary path and
+not the exceptional one, and the instruments that would make a recovery log correct in
+the crash-only sense, an identity, a scan at open, a sweeper for what no one claims,
+buy nothing when the reader is the writer and the writer has not gone away.
+
 The mechanism is the AI's to choose, and different state may be held by different
 tools or in different files as the AI judges best. What this rule fixes is the
 requirement, because a requirement is what a later sitting can be held to, and a

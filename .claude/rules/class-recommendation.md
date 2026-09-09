@@ -9,9 +9,17 @@ Expensive means the cost of a wrong answer is paid in work the record cannot
 take back cheaply. Irreversible means it is not paid back at all: a deletion, a
 swap, a landing that other work is built on. Capture-shaped means the party that
 would set the answer is the party the answer is meant to check.
-Where none of the three holds, the recommendation is delegated where the author
-has said they do not want to be asked again about that class of decision, and
-deferred otherwise.
+Where none of the three holds, the recommendation is delegated. Delegation is
+the residual and takes no enumeration behind it: a decision none of the three
+limbs reaches is one the author does not want to be asked about again, and
+that is what the residual says rather than something a list of already-named
+classes has to establish first. Deferred is the narrow case and carries a test
+of its own: it is recommended where a ratification is wanted and is not
+presently practical to obtain, and where waiting for it must not stop
+reconciliation outside bootstrap. So deferred is a holding pattern with an
+intention behind it, ratification later, and not the absence of one, and it is
+recommended against a reason the node states rather than as what is left when
+nothing else applies.
 
 The reading that applies the test is written on the node, in the `### authority`
 subsection, which says which of the three limbs it found and why; a class
