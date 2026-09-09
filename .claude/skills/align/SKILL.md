@@ -169,8 +169,9 @@ skill only when the session starts in the checkout that carries it.
    subsection — whole, as a fenced `markdown` block holding the node as it
    would stand under it, or as a named change, a `diff` block of hunks
    applied strictly against another option's resolved content — and a
-   node's answer is the resolved content of the option labelled confirmed,
-   or, where none is confirmed, of the option the answer fact recommends.
+   node's answer is the resolved content of the option labelled confirmed;
+   where none is confirmed the node has no answer, and the option the answer
+   fact recommends is carried as a draft and never as its answer (`authority`).
    The migration from legacy to content is `packages/disposition/migrate.mjs`,
    run once over the whole graph at graph commit `f0741490` on 2026-09-07
    under the author's grant of that day, after which every node stands in
