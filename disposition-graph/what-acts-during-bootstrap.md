@@ -9,6 +9,7 @@ facts:
         ref: "2026-09-05"
         supports:
           - words/2026-09-04/44
+          - words/2026-09-08/2
           - words/2026-09-08/22
       - name: deferred-as-the-resting-state
         source: review
@@ -44,6 +45,9 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/36
+      - name: interim-doctrine-binds-as-last-seen
+        source: ai
+        ref: "2026-09-08"
     recommends: shim-and-grant
     boldness: high
     against: "Every rule file under `.claude/rules/` that a session loads, this node's own projection among them, is the projection of a node no ruling reaches, and the `session-context` node declares a shim on `CLAUDE.md` and on `.claude/settings.json` and on neither the rules projection nor this file, so this answer says the doctrine the record is running on today acts on nothing, and says it in a file that binds every session while saying it. It leaves a session no account at all of what those files bind it to, and the option that would give one is `projected-doctrine-acts`."
@@ -610,6 +614,135 @@ From: shim-and-grant
  findings have overtaken. Its one bar is confirmed ratified disposition, which
 ```
 
+#### interim-doctrine-binds-as-last-seen
+
+The expert's choice, with the amendment it would mint beside it. Everything
+`projected-doctrine-acts` says -- the projected global-tier rules bind a session while
+the nodes they project are unruled -- with the binding attached to the rule text as of
+the graph commit the author last saw, so that a global-tier node the AI amends afterwards
+is loaded and reported but does not bind until the author has seen it. Where only one
+mark is recorded the expert asks that it be recorded on `projected-doctrine-acts`.
+
+**Expert choice.** `founding-constraint`, convened on this answer fact on 2026-09-08,
+grounding the constitution of a founding order. Its argument: the founding literature's
+organising distinction is between the constituent power, unbound by the order it is
+making, and the constituted powers, bound by it, and its central practical finding is
+that a transitional body cannot be left operating on ad hoc grants from the sovereign
+alone, because an operating body always runs on some norms and the only real choice is
+whether those norms are written, published and reviewable or tacit. That is what an
+interim constitution is for: not to anticipate the permanent text but to be binding law
+while the permanent text is unmade. `shim-and-grant` describes an order with no interim
+law at all -- a stand-in device for unmade materializations, plus a prerogative word from
+the sovereign -- which is the pre-constitutional condition the interim instrument was
+invented to end. Meanwhile the record already runs on interim law: nine files under
+`.claude/rules/` are loaded into every session and obeyed, and this repository's
+orientation page says every rule a session works under is one of them. So the answer as
+it stands states as doctrine the opposite of what the record does in operation, which the
+expert names as the paper-constitution pathology in its classical form: operative norms
+that bind in fact and are unreviewable in law because formally there was never anything
+to depart from.
+
+What makes the analogy hold for `projected-doctrine-acts` and not for
+`deferred-as-the-resting-state` is closure. What the option makes binding is a closed,
+published, projected set, the global-tier nodes, nine files, each headed by the node it
+comes from, and not an open default in favour of the drafter. The expert's case is that
+what made South Africa's 1993 instrument work as a constraint was that its thirty-four
+Constitutional Principles were enumerated, published and few enough to be certified
+against, and not that transitional authority was generally conceded.
+
+The pin is the certification device reduced to what two parties can run. South Africa
+made the interim instrument's constraint effective by having compliance certified by a
+body that was neither drafter nor ratifier, and the device had teeth: the Constitutional
+Court refused to certify on 6 September 1996 and the Assembly had to amend and return.
+This record has two parties and cannot stand up a third. A version pin is the two-party
+degenerate case: not a third body, but the property that made the third body useful,
+which is that the drafter cannot change what binds it without the change being shown.
+
+**Expert divergence, its own, three.** The first is against the option it chose: the
+interim instrument here is drafted by the party it binds and licenses, which is the
+constituent-power capture problem in miniature, and in the case that most supports the
+option it was not -- the interim text came from the multi-party process rather than from
+the assembly that would write the permanent one. The second is that every historical
+interim instrument the expert can point to was itself ratified before it bound anyone,
+whereas this option would make an instrument binding because it is projected, which no
+tradition in its grounding does; it quotes Madison against itself, that the plan was "of
+no more consequence than the paper on which it is written, unless it be stamped with the
+approbation of those to whom it is addressed", and says the option asks the record to
+give force to unstamped paper. The third is against the pin: seen is not agreed.
+Certification is an adjudicated finding of compliance against enumerated principles; a
+pin records only that the text was in front of the author, so it would prevent silent
+widening and would not prevent widening the author reads past.
+
+**AI support.** The gap the option closes is measured and not argued. Nine rule files are
+projected and loaded into every session; the answer this fact recommends says no class
+acts and nothing binds but a shim and a grant; the two cannot both be true of the same
+record. Whatever the author rules, the record should not go on holding a doctrine its own
+operation contradicts.
+
+**AI divergence.** The main thread does not move the mark onto this option or onto
+`projected-doctrine-acts`, and the reason is mechanical rather than a judgment about the
+argument. `projected-doctrine-acts` is encoded as a one-paragraph whole-markdown fence,
+as are four of the other rivals, while the recommendation's fence carries two paragraphs:
+ruling for any of the five would delete the answer's second limb, the half that answers
+this node's second question, when bootstrap ends. That was measured, not estimated -- the
+fences run 69 lines for the recommendation against 31, 33, 25, 20, 22 and 18 for the
+rivals, and the two options encoded as diffs against the recommendation do not have the
+problem. The option recorded here is encoded as a diff against `shim-and-grant` rather than as a
+sixth one-paragraph fence, which is the repair the expert asks for, performed on the
+option it minted rather than described; doing the same to `projected-doctrine-acts` is
+put to the author instead of done, because re-encoding an existing option's content
+changes what the author would be ruling on.
+
+**Content.**
+
+From: shim-and-grant
+
+```diff
+@@ -6,7 +6,7 @@
+ tier: global
+ defines:
+   - term: bootstrap
+-    gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
++    gloss: "The state of this record until bootstrap exit, in which nothing acts by right but the record's projected interim doctrine as the author last saw it, a declared shim, the author's grant, and each class a ruling has already conferred."
+   - term: bootstrap exit
+     gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
+   - term: bootstrap authority
+@@ -15,7 +15,7 @@
+ 
+ ## Answer
+ 
+-Two things act by right, and no class acts until a ruling confers one; from that
++Three things act by right, and no class acts until a ruling confers one; from that
+ ruling the class acts, as the authority node says, whose own sentence that no
+ class acts during bootstrap was written of the narrower state and stands with
+ the author as the option `a-conferred-class-acts-during-bootstrap`; and what
+@@ -37,7 +37,23 @@
+ findings have overtaken. Its one bar is confirmed ratified disposition, which
+ reconciliation may not contradict; during bootstrap nothing is ratified, so the
+ bar is presently empty, which the record says rather than leaving a reader to
+-find out. Nothing else acts by right: a
++find out.
++
++And the third is the record's own interim doctrine: the answers of the
++global-tier nodes, as the projector writes them under `.claude/rules/`, bind a
++session while the nodes they project are unruled. They bind as of the graph
++commit the author last saw, which each rule file carries as a pin, so a
++global-tier answer the AI amends afterwards is projected, loaded and reported
++and does not bind until the author has seen it. This is interim law and not a
++class: it confers nothing on anyone, it is a closed and published set rather
++than a default in the drafter's favour, and every one of its nodes stays
++unanswered and on the frontier, so nothing here is ratified and nothing is
++shielded from amendment. It is written into the answer because the record
++already runs this way, nine files loaded into every session and obeyed, and a
++doctrine saying otherwise leaves the norms a session actually runs on
++unreviewable by holding that formally there are none.
++
++Nothing else acts by right: a
+ recommendation on an unanswered node is a draft and grounds no work, and a class
+ the AI writes for itself is not a grant.
+ 
+```
+
 ### authority
 
 Ratified, at moderate boldness: this node says what an agent may act on by
@@ -618,7 +751,6 @@ capture-shaped on its face — an answer that widened it would let the AI grant
 itself the authority the rest of the record withholds. Moderate because the two
 rules it gathers are already the author's, and what is new is the sentence about
 how the state relaxes and ends.
-
 ## Account
 
 ### Manifest
@@ -813,3 +945,82 @@ expert landed one commit ago on `clean-context-review`. That is one fact, one ex
 and it diverges from the author's current choice there; the antecedent of the author's
 opening sentence therefore holds in its strongest form, not insufficient concurrence but
 no concurrence at all, and the consequent is what this sitting is doing.
+
+### The fourth expert, on this fact, 2026-09-08
+
+`founding-constraint` was convened on this answer fact under the author's grant, its
+grounding the constitution of a founding order, and its return is recorded above. It
+chose `projected-doctrine-acts` and minted the amendment recorded here, returning a
+support and a divergence for each of the nine options including the two passed ones.
+
+Its brief steered it and it says how. The brief described its grounding as, among other
+things, "the design of authority that is meant to shrink", which is the incumbent
+answer's own thesis -- this option's first sentence ends "and what acts by right shrinks
+with every ruling" -- so the brief handed the expert the incumbent's position as its
+expertise before it read the node. The expert asks that any finding of its amounting to
+"a shrinking, event-driven ratchet is good design" be read as the brief talking, and
+keeps exactly one such finding, flagged, in its support for this option's second limb.
+It also names a conflict it could not neutralize: an expert asked whether the expert
+system's own condition is satisfiable is not a disinterested party, since a finding that
+the expert relation is not yet recordable is a finding that the record needs more of what
+it is.
+
+**The measured matter.** The expert was asked whether the record can presently satisfy
+the condition that `reconciliation-runs-on-a-judgment-of-sufficient-grounding` sets, that
+the grounding between the author and the experts convened on a node suffices. Its answer
+is no, on six measurements, all re-runnable. The tooling contains the string "expert"
+zero times across `packages/disposition/*.mjs`. The nine projected rule files contain it
+zero times, and so does the alignment skill, so no session is told what an expert is and
+the party that must make the judgment loads nothing that defines its object. The reader
+has no field for an expert's position: the option carrying the first expert's mark parses
+to keys `name, source, ref, status, reason, ruling, supports, diverges, prose, sentence,
+aiSupport, aiDivergence, content, resolved, readings`, with no expert key, because
+`read.mjs` recognizes only the AI's two markers and everything before the first
+recognized marker falls into the option's own `sentence`. So the record states an expert's
+position by putting it inside the option's statement of itself. And the two nodes that
+would define the object, `expert-identity` and `expert-instructions`, both stand at the
+periagogic stage, `expert-identity`'s own prose saying "the record names an expert
+everywhere and defines one nowhere".
+
+What follows is narrower than a verdict on that option: its condition is not merely
+unverifiable by a third party, which is the design objection the option already carries;
+its subject is undefined and its object is unrecordable, so a ruling for it today would
+install a condition whose satisfaction cannot be shown, checked or revisited, asserted by
+the party it licenses. The expert calls it premature by exactly two nodes rather than
+wrong in direction, and offers a narrower repair: require the judgment to be recorded, as
+a dated line naming the node, the experts convened on it and what the judgment turned on,
+which would give the author the set of reconciliations that ran and not only the residue
+of those withheld.
+
+**Four measurements nobody asked for, all confirmed by the main thread before recording.**
+
+The stub-fence defect, confirmed line for line: five of the seven fence-carrying options
+would delete this answer's second limb if ruled. It is recorded in the option above and
+is the reason no mark moved.
+
+No option anywhere in the graph carries a ruling: zero, across all 165 nodes of both
+graphs. So the bar this answer names, confirmed ratified disposition, binds nothing --
+which the answer says -- and the ratchet it describes, relaxing node by node as rulings
+accumulate, has not advanced one notch. The record is at day zero of its own transition,
+and the author should have that when weighing how much the shrinking-by-ruling design has
+so far bought.
+
+The ledger entry `words/2026-09-08/2` was referenced by no option. That entry is the
+author's grant for this sitting, recorded as said on this node, so the node defining what
+a grant is did not reference the grant the sitting amending it was running under. The
+expert's reading is that a register of grants not containing the grant in force is the
+register failing at the one job it has. It is repaired in this commit, on
+`shim-and-grant`, beside the refinement at `words/2026-09-08/22` that it is the original
+of. Four further entries of that day and fourteen of earlier days remain unreferenced and
+are ordinary work.
+
+The expert observed the graph go from valid to invalid under it mid-sitting, exit 0 at
+about 23:51 UTC and exit 1 at 00:01:41, and reported it as observed, timestamped and
+possibly transient. It was transient: the invalid state was this sitting's own, an option
+`delegated-for-the-physical-form` written onto `readings`' authority fact, which the
+schema forbids because an authority fact may only offer the three classes a ruling
+confers; it was repaired in the same sitting and the graph validates. The observation is
+kept because the expert is right about what it is an instance of. Under a run-on grant
+with no per-act checkpoint the record's own reader can be broken between two reads and
+nothing marks the moment, which is the cost the record named when the narrow clause was
+replaced, appearing in the wild within hours of the replacement.
