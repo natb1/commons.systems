@@ -284,14 +284,14 @@ loads act as this record's interim doctrine while the nodes they project are
 unruled, and each falls away as the node it projects is ruled. It answers, at
 the node that owns the projection, the case the `what-acts-during-bootstrap`
 node records against its own answer: that nothing that answer names is what the
-doctrine the machine is running on is, since eight rule files are projected from
-eight nodes no ruling reaches, and by that node's "Nothing else acts by right"
+doctrine the machine is running on is, since nine rule files are projected from
+nine nodes no ruling reaches, and by that node's "Nothing else acts by right"
 they are neither of the two things that act.
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
-**AI divergence.** Against it, a shim over eight files
-projected from eight unruled nodes is one declaration standing in for the whole
+**AI divergence.** Against it, a shim over nine files
+projected from nine unruled nodes is one declaration standing in for the whole
 of the record's present operation, which is the thing a shim is least well
 shaped to be. The option on that node
 which offers the same answer written as a limb of its own text is
@@ -335,8 +335,8 @@ loads act as this record's interim doctrine while the nodes they project are
 unruled, and each falls away as the node it projects is ruled. It answers, at
 the node that owns the projection, the case the `what-acts-during-bootstrap`
 node records against its own answer: that nothing that answer names is what the
-doctrine the machine is running on is, since eight rule files are projected from
-eight nodes no ruling reaches, and by that node's "Nothing else acts by right"
+doctrine the machine is running on is, since nine rule files are projected from
+nine nodes no ruling reaches, and by that node's "Nothing else acts by right"
 they are neither of the two things that act.
 ```
 
@@ -639,3 +639,62 @@ the page states no rule of its own.
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/session-context stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-03/76, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `commit-settings-json`, `context-moves-here`, `strike-ledger-sunset-dependency`, `shim-names-an-existing-artifact`, `rules-projection-declared-a-shim`, `delete-claude-md`, `operating-rules-in-claude-md`, `skills-among-what-a-session-loads`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `5022100045d3fec87a66697115d238de6eead5cc` was already past the recommendation and is left as it stood. The survey's pin `8ade4e832717a6c3bf0fb4b7910f19bad0f1324f` is re-computed for the encoding as `6caaebc0f48522074d2c2b4756dfda8a811afb1c`; nothing it read changed.
+
+### The count was eight and is nine, 2026-09-08
+
+Three sentences on this node said eight rule files are projected from eight unruled
+nodes: two in the same paragraph of an option, once in its prose and once inside its
+content fence, and one in that option's divergence. The directory holds nine. The
+ninth arrived when a global-tier node was minted after the sentences were written, which
+is the ordinary way this number moves and will move again.
+
+The count is corrected rather than removed, because it is doing work: the argument is
+that the shim covers the whole of the record's present operation, and how many files
+that is, is the measure of how much. But a hand-written count of a directory that grows
+is a fact of the day dressed as a proposition, and this is the second time in two days
+the record has found one stale in its own prose. The durable form is a count the
+projector writes, and the projector already knows the number, since it is the projector
+that decides which nodes are global-tier and writes one file per node. Recorded here as
+an item for whoever answers this node: prose that must carry a count should carry it
+from the instrument, or should be written so it does not need one.
+
+The amendment does not stale this node's rule projection, and the sitting checked rather
+than assumed. The three sentences are in `rules-projection-declared-a-shim`, which is a
+rival; the recommendation on this fact is `standing`, so the projector reads a different
+fence and `--rules --check` reports the rules current. The sitting first wrote the
+opposite here, on the assumption that a corrected count in a content fence must reach the
+projection, and struck it when the check disagreed. Worth keeping as an instance: which
+option a fence belongs to decides whether an edit is a projection change or a note in the
+dialogue, and the two look identical in a diff.
+
+### An expert arrived at this node's rival from outside the record, 2026-09-08
+
+`rules-projection-declared-a-shim` holds that the projected rule files act as this
+record's interim doctrine while the nodes they project are unruled, each falling away as
+its node is ruled. It is a rival here, not the recommendation, and it was written by this
+record about itself.
+
+On the same day an expert convened on `what-acts-during-bootstrap`, grounded in the
+constitution of a founding order and given that node and its neighbourhood, arrived at
+the same design without being shown this option. Its argument comes from the other
+direction: a transitional body always runs on some norms, so the only choice is whether
+they are written, published and reviewable or tacit, and that is what an interim
+constitution is for. It found the same nine files, drew the same conclusion that they are
+the doctrine in operation, and minted
+`interim-doctrine-binds-as-last-seen` on that node, which is
+`rules-projection-declared-a-shim`'s proposition plus a pin at the graph commit the
+author last saw.
+
+Two nodes now carry the same design from two independent derivations, one from the
+record's own operation and one from a tradition outside it. That is the strongest form of
+support this record can presently record for anything, and it is worth saying plainly
+that it is also thin: two derivations agreeing is not two parties agreeing, since the AI
+composed the brief that produced the second. What it does establish is that the option is
+not an artifact of how this record happens to describe itself.
+
+What follows is a question, not a move. The two nodes would answer the same question
+differently placed -- this one at the projection that writes the files, that one at the
+authority that says what acts -- and neither answer references the other. Nothing is
+moved here, because a recommendation that changed on this fact would change what the
+projector writes for every session, and that is the author's to rule. It is recorded so
+that whoever takes either node sees both.
