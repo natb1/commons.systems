@@ -56,6 +56,42 @@ probes:
       returns the question.
     source: ai
     raised: 2026-09-08
+  - id: does-the-mechanism-reach-a-maieutic-probe
+    asks: >-
+      Your words scope this to "the answer to a periagogic probe". A maieutic probe
+      asks what you intend and have not yet articulated. May you defer or delegate on
+      one of those too, or is a maieutic probe one only you can answer?
+    fact: answer
+    why: >-
+      The scope clause is the author's own and it names one of the record's two probe
+      types, so the narrow reading is available on the face of the words; but the
+      record cannot presently tell which type a probe is. No probe in the graph carries
+      a type: `PROBE_KEYS` admits none, and the field `author-questions` gains at
+      `words/2026-09-08/39` is unmaterialized on the implementation ref. So the seven
+      deferrals this mechanism received on the day it was minted rest on the sitting's
+      own reading of which kind each probe was, and if the narrow scope is the answer
+      then a mark the record does not yet hold is a precondition of a valid deferral,
+      which is a dependency worth knowing about before the field is built rather than
+      after.
+
+      The two readings differ in what they ask the AI to do, which is why this is not a
+      detail. A periagogic probe asks what grounds a question, and ground is the sort
+      of thing a record holds, so reading the author's choice back from their recorded
+      dispositions is reading the record for what the record is for. A maieutic probe
+      asks what the author intends and has not said, and an intention that has not been
+      articulated is by construction not in the record; reading it back would be the AI
+      inferring the author's intention from the AI's own drafts, which is the capture
+      this node's own `against` names, arriving by a route the answer's scope clause
+      may already have closed. Against that: many probes the record calls maieutic ask
+      the author to choose between two readings of something they have already said,
+      and that is a record question in everything but its label, so a bright line at
+      the type would refuse the mechanism exactly where it is safest.
+    discharges: >-
+      Whether the answer's scope clause stands as the author wrote it or widens to any
+      probe, and with it whether the `type` field `author-questions` adds becomes a
+      precondition of a valid deferral rather than a projection convenience.
+    source: ai
+    raised: 2026-09-08
 facts:
   - name: answer
     options:
