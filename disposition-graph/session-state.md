@@ -215,9 +215,10 @@ facts:
         reason: "the author's refinement of 2026-09-08 admits to the ledger only what bears on a disposition fact, so a ledger that takes everything is the position that refinement left"
       - name: the-store-is-written-verbatim-and-holds-the-sequencing
         source: author
-        ref: "2026-09-08"
+        ref: "2026-09-09"
         supports:
           - words/2026-09-08/36
+          - words/2026-09-09/2
     recommends: a-compaction-store-the-ai-shapes
     boldness: low
     against: "The answer records a requirement and delegates the mechanism, which is what the author asked for and is also the shape in which a rule can be satisfied by nothing in particular. Compaction survival is not observable from inside the sitting that needs it: a store the AI judged adequate and that turns out not to have survived is discovered by a session that no longer has the thing it would have compared against, so the delegation hands the AI a choice whose failure it is structurally unable to see. The displaced option was worse in its reason and better in this one respect, that a fixed path is checkable by anyone at any time. What would close the gap is a test the sitting can run rather than a mechanism the rule names, and the record does not have one."
@@ -679,7 +680,7 @@ From: a-compaction-store-the-ai-shapes
  
  The store is a recovery log and not a diary, and the one failure it recovers from is
  compaction. Every other way a sitting can end, killed, crashed, or stopped by an
-@@ -56,6 +58,18 @@
+@@ -56,6 +58,31 @@
  word. Quotations may also be kept in other stores for other reasons, by rule or by
  the AI's judgement; the ledger's rule governs the ledger.
  
@@ -694,6 +695,19 @@ From: a-compaction-store-the-ai-shapes
 +order. `alignment-order`'s rank is derived from the graph by `--frontier` and stays
 +derived; what the store holds is this sitting's departure from that order under the
 +input in hand.
++
++How much of the sequencing is held is fixed by what the sitting must be able to print
++when it stops, which is `standard-report`'s question and is answered there. For each
++disposition the sitting has sequenced, the store holds its place in the order, the
++ground it was placed on, and the sitting's paraphrase of the author's inputs that
++decomposed into it. The paraphrase is held here and nowhere else, being the sitting's
++own reading and not the author's words, which are in the ledger and are addressed from
++the options they support. Two things a reader might expect here are not here. The
++disposition's id and its question are on the node and are read from it, since a
++disposition is a node. And the rank the sitting assigns a probe is recorded on the
++probe and not in the store, which is `author-questions`' answer, so what the store
++holds of the ordering is the order of the dispositions and never the order of the
++questions inside one.
 +
  A word leaves the store in one of two directions and never sits there. Where the
  sitting resolves that the words bear on a disposition fact, they are entered in the
@@ -922,3 +936,46 @@ just said it does not keep.
 This node is `tier: global`, so its rule projection under `.claude/rules/session-state.md`
 is stale from this amendment. The projection lands on the implementation ref and is
 named in this sitting's report.
+
+### What the report requires of the store, 2026-09-09
+
+The author's words at `words/2026-09-09/2` open with a rider, that the disposition on
+local session state support the alignment sequencing report the rest of the entry fixes.
+Recorded against the standing option `the-store-is-written-verbatim-and-holds-the-sequencing`
+rather than as a new one, because that option already holds that the sitting's
+re-evaluated sequencing is among the working state and this says what of it is held; and
+because a third option compatible with both of the two already here would make the
+problem this node's account records worse, that the mark cannot express two compatible
+positions and moving it would drop the delegation the author made first. The option's
+`ref` moves to the date of its newest words, as `ref` is read across the record.
+
+What the report demands is what the store must hold, and running the demand backwards is
+what fixes the contents. The report prints, per disposition, an id, a question, a
+paraphrase of the author's inputs, and a probe list in rank order. The id and the question
+are on the node. The rank is on the probe, under `author-questions`' answer, since the
+author's words of the same turn say the main thread records it and that what is recorded
+goes on the ref. So what is left for the store is the order itself, the ground each
+placement was made on, and the paraphrase, and the paraphrase is here because it is the
+sitting's reading rather than the author's words and there is nowhere on the ref for a
+reading of words that are already in the ledger.
+
+The rider bears on the recommendation and does not move it here. The recommended option is
+`a-compaction-store-the-ai-shapes`, which fixes the requirement and delegates the
+mechanism and says nothing about the sequencing; under it the store is not required to
+hold what the report must print, so the author's rider is not satisfied by the answer this
+node recommends, only by the option beside it. That is the same defect the account of
+2026-09-08 recorded from the other side, and this entry is a second author input weighing
+on it. It is recorded and not acted on, because moving the mark would drop the delegation
+and because the author's words ask for the disposition to support the report rather than
+for a different option to be recommended.
+
+What this settles of the probe `may-the-store-direct-what-it-may-not-authorize`, and what
+it does not. The probe's discharge has two limbs. The second, how much of the sequencing
+is stored at all rather than derived, is answered: the paraphrase and the order with its
+grounds are stored, the id and the question are read from the node, and the probe rank is
+on the ref, so the stored part is smaller than the probe assumed. The first limb, whether
+the no-authority sentence divides in two, is untouched and is now sharper than it was. The
+report a sitting prints at its stop is drawn from the store alone, and it directs the
+author's attention to some questions and not others while authorizing nothing, which is
+exactly the uncertified realtime rough the probe's reason names, no longer as an analogy
+but as a thing this record now does at every stop. The probe stands.
