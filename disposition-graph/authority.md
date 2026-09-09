@@ -1547,3 +1547,7 @@ wider option reaches a probe's reason, so striking it would be the AI ruling for
 that option in the act of correcting it. It is recorded here as further evidence
 for the wider option instead, and the author's choice between the two is left
 open.
+
+### The reader's fallback split from the answer, 2026-09-09
+
+The defect the answer names, that the reader supplies the recommendation where it finds no confirmation, was repaired on `greenfield` at 19a30a90 as far as this rule reaches into the reader: `answerText` and `answerOptionName` are now the confirmed option's resolved content and name alone, null where none is confirmed, and the text the projections render where nothing is confirmed is `carriedText` and `carriedOptionName`, named as what is carried and never as the answer, at the three sites that render drafts, the reader's own, the browser's and the review brief's. Every projection's output was measured unchanged by the split, and the prose that called the carried text the answer was reworded the same day at its nine loci, on `dialogue`'s and `survey-selection`'s recommended chains and in the alignment skill's third clause of currency. The answer's sentence naming the defect is left standing: the reader still supplies the recommendation to the projections, now under a name that says what it is, and whether a projection that renders the carried text in the place an answer would stand is what this rule wants of it is the projections' question and not this node's, left as found.
