@@ -3,6 +3,8 @@ question: How does this repository document itself?
 stage: maieutic
 probes:
   - id: does-a-declared-term-owe-a-sentence
+    target: author
+    type: periagogic
     asks: >-
       A node's `defines` block does two jobs: it claims a term, so the projector
       can report when two nodes claim the same one, and it may carry the
@@ -30,6 +32,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: what-equal-means-in-the-order
+    target: author
+    type: maieutic
     asks: >-
       What does the author mean by self-documentation and scope standing equal
       in the high-level order?

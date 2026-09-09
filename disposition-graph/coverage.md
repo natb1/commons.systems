@@ -3,6 +3,8 @@ question: Which of the recorded functions fall within the purpose?
 stage: periagogic
 probes:
   - id: personal-software-maintenance
+    target: author
+    type: maieutic
     asks: >-
       Does the purpose cover maintaining the software the author uses
       personally, or only the intention behind building it?
@@ -25,6 +27,8 @@ probes:
     source: ai
     raised: 2026-09-03
   - id: host-and-shared-infrastructure
+    target: author
+    type: maieutic
     asks: >-
       Is the author's own computing environment one more institution of daily
       life the purpose should name, or infrastructure with no purpose of its
@@ -43,6 +47,8 @@ probes:
     source: ai
     raised: 2026-09-03
   - id: marketing-and-portfolio-content
+    target: author
+    type: maieutic
     asks: >-
       Is marketing and portfolio content part of what this repository is for, or
       a separate function to be named or excluded?
@@ -61,6 +67,8 @@ probes:
     source: ai
     raised: 2026-09-03
   - id: indirect-promotion-of-values
+    target: author
+    type: maieutic
     asks: >-
       Is the indirect promotion of the author's values through unrelated content
       within the purpose, or a hobby a legacy node happened to rationalize?

@@ -3,6 +3,8 @@ question: What may the recorder do to the graph's topology without asking?
 stage: maieutic
 probes:
   - id: does-the-delegation-reach-the-whole-fact
+    target: author
+    type: maieutic
     asks: >-
       Does the delegation of 2026-09-06 reach every question the topology fact
       now carries, or only the prune its sentence names?

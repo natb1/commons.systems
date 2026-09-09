@@ -3,6 +3,8 @@ question: How is materialized implementation reviewed before it lands?
 stage: maieutic
 probes:
   - id: cap-and-effort-from-the-contract
+    target: author
+    type: periagogic
     asks: >-
       What fixes a landing's review cap and its effort tier?
     fact: answer
@@ -23,6 +25,8 @@ probes:
     source: ai
     raised: 2026-09-03
   - id: graph-landing-review-at-scale
+    target: author
+    type: periagogic
     asks: >-
       What reviews a graph landing once landings arrive from many sessions?
     fact: answer

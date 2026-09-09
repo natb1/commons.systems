@@ -358,6 +358,8 @@ depends:
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
 probes:
   - id: when-you-scoped-what-persists-to-the-opt
+    target: author
+    type: maieutic
     asks: "When you scoped what persists to the options the AI categorizes as viable, what did you mean viable to exclude?"
     why: "The node's answer fact recommends `passed-over-options-stay`, and its own recorded `against` says the recommendation \"reverses the author's words on the AI's reading of the regression purpose those same words gave\": the author's scoping phrase is \"categorized as viable by the AI\", and the node's rationale had earlier rejected keeping the rest. The record does not say whether an option the AI passed over is still viable in the author's sense or is exactly what the scoping was meant to drop. Everything the record has on it is the AI's reading of the author's phrase, in the node's own rationale and in its `against`, which read it in opposite directions."
     discharges: "It settles the answer fact's recommendation between `passed-over-options-stay` and `grant-from-a-ruling`, which stands, and with it the price the node itself gives at a hundred and forty-one option rows across thirty-eight nodes on the alignment page. It also settles `commons.systems/disposition-graph/rejected`'s recommendation, whose own `against` says that node \"has no ground of its own if the author rules the other way one node earlier\"."

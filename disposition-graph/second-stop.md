@@ -3,6 +3,8 @@ question: What does a newcomer read after purpose?
 stage: ruling
 probes:
   - id: onboarding-walk-against-bite-order
+    target: author
+    type: maieutic
     asks: >-
       Should the onboarding walk and the reconciliation bite order diverge, so
       that rank no longer serves both, or should the model node say where a

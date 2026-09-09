@@ -3,6 +3,8 @@ question: How is the record read?
 stage: maieutic
 probes:
   - id: scope-of-hiding-unanswered-nodes
+    target: author
+    type: maieutic
     asks: >-
       In what sense of "unanswered" did the author rule that unanswered nodes
       are hidden from the browser?

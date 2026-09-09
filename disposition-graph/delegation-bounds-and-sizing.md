@@ -48,6 +48,8 @@ review:
       words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 probes:
   - id: model-naming-clause-bound-or-sizing
+    target: author
+    type: periagogic
     asks: >-
       The clause added to `delegation` on 2026-09-08, that a brief names the
       model as it names the effort and no subagent runs on the harness's

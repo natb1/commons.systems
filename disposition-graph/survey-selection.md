@@ -106,6 +106,8 @@ facts:
     boldness: low
 probes:
   - id: probe-finding-reports-or-launches
+    target: author
+    type: maieutic
     asks: >-
       When the drift probe finds a contradiction in a frozen pair, does that
       finding launch a whole reading by itself, or is it put before the author
@@ -126,6 +128,8 @@ probes:
     source: ai
     raised: 2026-09-07
   - id: pin-on-a-node-the-survey-did-not-judge
+    target: author
+    type: periagogic
     asks: >-
       Does the pin a survey writes on a node it read as neighbourhood but did
       not judge stand as the survey that node's ruling owes?

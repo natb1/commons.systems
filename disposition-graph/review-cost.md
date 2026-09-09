@@ -3,6 +3,8 @@ question: What does a clean-context review cost, and how is that cost bounded?
 stage: maieutic
 probes:
   - id: does-the-bound-reach-the-sessions-own-search
+    target: author
+    type: maieutic
     asks: >-
       Does "no brief grows with the record" reach the alignment session's own
       search of the graph, or only the brief an instrument writes for a
@@ -28,6 +30,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: what-does-cost-name-here
+    target: author
+    type: periagogic
     asks: >-
       Does the cost this node bounds mean the tokens a reading is handed, or
       the author's own endurance for the sitting?

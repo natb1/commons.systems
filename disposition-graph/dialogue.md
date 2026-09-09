@@ -3,6 +3,8 @@ question: What does an unanswered node carry?
 stage: maieutic
 probes:
   - id: option-text-per-node-or-per-option
+    target: author
+    type: maieutic
     asks: >-
       In the author's sentence on viable-options that an option carries in full
       the text where it would stand as the answer, is one text held per node or
@@ -43,6 +45,8 @@ probes:
       `author-questions`' first discharge reason, and not by a session's reading
       of it.
   - id: proposal-at-two-loci
+    target: author
+    type: periagogic
     asks: >-
       Does the record anywhere say the dialogue's own section is a proposal in
       the authority node's sense, or is the collision only in the name, and does
@@ -76,6 +80,8 @@ probes:
       `depends` because authority waits on viable-options, which waits on this
       node, and a cycle is no order.
   - id: two-facts-or-four
+    target: author
+    type: maieutic
     asks: >-
       Does a node carry only the answer and authority facts, with everything
       else moved under fact options, or does a node such as agency carry no
@@ -95,6 +101,8 @@ probes:
     source: author
     raised: 2026-09-04
   - id: what-the-account-records
+    target: ai
+    type: periagogic
     asks: >-
       What is "The AI's account" meant to be recording, and is it justified to
       support the alignment dialogue and the review?

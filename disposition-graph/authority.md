@@ -3,6 +3,8 @@ question: Who may change an answer?
 stage: maieutic
 probes:
   - id: what-makes-a-single-valued-answer-the-authors
+    target: author
+    type: periagogic
     asks: >-
       A node's answer is single-valued. When the author and the AI diverge and
       the record keeps the divergence, what makes the recorded answer the
@@ -48,6 +50,8 @@ probes:
       record does keep and nobody ruled on. That is on this node's account with its
       four sites and its cost.
   - id: does-the-non-bootstrap-clause-reach-a-delegated-recommendation
+    target: author
+    type: maieutic
     asks: >-
       You wrote that non-bootstrap reconciliation acts only on the confirmed author
       option. On 2026-09-04 you wrote that under a delegation, and under a deferral,

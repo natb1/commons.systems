@@ -120,6 +120,8 @@ depends:
   - commons.systems/disposition-graph/authority#escalate-toward-ratified
 probes:
   - id: which-classes-of-decision-have-you-said
+    target: author
+    type: maieutic
     asks: "Which classes of decision have you said you do not want to be asked about again?"
     why: "The answer's delegated limb turns on it: \"the recommendation is delegated where the author has said they do not want to be asked again about that class of decision, and deferred otherwise.\" The record holds no enumeration of what the author has said that about, and the answer names no locus for one; the phrase appears in the node's own text and in `authority`'s definition of delegated, neither of which points anywhere. So the limb is applied from the AI's recollection of the author's words, which is the one input the same answer's third paragraph forbids elsewhere by requiring a written reading on the node that a reviewer can check."
     discharges: "It settles which of the two default limbs applies wherever none of expensive, irreversible or capture-shaped holds, and so moves the authority-fact recommendation on every node the escalation test reaches — the back-fill this node's answer already owes. Without it the AI's recommendation on the authority fact is unfalsifiable at exactly the point the counter-argument says a systematic tilt would be invisible."

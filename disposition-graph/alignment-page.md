@@ -3,6 +3,8 @@ question: What does the author read to rule?
 stage: ruling
 probes:
   - id: unit-of-a-ruling
+    target: author
+    type: maieutic
     asks: >-
       What is the unit the author confirms when they rule on a node?
     fact: answer
@@ -27,6 +29,8 @@ probes:
       nodes, founded `aspects-are-nodes`, and stands as dialogue's and
       recording's answers, both already in this node's `depends`.
   - id: permanence-or-persistence
+    target: author
+    type: maieutic
     asks: >-
       Which fact did the author mean by "permanence"?
     fact: persistence
@@ -43,6 +47,8 @@ probes:
       The author answered on 2026-09-03, quoted under this node's `##
       Disposition`, "I said permanence but I meant persistence".
   - id: boldness-renamed-to-confidence
+    target: author
+    type: maieutic
     asks: >-
       Is boldness renamed to confidence, and is the rename a change of meaning?
     fact: answer
@@ -67,6 +73,8 @@ probes:
       node's `depends` because growth already waits on this node, and a cycle
       is no order.
   - id: stands-as-a-draft-no-one-has-confirmed
+    target: ai
+    type: maieutic
     asks: >-
       Is the row status "stands: a draft no one has confirmed" recording
       anything useful, or does the stands status go with the chips the

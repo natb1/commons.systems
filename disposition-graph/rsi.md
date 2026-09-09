@@ -31,6 +31,8 @@ depends:
   - commons.systems/disposition-graph/viable-options
 probes:
   - id: what-rsi-names
+    target: author
+    type: maieutic
     asks: >-
       What does the word `rsi`, at the end of the high-level order the author
       recorded on 2026-09-03, name in this record?

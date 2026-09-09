@@ -3,6 +3,8 @@ question: What ends a round, and what may a party do to end it?
 stage: maieutic
 probes:
   - id: who-judges-that-the-ground-is-held
+    target: author
+    type: periagogic
     asks: >-
       Every instrument in this family gives a third party the judgment that the
       grounding condition is met. Who holds it here?
@@ -44,6 +46,8 @@ probes:
       round that was wrongly closed. The cost of appointing no one is not thereby
       paid; it is moved onto the recommendation's own divergence, where it stands.
   - id: where-does-reframing-the-question-fall
+    target: author
+    type: maieutic
     asks: >-
       The answer types persuasion. Reframing a question until the disagreement
       no longer applies is not persuasion. Where does that move fall?
@@ -76,6 +80,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: what-would-show-the-ground-was-not-common
+    target: author
+    type: periagogic
     asks: >-
       What would show, afterwards, that the ground was not in fact common, or
       that the round ended because the sitting ran out rather than because the
@@ -118,6 +124,8 @@ probes:
       entered in the ledger, which together say that anything to be told afterwards
       must be on the ref before the round ends.
   - id: is-the-terminal-state-acquiescence
+    target: author
+    type: periagogic
     asks: >-
       Is the terminal state this answer keeps acquiescence in Rescher's sense,
       or something stronger?

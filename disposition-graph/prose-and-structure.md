@@ -3,6 +3,8 @@ question: What may a node's prose restate of what the record already carries as 
 stage: maieutic
 probes:
   - id: scope-of-the-residue-diagnosis
+    target: author
+    type: maieutic
     asks: >-
       How far does the author intend the rule against re-encoding structured
       data into prose to reach?
@@ -25,6 +27,8 @@ probes:
     source: ai
     raised: 2026-09-04
   - id: does-the-rule-reach-the-content-fence
+    target: author
+    type: maieutic
     asks: >-
       Does the rule against re-encoding structured data as prose reach the
       frontmatter an option's content fence repeats?

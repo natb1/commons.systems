@@ -3,6 +3,8 @@ question: What movements does a sitting make, and what selects the one it makes 
 stage: maieutic
 probes:
   - id: is-the-stage-field-the-diagnosis
+    target: author
+    type: periagogic
     asks: >-
       If the movement follows a diagnosis of what the node lacks, is the
       existing `stage` field that diagnosis, or is the diagnosis a second thing
@@ -23,6 +25,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: does-expert-dialogue-carry-the-verdict
+    target: author
+    type: periagogic
     asks: >-
       When the author, the AI and the convened experts hold common ground, what
       has ended the round, and may the AI end it by persuading?
@@ -84,6 +88,8 @@ probes:
       disposition on termination is itself consistent with tradition, which is
       open and is the object of a reading.
   - id: who-convenes-the-experts
+    target: author
+    type: periagogic
     asks: >-
       Who chooses which tradition families are convened and writes their
       briefs, and may that be the AI whose recommendation they exist to test?
@@ -127,6 +133,8 @@ probes:
       discharge and is sharpened by it, since the party that would convene the panel
       is now also the party the deferral hands the answer to.
   - id: who-writes-the-against-after-the-encoding
+    target: author
+    type: periagogic
     asks: >-
       After the grounding is common and the AI writes the recommendation onto
       the facts, does a party that did not draft it read what was written, and
@@ -166,6 +174,8 @@ probes:
       before the author rules. The deferral does not decide between keeping a small
       instrument at the encoding and letting the AI's own case against suffice.
   - id: is-a-drained-probe-an-answered-probe
+    target: author
+    type: periagogic
     asks: >-
       When a probe is not resolved, is it recorded on the node as an objection
       with the answer beside it, or is it enough that the round ends when the
@@ -209,6 +219,8 @@ probes:
       draining does not exist. Recorded as the option
       no-cap-and-probes-do-not-block on author-questions.
   - id: is-the-dialogue-before-the-review-or-instead-of-it
+    target: author
+    type: periagogic
     asks: >-
       Does expert dialogue replace the clean-context review, or precede it?
     fact: answer
@@ -247,6 +259,8 @@ probes:
       an author choice and not a confirmation, so if the mark moves again this probe
       is reopened rather than re-asked.
   - id: is-a-convened-position-a-reading-or-a-role
+    target: author
+    type: periagogic
     asks: >-
       When the AI argues a position because a convened tradition requires it,
       is that giving a reading or playing a role?

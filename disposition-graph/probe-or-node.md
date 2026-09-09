@@ -3,6 +3,8 @@ question: When is an open question a probe, an option, or a node?
 stage: maieutic
 probes:
   - id: does-the-standing-prune-grant-act-wherever-given
+    target: author
+    type: maieutic
     asks: >-
       Does the prune grant the author made standing on 2026-09-06 ("the prune
       grant is standard disposition") act wherever it was given, in the dialogue
@@ -25,6 +27,8 @@ probes:
     source: review
     raised: 2026-09-07
   - id: a-delegable-review-finding-question
+    target: author
+    type: maieutic
     asks: >-
       When a review-finding question's response would be a delegation, is it
       a node, as the ruling test says, or a maieutic question, as the author's

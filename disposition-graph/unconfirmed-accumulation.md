@@ -4,6 +4,8 @@ form: rule
 stage: maieutic
 probes:
   - id: does-a-recorded-divergence-say-which-kind-it-is
+    target: author
+    type: periagogic
     asks: >-
       When the fold carries a divergence between sittings, should it say which
       kind the divergence is, factual-interpretive or evaluative?

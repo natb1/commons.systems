@@ -3,6 +3,8 @@ question: How is a complex disposition decomposed into units for a sitting, and 
 stage: maieutic
 probes:
   - id: bundled-disposition-as-queued-questions
+    target: author
+    type: periagogic
     asks: >-
       Is a bundled disposition read as questions queued under the node it
       refines?

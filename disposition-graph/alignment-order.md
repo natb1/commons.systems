@@ -3,6 +3,8 @@ question: What orders the unanswered frontier for alignment?
 stage: maieutic
 probes:
   - id: rank-second-reading-frontier
+    target: author
+    type: periagogic
     asks: >-
       Does attention's second reading of rank, "frontier attention, where work
       goes first", distinguish an alignment frontier from a reconciliation

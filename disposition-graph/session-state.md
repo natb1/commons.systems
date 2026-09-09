@@ -3,6 +3,8 @@ question: Where does a sitting's own working state live while it is not yet in t
 stage: maieutic
 probes:
   - id: is-the-staging-store-a-fourth-thing-a-session-loads
+    target: author
+    type: periagogic
     asks: >-
       The session-context node says a session loads three projections and
       nothing else. Is the staging store a fourth, or is it reached through one
@@ -25,6 +27,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: what-does-a-dead-sitting-owe-the-next
+    target: author
+    type: periagogic
     asks: >-
       When a sitting dies without stopping, compacted, killed, or ended by an
       error, what does the next sitting owe what the dead one left in the store?
@@ -63,6 +67,8 @@ probes:
       obliged to read a store left behind. The probe's crash-only argument is answered
       and not adopted, and the answer's content now carries the answer.
   - id: is-the-ledger-rule-admission-or-citation
+    target: author
+    type: periagogic
     asks: >-
       Is the ledger's rule about what may be admitted to the record, or about
       what may be cited from it?
@@ -102,6 +108,8 @@ probes:
       the ledger's admission rule governs the ledger and nothing else, which is
       what the probe asked and is enough to close it.
   - id: where-does-an-unpaid-residual-go
+    target: author
+    type: periagogic
     asks: >-
       When the sitting that owed it is gone, who is a reconciliation residual
       owed to?
@@ -125,6 +133,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: what-shows-that-a-classification-happened
+    target: author
+    type: periagogic
     asks: >-
       When a sitting judges that something you said was direction to it and not
       disposition, what should the record show about that having happened?
@@ -148,6 +158,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: may-the-store-direct-what-it-may-not-authorize
+    target: author
+    type: periagogic
     asks: >-
       What may a sitting do on the strength of the store alone?
     fact: answer

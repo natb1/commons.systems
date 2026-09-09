@@ -3,6 +3,8 @@ question: What does the author do by deferring or delegating on a probe instead 
 stage: maieutic
 probes:
   - id: is-the-question-undecided-or-only-not-yet-worked
+    target: author
+    type: maieutic
     asks: >-
       When you defer on a probe, are you telling the record that the question has
       no answer you hold yet, or that you hold one and cannot get at it in the
@@ -30,6 +32,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: may-a-deferral-lower-the-class-of-a-node-that-defines-authority
+    target: author
+    type: maieutic
     asks: >-
       Should this mechanism be able to reach the nodes that decide who may decide
       — `authority`, `class-recommendation`, `what-acts-during-bootstrap`, and
@@ -57,6 +61,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: does-the-mechanism-reach-a-maieutic-probe
+    target: author
+    type: maieutic
     asks: >-
       Your words scope this to "the answer to a periagogic probe". A maieutic probe
       asks what you intend and have not yet articulated. May you defer or delegate on

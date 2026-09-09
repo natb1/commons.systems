@@ -13,6 +13,8 @@ review:
       words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 probes:
   - id: which-queue-the-heading-summarizes
+    target: author
+    type: maieutic
     asks: >-
       Which queue does a graph heading's metric summarize — the reconciliation
       frontier, the review the author is owed, or both?

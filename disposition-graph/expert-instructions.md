@@ -111,6 +111,8 @@ review:
       words: "588bbcc9bb8550b5ef413f5b7f5b82e90bb8e035618d5faf343a8fc6005e7ae6"
 probes:
   - id: retrieval-contract-or-source-of-variance
+    target: author
+    type: periagogic
     asks: >-
       Is a convened expert an instrument you want to return the same thing
       every time it is asked the same question, or a second mind you want to
@@ -160,6 +162,8 @@ probes:
       admits two widths the narrower one governs. The outcome measure the probe said
       nothing in the record fixes is still unfixed.
   - id: against-what-is-an-experts-return-checked
+    target: author
+    type: periagogic
     asks: >-
       When an expert returns readings and probes, what tells you that return
       was any good, and who applies that test?
@@ -203,6 +207,8 @@ probes:
       by the convening AI, by the author, or by a third party, is answered against
       the third: it is the author and the convening AI.
   - id: what-does-eg-mean
+    target: author
+    type: maieutic
     asks: >-
       When you wrote that standard instructions include, for example,
       responding with references to tradition and periagogic and maieutic
@@ -229,6 +235,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: one-expert-kind-or-a-family
+    target: author
+    type: maieutic
     asks: >-
       Is an expert one kind of participant that is given a different tradition
       each time, or are the tradition families themselves the kinds?
@@ -251,6 +259,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: what-is-left-unstandardized-and-who-notices-drift
+    target: author
+    type: periagogic
     asks: >-
       What about an expert's instructions do you want to stay different every
       time, and how would you find out if it had stopped being different?
@@ -277,6 +287,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: may-an-expert-refuse-the-frame
+    target: author
+    type: maieutic
     asks: >-
       If a convened expert judges that the question it was given is the wrong
       question, do you want it to answer anyway, or to say so and return
@@ -305,6 +317,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: how-many-experts-and-do-they-read-the-same-brief
+    target: author
+    type: periagogic
     asks: >-
       When more than one expert is convened on a question, do you want them
       given the same instructions, or deliberately different ones?

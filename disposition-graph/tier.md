@@ -3,6 +3,8 @@ question: What gives a rule its scope?
 stage: maieutic
 probes:
   - id: a-rule-narrower-than-global
+    target: author
+    type: maieutic
     asks: >-
       Does the author want the record to be able to express a rule whose scope
       is narrower than global?
@@ -25,6 +27,8 @@ probes:
     source: review
     raised: 2026-09-03
   - id: an-instance-of-a-narrower-rule
+    target: author
+    type: maieutic
     asks: >-
       What rule of this record would have a scope narrower than global?
     fact: answer

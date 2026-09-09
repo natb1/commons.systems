@@ -126,6 +126,8 @@ review:
           - "cites"
 probes:
   - id: does-the-ledger-admit-a-grant
+    target: author
+    type: periagogic
     asks: >-
       Does the ledger admit the author's grant of bootstrap authority, which
       confers a power for a sitting rather than articulating a disposition?
@@ -149,6 +151,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: which-side-carries-the-reference
+    target: author
+    type: periagogic
     asks: >-
       Does the reference from a quotation to the fact options it bears on live
       on the quotation or on the option?
@@ -171,6 +175,8 @@ probes:
     source: ai
     raised: 2026-09-08
   - id: may-a-withdrawn-entry-be-deleted
+    target: author
+    type: periagogic
     asks: >-
       When the author names a ledger entry as one that does not belong there,
       is it deleted, struck in place, or left standing with the classification

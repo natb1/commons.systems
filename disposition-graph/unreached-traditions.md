@@ -521,3 +521,9 @@ What the sitting should have done and did not: state the resource position in th
 A unit that knows how much budget remains can choose which of its traditions to spend it
 on, and every one of these units learned the budget was gone by hitting the wall. That is
 recorded as a requirement on `expert-instructions`, which owns what a brief carries.
+
+### The search budget is the session's and reaches every unit in it, 2026-09-09
+
+The wall the previous entry records has a shape the record should hold: the web-search budget is counted per session, not per unit, and a subagent draws on the session that launched it. The tradition survey of `experts-and-adversarial-review` began after the session's budget stood at two hundred of two hundred, attempted four searches, had all four refused, and ran on fetches alone, roughly forty-five of them. A sitting that spends its searches early runs its later surveys without any, and the order in which a sitting launches its units is therefore a cost that lands on the last survey and never on the first.
+
+What served in place of search, and belongs here as the standing substitute a unit can be briefed with: general search engines were unusable, the one behind a CAPTCHA, another returning nothing relevant, a third refusing the fetch and a fourth delaying it; what worked was OpenAlex for bibliographic verification, Europe PMC to resolve a DOI to an open copy, the PubMed Central article pages for full text, and Sefaria for the rabbinic corpus. Those last two were the only sources that yielded primary text verbatim in that survey, and both of its most valuable readings came through them. What the survey could not reach, and why, is listed reading by reading in that node's account.
