@@ -2,6 +2,39 @@
 question: What probes for the author does a node carry, and where are they asked?
 stage: review
 probes:
+  - id: does-a-probe-carry-its-own-type
+    asks: >-
+      `standard-report`'s answer has the report print each probe with its type,
+      periagogic or maieutic. The probe schema has no type. Should it carry one,
+      or is the type read off something the record already holds?
+    fact: answer
+    why: >-
+      The record requires a projection it cannot make. `PROBE_KEYS` admits
+      `id, asks, why, discharges, source, raised, fact, status, reason` and no
+      type, and `standard-report`'s answer, refined by the author at
+      `words/2026-09-08/38` to print the probe's schema fields separately, still
+      asks for the type beside them. Measured on the graph at this sitting's
+      landing: of the fifty-two probes standing open, seven say their own type in
+      the prose of their `why` field, all seven on `expert-instructions` and all
+      seven written in one sitting, and the other forty-five say nothing. So a
+      report that prints the type prints it from the AI's classification of each
+      probe at the moment of writing, which is a reading made fresh each time and
+      never checked against the last one. The type also does work beyond the
+      report: `movements` divides a sitting by movement, and a probe's type says
+      which movement it belongs to, so a probe with no type cannot be sequenced by
+      the same rule the sitting is sequenced by. This is the second field the
+      record asks a probe for and does not hold, the first being the `target` that
+      `where-does-a-probe-addressed-to-an-expert-live` asks about; whether they are
+      one question or two is part of what this asks.
+    discharges: >-
+      Whether the probe schema gains a type, whether the type is instead derived
+      from the node's stage or the probe's fact, or whether `standard-report`'s
+      answer drops the requirement. It does not move this node's rule that a probe
+      is carried on the node it bears on, and it does not turn on
+      `what-should-the-record-call-a-probe-that-is-answered`, which is about the
+      status and not the type.
+    source: ai
+    raised: 2026-09-08
   - id: what-should-the-record-call-a-probe-that-is-answered
     asks: >-
       The record says a probe is `discharged`, in the schema and in 330 places

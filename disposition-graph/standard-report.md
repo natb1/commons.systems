@@ -178,3 +178,19 @@ paragraph of the same entry says: the words ask for the reconciliation to run fi
 that I can respond to the ranking probe's actual questions with the correct context".
 So the defect this refinement corrects was measured on the instrument itself, in the
 one way the record can measure it, by the author failing to be able to use the output.
+
+### The type the report prints is not a field, 2026-09-08
+
+Found when this node's refinement was first applied, in the report printed at the end of
+the sitting that recorded it. The answer has the report carry each probe with its type,
+periagogic or maieutic; the probe schema has no type field. Of the fifty-two probes
+standing open at this sitting's landing, seven say their type in the prose of their `why`,
+all seven on `expert-instructions`, and forty-five say nothing. So the type the report
+prints is the AI's classification made at the moment of printing, checked against nothing
+and not the same reading twice.
+
+Recorded as the probe `does-a-probe-carry-its-own-type` on `author-questions`, which owns
+the probe encoding and already carries the same shape of question about the missing
+`target`. It is asked there and not here because the choice is between the schema gaining
+a field, the type being derived from what the record holds, and this node's answer dropping
+the requirement, and only the third of those is this node's.
