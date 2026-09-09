@@ -1730,3 +1730,54 @@ sitting's report of that evening; the sequencing that followed from that diverge
 therefore re-derived and not merely restated. It does not close the node: nothing here is
 a ruling, the authority fact still recommends ratified, and the persistence fact still
 recommends that the shim is superseded by `review-skills`.
+
+### A reader started in this checkout is never clean of the global tier, 2026-09-09
+
+Two things were found on 2026-09-09 by watching the readings run rather than by
+reading this node, and both belong here because both are facts about what a
+clean context actually contains.
+
+The first is that a reading started in this checkout is not clean of the record.
+The harness loads `CLAUDE.md` and every file under `.claude/rules/` into any
+session started in the directory that carries them, and `.claude/rules/` is the
+projection of the global-tier nodes' answers. So a reader launched here opens
+with `authority`, `evaluation`, `delegation`, `materialization`,
+`session-context`, `class-recommendation`, `delegation-bounds-and-sizing`,
+`session-state` and `what-acts-during-bootstrap` already in its context, in full,
+before it has read a line of its brief. The review's premise is that the reader
+meets the draft without the sitting's accumulated context; what it actually meets
+is the draft without the sitting's *conversation*, on top of the record's own
+doctrine. That is not obviously wrong — a reader who does not know the record's
+rules will report the rules back as findings, which is its own kind of noise —
+but it is not what the node says, and the difference has a consequence the
+sitting saw: a reading whose object is a global-tier node is reading a draft
+whose current projection it has already been given, so it can compare them
+without being asked to, and a reading whose object is any other node has read the
+doctrine that node is supposed to be tested against. Whether that is the review
+this node wants is a question for the node and not a defect to repair silently;
+it is recorded so the question can be asked with the fact in hand.
+
+It also bears on what a reading may be asked to check. The delta re-reading of
+`what-an-option-row-carries` declined to verify that node's cross-node claims
+from its own context, on the ground that its scope was the diff and the previous
+reading's findings. That was right on its own terms, and right for a second
+reason it could not have known: what a reader holds of the rest of the record is
+whatever the harness put there, which is the global tier and nothing else, so a
+cross-node claim about a non-global node is one it has no grounds to check and no
+way to know it lacks. The claims were checked by the sitting against the node
+files directly and all of them hold. The rule the sitting draws is that
+cross-node verification is the main thread's and not the reader's, unless the
+brief hands the reader the nodes.
+
+The second is a divergence between the brief the readers are given and the
+disposition the record now holds. The brief states, without condition, that the
+cap is three open probes and that a probe beats the verdict. The author struck
+exactly that cap-and-blocking rule on 2026-09-08 at `words/2026-09-08/32`,
+recorded on `author-questions` as the option `no-cap-and-probes-do-not-block`.
+Three readings on 2026-09-09 were given the struck rule; it was moot in all three
+because none raised a probe, and it will not stay moot. The repair is on the
+implementation ref, in `packages/clean-context-review/brief.mjs`, and it is owed
+rather than done here, since this skill does not write that ref. It is recorded
+on this node because this is where a reader's brief is decided, and because a
+brief that states a struck rule is a defect of the review and not of the node
+whose reading happened to surface it.

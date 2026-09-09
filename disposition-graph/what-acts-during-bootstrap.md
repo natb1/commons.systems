@@ -1,6 +1,6 @@
 ---
 question: What acts while nothing in the record is ratified, and when does that state end?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -66,10 +66,10 @@ facts:
 review:
   verdict: forward
   strength: moderate
-  date: 2026-09-05
-  of: 978ae6c02bed0e9281b0b0c76daa5e5c761ba09c
-  commit: 022448f548ba52bc6900dd2d7be9c8af11e44320
-  against: "The amendment answers two of its five findings by adding a citation of a divergence rather than by removing one, so the rule the author is asked to ratify now says twice, in the text `.claude/rules/` carries, that the node it cites holds the other position, and each contest is parked as an option on a node that is itself unruled: a session that reads the notice has nowhere to go for the resolution, and at the first ruling `.claude/rules/authority.md` will still carry 'During bootstrap no class acts' with no notice in that file. Beside that, the standing objection is untouched: the answer still says only what does not make the rule files unsupported and never what makes them binding, and the amendment's own new work — a second row for `projected-doctrine-acts` at `session-context` — moves the remedy one node further from the recommendation without moving the recommendation. None of this defeats the amendment: each of the five defects is cured at its own locus, verified at the loci below, and what is left is the record's condition and not a fault of this text."
+  date: 2026-09-09
+  of: f363726edf001ec1401aa91313271cd69c638c65
+  commit: 7663ad04b910a3cbef62c4bd2bbbceba3daa8cfb
+  against: "The recommendation's own defining clause rests on a term the schema cannot presently exhibit: `reconciliation-acts-on-a-convergence`'s AI divergence says so directly -- 'a rule that governs every reconciliation this record does today is stated in terms of a mark no node carries, and a reader who tries to check a past reconciliation against it finds nothing to check it with' -- and the account repeats the same admission twice more, once on the fact and once in the dated section recording the author's words. A recommendation whose central mechanism is, by its own text, unauditable is a real reason to hesitate before sending it to the author for ratification. It does not defeat forwarding here: the term is the author's own words at `words/2026-09-08/39` transcribed rather than an AI-invented test, the gap is disclosed at every locus a reader would meet the clause rather than smoothed over anywhere, and the fix is already named and handed to the node that owns the encoding, `what-an-option-row-carries`, rather than assumed or quietly deferred. That is the disclosure the evaluation node's rule against an AI answering a case against itself calls for, not a defect of this text."
   survey:
     date: 2026-09-07
     of: 8aace539d14bae32f54338575af53f8391a222fa
@@ -262,7 +262,16 @@ is the author's.
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
-**AI divergence.** The record wrote no case against this option; its divergence is owed.
+**AI divergence.** The record wrote no case against this option's argument, and that
+divergence is still owed. What stands here instead is mechanical, and it is a reason to
+re-encode this option before ruling for it rather than a reason against what it says:
+the option is a whole-markdown fence whose `## Answer` is one paragraph, while the
+recommendation's fence carries two, so ruling for it as presently encoded would delete
+the answer's second limb, the half that says when bootstrap ends. Six of this fact's
+options are in that position and the ones encoded as diffs against the recommendation are
+not. The repair is to re-encode this option's content; it is put to the author rather
+than done, because re-encoding an existing option changes what the author would be ruling
+on.
 
 **Content.**
 
@@ -321,7 +330,16 @@ on it.
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
-**AI divergence.** The record wrote no case against this option; its divergence is owed.
+**AI divergence.** The record wrote no case against this option's argument, and that
+divergence is still owed. What stands here instead is mechanical, and it is a reason to
+re-encode this option before ruling for it rather than a reason against what it says:
+the option is a whole-markdown fence whose `## Answer` is one paragraph, while the
+recommendation's fence carries two, so ruling for it as presently encoded would delete
+the answer's second limb, the half that says when bootstrap ends. Six of this fact's
+options are in that position and the ones encoded as diffs against the recommendation are
+not. The repair is to re-encode this option's content; it is put to the author rather
+than done, because re-encoding an existing option changes what the author would be ruling
+on.
 
 **Content.**
 
@@ -374,7 +392,16 @@ than on the AI's amendment of them.
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
-**AI divergence.** The record wrote no case against this option; its divergence is owed.
+**AI divergence.** The record wrote no case against this option's argument, and that
+divergence is still owed. What stands here instead is mechanical, and it is a reason to
+re-encode this option before ruling for it rather than a reason against what it says:
+the option is a whole-markdown fence whose `## Answer` is one paragraph, while the
+recommendation's fence carries two, so ruling for it as presently encoded would delete
+the answer's second limb, the half that says when bootstrap ends. Six of this fact's
+options are in that position and the ones encoded as diffs against the recommendation are
+not. The repair is to re-encode this option's content; it is put to the author rather
+than done, because re-encoding an existing option changes what the author would be ruling
+on.
 
 **Content.**
 
@@ -414,7 +441,16 @@ any of it, and the first sitting could not be run.
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
-**AI divergence.** The record wrote no case against this option; its divergence is owed.
+**AI divergence.** The record wrote no case against this option's argument, and that
+divergence is still owed. What stands here instead is mechanical, and it is a reason to
+re-encode this option before ruling for it rather than a reason against what it says:
+the option is a whole-markdown fence whose `## Answer` is one paragraph, while the
+recommendation's fence carries two, so ruling for it as presently encoded would delete
+the answer's second limb, the half that says when bootstrap ends. Six of this fact's
+options are in that position and the ones encoded as diffs against the recommendation are
+not. The repair is to re-encode this option's content; it is put to the author rather
+than done, because re-encoding an existing option changes what the author would be ruling
+on.
 
 **Content.**
 
@@ -451,7 +487,16 @@ not a class.
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
-**AI divergence.** The record wrote no case against this option; its divergence is owed.
+**AI divergence.** The record wrote no case against this option's argument, and that
+divergence is still owed. What stands here instead is mechanical, and it is a reason to
+re-encode this option before ruling for it rather than a reason against what it says:
+the option is a whole-markdown fence whose `## Answer` is one paragraph, while the
+recommendation's fence carries two, so ruling for it as presently encoded would delete
+the answer's second limb, the half that says when bootstrap ends. Six of this fact's
+options are in that position and the ones encoded as diffs against the recommendation are
+not. The repair is to re-encode this option's content; it is put to the author rather
+than done, because re-encoding an existing option changes what the author would be ruling
+on.
 
 **Content.**
 
@@ -486,7 +531,7 @@ Everything `shim-and-grant` says, with a third thing acting by right beside the 
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
-**AI divergence.** Against it: it is a wider licence than the fact's own case against already worries about, and the party reading which direction reaches which act is the party the act benefits.
+**AI divergence.** Against it: it is a wider licence than the fact's own case against already worries about, and the party reading which direction reaches which act is the party the act benefits. And mechanically, this option is one of the six whose fence holds a one-paragraph answer where the recommendation's holds two, so ruling for it as presently encoded would delete the answer's second limb; the re-encoding is put to the author rather than done, for the reason the other five say.
 
 **Content.**
 
@@ -700,16 +745,21 @@ operation contradicts.
 **AI divergence.** The main thread does not move the mark onto this option or onto
 `projected-doctrine-acts`, and the reason is mechanical rather than a judgment about the
 argument. `projected-doctrine-acts` is encoded as a one-paragraph whole-markdown fence,
-as are four of the other rivals, while the recommendation's fence carries two paragraphs:
-ruling for any of the five would delete the answer's second limb, the half that answers
-this node's second question, when bootstrap ends. That was measured, not estimated -- the
-fences run 69 lines for the recommendation against 31, 33, 25, 20, 22 and 18 for the
-rivals, and the two options encoded as diffs against the recommendation do not have the
-problem. The option recorded here is encoded as a diff against `shim-and-grant` rather than as a
-sixth one-paragraph fence, which is the repair the expert asks for, performed on the
-option it minted rather than described; doing the same to `projected-doctrine-acts` is
-put to the author instead of done, because re-encoding an existing option's content
-changes what the author would be ruling on.
+as are five of the other rivals, while the recommendation's fence carries two paragraphs:
+ruling for any of the six would delete the answer's second limb, the half that answers
+this node's second question, when bootstrap ends. That was measured and not estimated,
+and it was re-measured on 2026-09-09, when the tally this sentence used to carry had
+itself gone stale: the mark has since moved to `reconciliation-acts-on-a-convergence`,
+whose fence is half again longer than the sixty-nine lines named here, and the
+one-paragraph rivals number five and not four. The numbers are struck and the structure
+put in their place, which is the same repair the sitting made to two other prose counts
+the same day. The options encoded as diffs against the recommendation do not have the
+problem. The option recorded here is encoded as a diff against `shim-and-grant` rather
+than as a seventh one-paragraph fence, which is the repair the expert asks for, performed
+on the option it minted rather than described; doing the same to the six is put to the
+author instead of done, because re-encoding an existing option's content changes what the
+author would be ruling on. The warning now stands on each of the six rather than here
+alone, which is what the re-reading of 2026-09-09 asked for.
 
 **Content.**
 
@@ -1181,3 +1231,64 @@ convergence nobody can point at cannot be audited is not disposed of by that
 choice, and it is why the boldness on this fact does not fall. The amendment
 owed on `recording` is named on `what-an-option-row-carries` and is not assumed
 here.
+
+### The re-reading's finding of 2026-09-09, and what re-measuring it found
+
+The delta re-reading of this node returned forward at moderate strength on
+2026-09-09, with one finding and no probes, and the finding was right about a
+real hazard and wrong about its size in the direction that mattered.
+
+What it found: the amendment of 2026-09-08 measured a mechanical risk in
+`projected-doctrine-acts` — that it is encoded as a one-paragraph whole-markdown
+fence, so ruling for it would silently delete the answer's second limb, the half
+that says when bootstrap ends — and recorded that measurement on
+`interim-doctrine-binds-as-last-seen`'s divergence, the option the expert minted,
+and not on `projected-doctrine-acts`'s own, which still read "The record wrote no
+case against this option; its divergence is owed." An author opening
+`projected-doctrine-acts` where they would actually rule for it met no warning at
+all; the warning sat on a sibling option they had no occasion to open.
+
+The sitting re-measured rather than transcribing, and two things came back. The
+hazard is real and covers six options, not five: `deferred-as-the-resting-state`,
+`projected-doctrine-acts`, `grant-expires-at-exit`, `nothing-acts`,
+`a-bootstrap-class` and `a-standing-direction-acts-by-right` all resolve to a
+whole fence with a one-paragraph answer, while `shim-and-grant` and the four
+options encoded as diffs resolve to two paragraphs or more. The warning is now on
+each of the six, in the option's own `**AI divergence.**`, where the author meets
+it at the moment of ruling. The sixth is the survey's own remedy option, which is
+the one it would have been most costly to leave unwarned.
+
+And the recorded measurement had itself gone stale inside two days. It named
+sixty-nine lines for the recommendation; the mark has since moved to
+`reconciliation-acts-on-a-convergence`, whose fence is half again longer, and the
+count of one-paragraph rivals it gave as four is five. The tallies are struck and
+the structure stated instead. That is the third stale prose count this sitting
+found on 2026-09-09, after 134 nodes on `what-an-option-row-carries` and three
+sites on `authority`, and unlike those two it was found by re-measuring rather
+than by a reader noticing — which is the argument for re-measuring a recorded
+measurement instead of copying it, and is recorded here as such.
+
+The re-encoding itself is not done. Six options would have to have their content
+re-encoded as diffs against the recommendation, and re-encoding an existing
+option's content changes what the author would be ruling on, so it is put to the
+author rather than performed. The finding does not touch the recommended option
+`reconciliation-acts-on-a-convergence` and does not hold the node back from the
+author's ruling, as the reading itself said.
+
+### Clean-context re-reading, 2026-09-09, of f363726e
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `reconciliation-acts-on-a-convergence`.
+
+Findings:
+
+- ## Facts, `### answer`, `#### interim-doctrine-binds-as-last-seen` (AI divergence) against `#### projected-doctrine-acts` (AI divergence). The amendment measures, by name, a mechanical risk in `projected-doctrine-acts`: '`projected-doctrine-acts` is encoded as a one-paragraph whole-markdown fence, as are four of the other rivals, while the recommendation's fence carries two paragraphs: ruling for any of the five would delete the answer's second limb, the half that answers this node's second question, when bootstrap ends,' measured rather than estimated -- 'the fences run 69 lines for the recommendation against 31, 33, 25, 20, 22 and 18 for the rivals.' That finding is recorded on `interim-doctrine-binds-as-last-seen`'s own divergence, the expert's minted option, and not on `projected-doctrine-acts`'s, whose divergence still reads exactly as the 2026-09-07 migration left it: 'The record wrote no case against this option; its divergence is owed.' An author who opens `projected-doctrine-acts` where they would actually rule for it meets no warning that choosing it, as presently encoded, silently drops the node's own account of when bootstrap ends; the warning exists only on a sibling option a reader of `projected-doctrine-acts` has no occasion to open. Suggested edit: copy the measurement (or a pointer to it) into `projected-doctrine-acts`'s own `**AI divergence.**` field in place of 'is owed'. This risk is new to this amendment -- the whole-fence encoding it depends on did not exist at the last reading's pin -- and it does not touch the recommended option `reconciliation-acts-on-a-convergence` or the survey's remedy `a-standing-direction-acts-by-right`, so it is not a reason to hold the node back from the author's ruling.
+
+On the facts and what they recommend: The diff moves the answer fact's `recommends` from `shim-and-grant` to `reconciliation-acts-on-a-convergence` (a diff against `shim-and-grant` adding the author's convergence clause from `words/2026-09-08/39`); `boldness` stays `high`, unmoved by the amendment because, as the fact's own prose says, 'the clause is the author's, so it is not what the boldness was ever marking.' The frontmatter `stands: shim-and-grant` line is dropped as part of the 2026-09-07 migration to content encoding, which also converts every option's prose into a `**Content.**` fence. Five options are appended (`a-standing-direction-acts-by-right`, `the-grant-is-one-reconciliation`, `reconciliation-runs-on-a-judgment-of-sufficient-grounding`, `interim-doctrine-binds-as-last-seen`, `reconciliation-acts-on-a-convergence`); `shim-and-grant`'s own content is updated in place to the author's 2026-09-08 grant-unit-is-the-sitting refinement, with the pre-refinement text preserved as `the-grant-is-one-reconciliation` rather than dropped silently. The `authority` fact (`ratified`, moderate) is untouched by the diff.
+
+On the viability of the options: The diff adds five options and removes none, so all eleven now on the answer fact's option list are distinct, and I found none newly missing. None is newly dominated by the recommendation's move either, but one is newly at risk rather than newly dominated: five of the seven whole-fence options, `projected-doctrine-acts` and the two passed options among them, would delete the answer's second limb if ruled for exactly as encoded, a risk the amendment measures in detail on `interim-doctrine-binds-as-last-seen`'s own divergence but does not copy to `projected-doctrine-acts`'s (see finding). It does not touch the recommendation's own viability or the other options'.
+
+Strongest counter-argument (moderate): The recommendation's own defining clause rests on a term the schema cannot presently exhibit: `reconciliation-acts-on-a-convergence`'s AI divergence says so directly -- 'a rule that governs every reconciliation this record does today is stated in terms of a mark no node carries, and a reader who tries to check a past reconciliation against it finds nothing to check it with' -- and the account repeats the same admission twice more, once on the fact and once in the dated section recording the author's words. A recommendation whose central mechanism is, by its own text, unauditable is a real reason to hesitate before sending it to the author for ratification. It does not defeat forwarding here: the term is the author's own words at `words/2026-09-08/39` transcribed rather than an AI-invented test, the gap is disclosed at every locus a reader would meet the clause rather than smoothed over anywhere, and the fix is already named and handed to the node that owns the encoding, `what-an-option-row-carries`, rather than assumed or quietly deferred. That is the disclosure the evaluation node's rule against an AI answering a case against itself calls for, not a defect of this text.
+
+The session's reply: Forward taken, and the finding is right and larger than it stated. The measurement of the one-paragraph fence hazard sat on `interim-doctrine-binds-as-last-seen`'s divergence, the option the expert minted, while `projected-doctrine-acts`'s own divergence still read 'The record wrote no case against this option; its divergence is owed', so an author ruling for it met no warning at the place they would rule. The sitting re-measured rather than transcribing. The hazard covers six options and not five: `deferred-as-the-resting-state`, `projected-doctrine-acts`, `grant-expires-at-exit`, `nothing-acts`, `a-bootstrap-class` and `a-standing-direction-acts-by-right` all resolve to a whole fence with a one-paragraph answer, the sixth being the survey's own remedy option, which the finding explicitly said it did not touch. The warning now stands on each of the six in its own `**AI divergence.**`. The recorded measurement had also gone stale inside two days: it named sixty-nine lines for a recommendation that has since moved to `reconciliation-acts-on-a-convergence`, and gave the one-paragraph rivals as four where they are five, so its tallies are struck and the structure stated instead. The re-encoding itself is put to the author rather than performed, since re-encoding an existing option changes what the author would be ruling on. The finding does not touch the recommended option and does not hold the node back from the ruling, as the reading said.

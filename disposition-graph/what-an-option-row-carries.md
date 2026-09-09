@@ -1,7 +1,7 @@
 ---
 question: What does an option's row carry at the first level?
 form: rule
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -64,9 +64,12 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/39
+      - name: names-on-the-row-stances-in-a-companion
+        source: commons.systems/disposition-graph/cjeu-secret-deliberation
+        ref: "2026-09-09"
     recommends: five-marks-and-the-two-the-author-added
     boldness: moderate
-    against: "The record asks the AI for a case against every recommendation — `dialogue`'s recommended text makes a fact's `against` the argument the recommendation had to beat, written when the recommendation is recorded — and under this answer the author never sees it at the level they read: on every fact of every node but one, the row carries a mark saying no reader's line bears and the AI's written objection, where one exists, sits behind a fold, because a reading returns one counter-argument for a node and `caseAgainst` substitutes it on the answer fact alone. The rule is mostly unmet today, 53 fact-level `against` fields beside 247 recommendations at this head, so on most rows the mark replaces nothing yet; that is back-fill debt against the rule, as `dialogue`'s own account records, and not a reason the rule will stay unmet, so what the fold hides grows as the debt is paid. The arrangement this answer forbids, the AI's line at the first level, is the only one under which an objection the record holds is always where the author reads."
+    against: "The record asks the AI for a case against every recommendation — `dialogue`'s recommended text makes a fact's `against` the argument the recommendation had to beat, written when the recommendation is recorded — and under this answer the author never sees it at the level they read: on every fact of every node but one, the row carries a mark saying no reader's line bears and the AI's written objection, where one exists, sits behind a fold, because a reading returns one counter-argument for a node and `caseAgainst` substitutes it on the answer fact alone. The rule is mostly unmet today, 53 fact-level `against` fields beside 247 recommendations at this head, so on most rows the mark replaces nothing yet; that is back-fill debt against the rule, as `dialogue`'s own account records, and not a reason the rule will stay unmet, so what the fold hides grows as the debt is paid. The arrangement this answer forbids, the AI's line at the first level, is the only one under which an objection the record holds is always where the author reads. The tradition survey of 2026-09-09 weakened this argument in one direction and hardened it in three, and both go here. Weakened: no tradition it surveyed offers a measured finding about how many marks a row can carry, and the survey says so expressly rather than supplying one; every measurement it returned is about a practice being abandoned and none is about density, so the argument above rests on judgment and is not evidence-backed, which the record states rather than letting seven cited traditions imply otherwise. Hardened, from three directions that all land on the two marks the author's enumeration added. `cjeu-secret-deliberation` finds that the arrangement which has held this line longest publishes who deliberated and refuses to publish who held what, on the stated ground that a reader who can see which party chose which option reads the decision through the personnel instead of through the reasons; it is the only reading of the seven that produced an option this fact did not carry, `names-on-the-row-stances-in-a-companion`, and it names the precondition that option has not met, since the tradition relocates the losing reasoning into a companion an office is obliged to write and this record has no such office. `nygard-adr-proposed-status` finds that the tradition the author's own criterion invokes holds exactly one status value at a time, so it licenses the retention this answer keeps and licenses no row of parallel marks, and that an ADR criterion cannot reach the presentation question at all, the form never having put two statuses on one line. `festo-surrendered-subject-matter` finds that a recorded position by a named party becomes a boundary that party must argue their way out of, and that the tradition's remedy is to say who bears the burden of lifting one; this answer mints two such marks and no instrument for lifting either, and cannot presently encode the first of them at all. Against those, `eduyot-minority-opinion` supports attribution with the tally withheld and carries R. Judah's counter, that the minority is recorded in order to be set aside, on which the indispensable mark is the one saying a view does not act: of the marks this answer carries, three say who chose an option and none says an option was passed over. That last diverges from the author's own cut of 2026-09-04 and not from an AI's choice, and it reaches the author in that form."
   - name: authority
     options:
       - name: ratified
@@ -84,10 +87,10 @@ facts:
 review:
   verdict: forward
   strength: weak
-  date: 2026-09-07
-  of: 262fc5f533ed9beffd16a456f6dc58a181374812
-  commit: 35d110afbf61cdbb8b6d91fa3ffdb2c61c5626ba
-  against: "The fact-level lead paragraph (\"Recommended because every settlement on it is the author's words applied where they fall...\") was not touched by this diff and argues only for the marks arrangement, without saying why the accumulation-layer option is now recommended over the plain `three-marks-and-the-case-against` it is built on; the option's own added prose (AI support/divergence) carries that argument instead, which is a defensible split but leaves the fact's summary line silent on the actual recommended option. Separately, `a-term-is-its-own-sentence` rests on an unverified claim about `vocabulary-option-summary` and a node count neither this diff nor the previous reading established. Neither point was visible to the last reading since both are new to this diff, but neither is a false statement, a broken pin, or a contradiction this node's own text shows — they are gaps for the neighbourhood to close, not defects in the amendment itself."
+  date: 2026-09-09
+  of: 1e0b37a2b7f2c4faebb8bf0d5feb9535b830af8e
+  commit: 7663ad04b910a3cbef62c4bd2bbbceba3daa8cfb
+  against: "The amendment's own new prose leans on claims about sibling and freshly-minted nodes -- `viable-options`, `deferring-on-a-probe`, `expert-instructions`, `movements`, and `what-acts-during-bootstrap` -- that this delta's scope cannot check, in the same way `a-term-is-its-own-sentence`'s '134 nodes' claim could not be checked at the last reading; none is a false statement, a broken pin, or a contradiction this node's own text shows, so by the standard the last reading itself applied these are gaps for the neighbourhood to close rather than defects in the amendment. Separately, the previous reading's own finding about `a-term-is-its-own-sentence` remains open -- neither the 2026-09-08 amendment nor the 2026-09-07 survey touched it -- so it is carried forward rather than closed by this round. And the frontier survey's vocabulary finding, which quotes this node twice for a 'reader' sense that collides with the agent sense, is not yet answered either, though the fix it proposes is recorded as an unruled option on `review-cost`'s own answer fact and so is not yet this node's to make on its own."
   survey:
     date: 2026-09-07
     of: e1d748d7c323ead845059b3d87d540c21d49439a
@@ -866,8 +869,8 @@ not the fallback, which is what the projector prints where the record holds
 nothing, since here the record holds the term and its gloss both. Raised by
 `commons.systems/disposition-graph/vocabulary-option-summary`, whose recommended
 answer leads a vocabulary row with the term and puts the gloss one step down, and
-which would otherwise print on three rows of each of the 134 nodes carrying the
-authority fact a lead this answer's own words call a defect to be found. Under
+which would otherwise print on three rows of every node carrying the authority
+fact a lead this answer's own words call a defect to be found. Under
 this option those two clauses say what they mean for a per-node fact and say what
 a vocabulary fact does instead; nothing else in the answer changes.
 
@@ -902,8 +905,8 @@ not the fallback, which is what the projector prints where the record holds
 nothing, since here the record holds the term and its gloss both. Raised by
 `commons.systems/disposition-graph/vocabulary-option-summary`, whose recommended
 answer leads a vocabulary row with the term and puts the gloss one step down, and
-which would otherwise print on three rows of each of the 134 nodes carrying the
-authority fact a lead this answer's own words call a defect to be found. Under
+which would otherwise print on three rows of every node carrying the authority
+fact a lead this answer's own words call a defect to be found. Under
 this option those two clauses say what they mean for a per-node fact and say what
 a vocabulary fact does instead; nothing else in the answer changes.
 ```
@@ -1039,6 +1042,55 @@ From: the-details-carry-the-three-accumulations
 +Beside that sentence the row carries five status marks and no others, which are the five the author enumerated at `words/2026-09-08/39`. That the recommendation adopts it, with its boldness. For each reading that bears on it, whether the tradition supports it or departs from it, by the reading's name. Where the author has ruled for it with the response confirm, that it is the confirmed disposition, marked confirmed where it is the last so ruled on this fact, and keeps its authority until the author rules for another, with the response and the date. Where the author has chosen it and not confirmed it, that it is the author's choice, marked unconfirmed in the same breath, since this is the one mark on the row that would do harm by being mistaken for the mark above it, and the author wrote the qualification into their own name for it. And where an expert convened on the fact chose it, that the expert chose it, by that expert's name, one mark per expert and no tally, because the author's rule integrates expert choice without requiring expert consensus, and a count on a row reads as a vote where there is none.
 +
 +The fourth mark and the fifth are new here and the first three are the record's own, renamed by the author's enumeration and not moved by it. The fourth is the one the rest of the record has been reaching for with nowhere to put it: `viable-options` describes it in its own answer, the option the author has selected without confirming, marked selected; `deferring-on-a-probe` produces one on every deferral it receives, since what a deferral sets is the author's choice and expressly not a confirmation; and `what-acts-during-bootstrap` makes it a term of the rule that governs every reconciliation this record does today. Against all three, `recording`'s ruling responses are `confirm` and `edit`, and neither records a choice made and not confirmed, so an amendment there is owed with this one and is named rather than assumed. Until it lands, a convergence whose first term the record cannot exhibit is a convergence nobody can check. The row's expanded details carry three accumulations and no more, at every stage and before and after any confirmation: the author's words, the entries the option references, each marked support or divergence and shown as one quotation concatenated in date order; the traditions', projected from the readings that bear on the option, each marked the same way; and the AI's accumulated support and divergence, shown whether or not the fact recommends the option. Beneath them, the node as it would stand under this option, resolved from the option's content, which the page previews in the context pane when the option is selected.
+ The first two are the author's words of 2026-09-04. The third is what their
+ answer of 2026-09-06 puts where the `stands` chip was: a mark records the prior
+ confirmed disposition, if any, so it appears on an option the author has ruled
+```
+
+#### names-on-the-row-stances-in-a-companion
+
+The recommendation's marks, with the two the author's enumeration adds kept on the
+fact and taken off the option's row: the parties who took a position are named, which
+option each of them chose is not, and each party's reasoning is published beside the
+fact in a note signed by them and binding nothing.
+
+**AI support.** Raised by the reading `cjeu-secret-deliberation` from the tradition
+survey of 2026-09-09, which found it the strongest counter to the recommendation and
+a design this fact did not carry. The tradition already does the part this record
+wants, publishing who deliberated, and stops one step short on a ground this record's
+own purpose makes serious: a reader who can see which party chose which option reads
+the decision through the personnel instead of through the reasons, and a record whose
+purpose is the author's explicit intent rather than their impression is exactly the
+record that cannot afford to be read that way. It keeps what the marks were for by
+relocating it rather than suppressing it, which is why this stands beside the
+recommendation as an option and not as a strike against it.
+
+**AI divergence.** It costs the author the thing marks (2) and (5) were asked for.
+The convergence `what-acts-during-bootstrap` makes bootstrap reconciliation act on is
+a convergence of the author's choice with the AI's recommendation, and a reader who
+must open a companion note to find the author's choice cannot see that convergence on
+the row where the ruling is staged. The tradition pays for its restraint with an
+institution this record does not have, an Advocate General whose submissions are
+published as a matter of course, so the reasoning is reliably somewhere even when the
+stances are nowhere; here the companion note has no such producer, and a relocation
+whose destination nobody writes is a suppression under another name.
+
+**Content.**
+
+From: five-marks-and-the-two-the-author-added
+
+```diff
+@@ -18,9 +18,11 @@
+ record not yet written and a defect to be found. The name also stays in the row's
+ markup, where a ruling is staged from it.
+ 
+-Beside that sentence the row carries five status marks and no others, which are the five the author enumerated at `words/2026-09-08/39`. That the recommendation adopts it, with its boldness. For each reading that bears on it, whether the tradition supports it or departs from it, by the reading's name. Where the author has ruled for it with the response confirm, that it is the confirmed disposition, marked confirmed where it is the last so ruled on this fact, and keeps its authority until the author rules for another, with the response and the date. Where the author has chosen it and not confirmed it, that it is the author's choice, marked unconfirmed in the same breath, since this is the one mark on the row that would do harm by being mistaken for the mark above it, and the author wrote the qualification into their own name for it. And where an expert convened on the fact chose it, that the expert chose it, by that expert's name, one mark per expert and no tally, because the author's rule integrates expert choice without requiring expert consensus, and a count on a row reads as a vote where there is none.
++Beside that sentence the row carries three status marks and no others, and the two the author's enumeration at `words/2026-09-08/39` adds are kept on the fact and off the option's row. That the recommendation adopts it, with its boldness. For each reading that bears on it, whether the tradition supports it or departs from it, by the reading's name. Where the author has ruled for it with the response confirm, that it is the confirmed disposition, marked confirmed where it is the last so ruled on this fact, and keeps its authority until the author rules for another, with the response and the date.
+ 
+-The fourth mark and the fifth are new here and the first three are the record's own, renamed by the author's enumeration and not moved by it. The fourth is the one the rest of the record has been reaching for with nowhere to put it: `viable-options` describes it in its own answer, the option the author has selected without confirming, marked selected; `deferring-on-a-probe` produces one on every deferral it receives, since what a deferral sets is the author's choice and expressly not a confirmation; and `what-acts-during-bootstrap` makes it a term of the rule that governs every reconciliation this record does today. Against all three, `recording`'s ruling responses are `confirm` and `edit`, and neither records a choice made and not confirmed, so an amendment there is owed with this one and is named rather than assumed. Until it lands, a convergence whose first term the record cannot exhibit is a convergence nobody can check. The row's expanded details carry three accumulations and no more, at every stage and before and after any confirmation: the author's words, the entries the option references, each marked support or divergence and shown as one quotation concatenated in date order; the traditions', projected from the readings that bear on the option, each marked the same way; and the AI's accumulated support and divergence, shown whether or not the fact recommends the option. Beneath them, the node as it would stand under this option, resolved from the option's content, which the page previews in the context pane when the option is selected.
++The author's choice short of confirmation and each convened expert's choice are kept and are not put on an option's row. The fact names every party that took a position on it, the author where they have chosen and not confirmed and each expert convened, and says of none of them which option they chose. Each such party's reasoning is carried instead in a signed companion, one note per party in the fact's drill-down, attributed by name, binding nothing, and free to differ from the recommendation; where a party took a position and wrote no note the fact says so, since an absence that is silent reads as an absence that was judged. So this answer keeps everything the recommendation keeps and moves where it is shown: the parties stand at the first level and their stances one step beneath, in their own words, rather than as a mark standing above the argument.
++
++The two the author's enumeration adds are relocated here and not struck, and the first three are the record's own, renamed by that enumeration and not moved by it. The first of the two is the one the rest of the record has been reaching for with nowhere to put it: `viable-options` describes it in its own answer, the option the author has selected without confirming, marked selected; `deferring-on-a-probe` produces one on every deferral it receives, since what a deferral sets is the author's choice and expressly not a confirmation; and `what-acts-during-bootstrap` makes it a term of the rule that governs every reconciliation this record does today. Against all three, `recording`'s ruling responses are `confirm` and `edit`, and neither records a choice made and not confirmed, so an amendment there is owed with this one and is named rather than assumed. Until it lands, a convergence whose first term the record cannot exhibit is a convergence nobody can check, and under this answer that term is written in the author's own note rather than read off a mark. The ground for the relocation is the tradition the reading `cjeu-secret-deliberation` records: the arrangement that has held this line longest keeps the names on the judgment, keeps the stances off it, and publishes the divergent reasoning in a separately signed text beside it. The row's expanded details carry three accumulations and no more, at every stage and before and after any confirmation: the author's words, the entries the option references, each marked support or divergence and shown as one quotation concatenated in date order; the traditions', projected from the readings that bear on the option, each marked the same way; and the AI's accumulated support and divergence, shown whether or not the fact recommends the option. Beneath them, the node as it would stand under this option, resolved from the option's content, which the page previews in the context pane when the option is selected.
  The first two are the author's words of 2026-09-04. The third is what their
  answer of 2026-09-06 puts where the `stands` chip was: a mark records the prior
  confirmed disposition, if any, so it appears on an option the author has ruled
@@ -1269,3 +1321,107 @@ Owed on the implementation ref: `OPTION_SOURCES` in the reader admits `author`,
 `ai` and `review` and not `expert`, and nothing in the encoding carries either
 new mark, so this answer describes a row two of whose five marks no node can
 presently hold.
+
+### The tradition survey of 2026-09-09, and the seven readings it returned
+
+The maieutic movement's tradition survey ran on 2026-09-09 under the author's
+bootstrap grant of 2026-09-08 and returned seven readings, all seven minted as
+nodes under this one on the same day. Four bear `adopted` on
+`five-marks-and-the-two-the-author-added` and three bear `diverged`, and the
+fact's `against` carries what they found in the register the recommendation has
+to beat, so this entry records the shape of the return and not its content.
+
+Two things about the return are worth the record's attention beyond the readings
+themselves. The first is negative and the survey stated it rather than filling
+it: no tradition it read offers a measured finding about how many marks a row
+can carry. Every measurement it returned is about a practice being abandoned,
+not about density, so the density argument in the `against` rests on judgment.
+The record says so rather than letting a citation of seven traditions imply an
+evidence base it does not have.
+
+The second is that one reading produced an option. `cjeu-secret-deliberation`
+found the arrangement that already publishes who deliberated and deliberately
+declines to publish who held what, with the divergent reasoning relocated into a
+separately signed companion rather than suppressed; the survey called it the
+strongest counter it found and named it a real option this fact did not carry.
+It carries it now: `names-on-the-row-stances-in-a-companion` was created on this
+fact on 2026-09-09, sourced to that reading, its content generated as a strict
+diff from the recommendation and round-trip verified before it was written. The
+option was created before the reading so that the reading's `bears` would
+resolve; the reading is nonetheless its source.
+
+Three of the seven land on the same two marks, the two the author's enumeration
+added, from three directions: the CJEU reading on what they cost a reader, the
+ADR reading on the tradition the author's own criterion invoked licensing one
+status value and not a row of parallel ones, and the Festo reading on there
+being no instrument for lifting a mark once a named party carries it. That
+convergence is stronger than any of the three alone, and it is named here rather
+than left for a reader to assemble.
+
+The five readings drawn from closed publishers quote nothing. The survey's rule
+is that an unverified quotation is worse than none; loci were verified through
+Crossref and Semantic Scholar and the text was not obtained, so the readings
+characterise and do not quote, and each says so in its own account. One
+attribution the survey could not pin, Shipman and McCall as the successor
+programme to design rationale capture, was dropped rather than recorded
+unpinned.
+
+Every one of the seven writes the class rule in its `### authority` subsection
+rather than the census sentence that forty-six reading nodes carry and that the
+frontier survey of 2026-09-05 found false. Minting seven more instances of a
+defect already named and already proposed for striking would have been the
+cheapest possible error, and the readings' accounts say why they do not.
+
+### The reading's findings of 2026-09-09, answered
+
+The delta re-reading of this node returned forward at weak strength with three
+findings on 2026-09-09, and this entry says what each one got.
+
+The count is struck rather than corrected. `a-term-is-its-own-sentence` said
+`vocabulary-option-summary`'s answer would otherwise print its lead on three
+rows of each of the 134 nodes carrying the authority fact. The claim about
+`vocabulary-option-summary` verifies against that node; the number does not, and
+the sitting dated it rather than only checking it: 133 nodes carried the
+authority fact at the end of 2026-09-06, 150 in the middle of 2026-09-07, and
+164 when the finding was raised. So the number was right when it was written and
+went stale inside three days, which makes it drift and not an error, and a
+verified instance of the question `bootstrap-residue-staleness` asks. Correcting
+it would have restarted the same clock, so the number is gone and the sentence
+now states the rule: every node carrying the authority fact. It is a recurrence
+of the defect the frontier survey of 2026-09-05 named on
+`hansard-verbatim-record`, where a census sentence carried verbatim by
+forty-six reading nodes had gone false, and that recurrence is why the seven
+readings minted here write the class rule in `### authority` instead.
+
+The second finding, that the fact-level lead argues only for the marks
+arrangement and does not say why the accumulation-layer option is recommended
+over the option it is built on, is left standing as the reading put it: a
+defensible split, with the recommended option's own subsection carrying that
+argument.
+
+The third is not a defect of this node and is not answered here. The reading
+declined to check the cross-node claims from its own context, on the ground that
+its scope was the diff and the previous reading's findings; that was the right
+call for a further reason the reading could not have known, which is recorded on
+`clean-context-review` instead. The claims were checked by this sitting against
+the node files directly, and all of them hold.
+
+### Clean-context re-reading, 2026-09-09, of 1e0b37a2
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `five-marks-and-the-two-the-author-added`.
+
+Findings:
+
+- The previous reading's one finding is left open, but not by fault of this amendment. That finding said `a-term-is-its-own-sentence`'s claim -- "which would otherwise print on three rows of each of the 134 nodes carrying the authority fact a lead this answer's own words call a defect to be found" -- "should be verified against `vocabulary-option-summary` at the node's next full reading or by the survey before the author rules." The 2026-09-08 diff does not touch the `a-term-is-its-own-sentence` option (it still stands, untouched, on the answer fact's option list alongside the new `five-marks-and-the-two-the-author-added`), and the frontier survey of 2026-09-07 (`### Frontier survey, 2026-09-07, of 77d3e104`) does not verify the claim either. The finding's own deadline, "before the author rules," has not arrived: the stage moved to `maieutic` rather than toward a ruling. Suggested handling: carry the finding forward again rather than treat it as closed.
+- The amendment's new account section, "### The author's five marks, and the two the row does not have, 2026-09-08," grounds its fourth mark in claims about sibling and newly-minted nodes that this delta's scope (the diff plus the previous reading's findings) cannot check: "`viable-options` describes it in its own answer — the option the author has selected without confirming, where there is one, marked selected"; "`deferring-on-a-probe`, minted in this sitting, produces one on every deferral it receives, since what a deferral sets is the author's choice and expressly not a confirmation"; and "`expert-instructions` stands at the periagogic stage and `movements` at the maieutic, and both carry a ruling of deferred on their authority fact from the same entry." A fourth claim in the same section, that `what-acts-during-bootstrap` "makes it a term of the rule that governs every reconciliation this record does today," is the same kind of claim, though I note for transparency that the materialized rule at `.claude/rules/what-acts-during-bootstrap.md` in this session's own project context (not supplied by the brief, and so not properly in scope for this reading) corroborates it: that rule states reconciliation acts on "the convergence of the author's choice with the AI's recommendation ... the recommendation being the AI's, which integrates the choices of any experts convened on the fact without requiring that those experts agree," and that "`recording`'s ruling responses are `confirm` and `edit` and neither writes a choice the author has made and not confirmed," matching the account's own claims about `recording` almost verbatim. None of the four is verifiable from the diff and the previous reading's findings alone. This is the same class of gap the last reading found in `a-term-is-its-own-sentence`'s claim about `vocabulary-option-summary`, and by that reading's own standard ("neither is a false statement, a broken pin, or a contradiction this node's own text shows — they are gaps for the neighbourhood to close, not defects in the amendment itself") it is a gap for the neighbourhood to close and not a defect in this amendment. Suggested handling: verify all of `a-term-is-its-own-sentence`, `viable-options`, `expert-instructions`/`movements`, and `deferring-on-a-probe` together at this node's next full reading or by the survey before the author rules.
+- The frontier survey's vocabulary finding of 2026-09-07 ("Kind: vocabulary") quotes this node twice for a "reader" sense that collides with the agent/reviewer sense used elsewhere in the record: the parser sense, "what-an-option-row-carries 'which the reader of the graph enforces'", and the agent sense, "what-an-option-row-carries 'Where no reader's line bears on a fact the row carries, in the line's place, one'". Its proposal reads "review-cost, what-an-option-row-carries and clean-context-review substitute" the agent sense. This amendment leaves both instances unchanged, including inside the very paragraph it rewrote: the current Answer still reads "Where no reader's line bears on a fact the row carries, in the line's place, one mark saying so, and no argument." This is left open, but properly so and not a defect: the survey recorded the option enacting the substitution, `reader-is-the-parser-and-reviewer-is-the-reading`, on `review-cost`'s own answer fact rather than on this node's, so the vocabulary is `review-cost`'s to settle before this node could adopt it without pre-empting that node's own dialogue.
+
+On the facts and what they recommend: The diff moves the answer fact's `recommends` from `the-details-carry-the-three-accumulations` to the newly added `five-marks-and-the-two-the-author-added` (boldness unchanged at moderate), leaving `stands` at `three-marks-and-the-case-against` so the `## Recommendation` fence persists. The resolved content is rewritten to state five first-level marks -- the prior three (recommended-with-boldness, per-reading support/divergence, confirmed) plus 'the author's choice, marked unconfirmed' and 'the expert chose it, by that expert's name, one mark per expert and no tally' -- while carrying the three-accumulation drill-down of the option it supersedes forward unchanged. The authority fact (`ratified`, low boldness) and its fence are untouched by this diff.
+
+On the viability of the options: Every option on the answer fact's list keeps a status consistent with before this diff: the four passed-over options are unchanged, and `the-details-carry-the-three-accumulations` and `a-term-is-its-own-sentence` remain live and untouched. The new option, `five-marks-and-the-two-the-author-added`, carries an argued case tied directly to the author's own enumeration at `words/2026-09-08/39` rather than a bare assertion, and states plainly what it does not yet resolve (the fourth mark's encoding, owed on `recording`) rather than presenting it as settled. Nothing in the diff leaves an option ambiguous or contradicts the viable list; the authority fact's options are unaffected.
+
+Strongest counter-argument (weak): The amendment's own new prose leans on claims about sibling and freshly-minted nodes -- `viable-options`, `deferring-on-a-probe`, `expert-instructions`, `movements`, and `what-acts-during-bootstrap` -- that this delta's scope cannot check, in the same way `a-term-is-its-own-sentence`'s '134 nodes' claim could not be checked at the last reading; none is a false statement, a broken pin, or a contradiction this node's own text shows, so by the standard the last reading itself applied these are gaps for the neighbourhood to close rather than defects in the amendment. Separately, the previous reading's own finding about `a-term-is-its-own-sentence` remains open -- neither the 2026-09-08 amendment nor the 2026-09-07 survey touched it -- so it is carried forward rather than closed by this round. And the frontier survey's vocabulary finding, which quotes this node twice for a 'reader' sense that collides with the agent sense, is not yet answered either, though the fix it proposes is recorded as an unruled option on `review-cost`'s own answer fact and so is not yet this node's to make on its own.
+
+The session's reply: Forward taken. Of the three findings, the first is right and is answered by striking the count rather than correcting it: the claim about `vocabulary-option-summary` verifies, the number 134 does not, and dating it (133 nodes at the end of 2026-09-06, 150 mid-2026-09-07, 164 when the finding was raised) shows drift rather than error, so correcting it would have restarted the same clock. The sentence now states the rule. The second finding is left standing as the reading put it, a defensible split with the recommended option's own subsection carrying the argument for the accumulation layer. The third is not a defect of this node: the reading was right to decline cross-node verification from its own context, for a further reason recorded on `clean-context-review`, and the sitting checked the claims against the node files directly, where all of them hold. Beyond the findings, the node took the tradition survey's return: a new option `names-on-the-row-stances-in-a-companion` sourced to the CJEU reading, and an `against` extended with the survey's finding that no surveyed tradition offers a measured result on mark density while three hardened against the two marks the author's enumeration added. All of that is outside the review pin, so the forward verdict stands on what was read.
