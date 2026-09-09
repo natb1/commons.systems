@@ -27,6 +27,68 @@ probes:
       while one stands.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      Answered at `words/2026-09-08/39` by declining the premise. The probe opened
+      with a flat declarative, that a node's answer is single-valued, and asked what
+      makes the single value the author's. The author's reply names that sentence as
+      the thing they do not understand: a fact carries options, each carrying its own
+      marks, and no standing answer is kept other than the confirmed one. The question
+      the probe asked then dissolves, because what makes the standing answer the
+      author's is that there is no standing answer that is not, and a kept divergence
+      stands beside it as an option with its own marks rather than as a rival value.
+
+      Recorded here because the premise was the AI's own and not the record's, and a
+      discharge that did not say so would leave a reader looking for the disposition
+      it came from. The sentence appears nowhere in the record but this probe: no
+      answer, option, or rule states it, and the sitting that raised the probe wrote
+      it. What it was tracking is real and survives the discharge as the
+      implementation defect the answer now names, the reader supplying the
+      recommendation where it finds no confirmation, which is a single value the
+      record does keep and nobody ruled on. That is on this node's account with its
+      three sites and its cost.
+  - id: does-the-non-bootstrap-clause-reach-a-delegated-recommendation
+    asks: >-
+      You wrote that non-bootstrap reconciliation acts only on the confirmed author
+      option. On 2026-09-04 you wrote that under a delegation, and under a deferral,
+      the AI's recommendation acts. Is a ruling of delegated or deferred itself the
+      confirmed option your new clause asks for, so that the recommendation standing
+      under it still acts after bootstrap? Or does the clause ask for a confirmation
+      on the answer fact itself, so that after exit nothing acts on a node until you
+      have confirmed its answer?
+    fact: answer
+    why: >-
+      The two readings do opposite things to a class you have already defined. Read
+      narrowly, the clause strikes "the recommendation acts" from both the delegated
+      and the deferred sentences of this node's answer, which are your own words of
+      2026-09-04 at `words/2026-09-04/22`; a delegation would then be a promise not to
+      ask that still requires an answer from you, which is the thing delegation exists
+      to avoid. Read widely, a ruling of any kind is a confirmed option of yours
+      sitting on one fact or another, the clause bars only what no ruling reaches at
+      all, and it restates what this node's unanswered sentence already says.
+
+      The AI can build the case for either and has therefore built neither into the
+      answer. The clause that fixes what reconciliation may act on is the clause that
+      fixes what the AI may act on, so settling its reach under a grant is the AI
+      setting the bound it is itself held to, which is the capture limb of
+      `class-recommendation`'s test. What the answer records instead is the rule with
+      its reach open and the part both readings agree on binding in the meantime, a
+      node no ruling reaches at all.
+
+      There is a third possibility the AI raises rather than assumes away: that the
+      contrast you were drawing is between a choice and a confirmation and not between
+      the classes at all, so that after exit a delegated node's recommendation acts
+      because your delegation confirmed in advance that it would, while a deferred
+      node's does not, the deferral being the one class whose whole content is that
+      you have not yet decided. That reading splits the two sentences your 2026-09-04
+      words joined, which is why it is put to you rather than recorded.
+    discharges: >-
+      Whether the delegated and deferred sentences of this node's answer survive the
+      new clause unchanged, are struck by it, or are split by it; and with that,
+      whether anything the author has not confirmed on an answer fact acts once
+      bootstrap ends.
+    source: ai
+    raised: 2026-09-08
 review:
   verdict: forward
   strength: weak
@@ -1146,7 +1208,12 @@ facts:
           - words/2026-09-03/27
           - words/2026-09-03/28
           - words/2026-09-03/29
-    recommends: the-ruling-is-quoted-in-the-record-and-referenced-by-the-option
+      - name: no-standing-answer-but-a-confirmed-one
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/39
+    recommends: no-standing-answer-but-a-confirmed-one
     boldness: moderate
   - name: authority
     options:
@@ -1184,7 +1251,9 @@ depends:
 
 ### answer
 
-`the-ruling-is-quoted-in-the-record-and-referenced-by-the-option` is recommended since 2026-09-07: it is `authority-derived` with one sentence amended, that the words earning a ruling are entered in the ledger and referenced by the option ruled on, following `quotes`' recommendation of the ledger, which the author has put up for confirmation, so that it stands or falls with that ruling. Its support and divergence are under its subsection; the options recorded on this fact since the reading of 2026-09-05 stay viable beside it, each as its subsection says, and none is passed over by this amendment. What follows is the reason `authority-derived` was recommended on, which the amendment carries.
+`no-standing-answer-but-a-confirmed-one` is recommended since 2026-09-08: it is `the-ruling-is-quoted-in-the-record-and-referenced-by-the-option` with two of the author's sentences from `words/2026-09-08/39` inserted and nothing struck, that the record keeps no standing answer other than the confirmed option, and that outside bootstrap reconciliation acts only on one. Its support and divergence are under its subsection. The boldness does not move: both insertions are the author's, so neither is what the mark was on, and the second is recorded with its reach left open, which is a reason for the mark to stay where it is. What follows is the reason the text it amends was recommended on, which the amendment carries except where it says otherwise.
+
+`the-ruling-is-quoted-in-the-record-and-referenced-by-the-option` was recommended from 2026-09-07 until then: it is `authority-derived` with one sentence amended, that the words earning a ruling are entered in the ledger and referenced by the option ruled on, following `quotes`' recommendation of the ledger, which the author has put up for confirmation, so that it stands or falls with that ruling. Its support and divergence are under its subsection; the options recorded on this fact since the reading of 2026-09-05 stay viable beside it, each as its subsection says, and none is passed over by this amendment. What follows is the reason `authority-derived` was recommended on, which the amendment carries.
 
 `authority-derived` was recommended until then, at moderate boldness. The derivation of the class from the rulings, the grant that does not expire, and the proposal as a state of a ratified node are the author's words of 2026-09-04; the strike of the 2026-09-03 expiry against the words of that day, the list of a move's origins, the return of a proposal to the review stage, the rule that a ruling of ratified on the authority fact is a different act, together with the two further rules of the derivation the third reading found unstated, all three read off `derive.mjs` and supported by no words of the author's, the widening of the scope sentence to a move on any node within the class's scope and to the passing over of an option the AI wrote, and the citations of what acts during bootstrap and of what class the AI recommends are the AI's. Among the options viable beside it are `stamped-classes`, the mark stored on the node if the author prefers it; `ceiling-moves-here`, which is not dominated; and `escalate-toward-ratified`, whose rule left this answer on 2026-09-05 for the node `class-recommendation`, where it is the recommendation, and which stays on the list because no candidate leaves it, shown as moved rather than passed over once the `adopted-is-a-status` option on the viable-options node is ruled, which `depends` names.
 
@@ -1858,6 +1927,81 @@ defines:
 Every answer carries its authority in the rulings recorded on its facts, and no stamp is written beside them: a node's class is read off those rulings, and a node no ruling grants is unanswered, as the unanswered node says. Ratified means the author ruled on the answer fact, in the alignment dialogue after its dialectic, and wants to be asked before it changes; the confirmed choice acts. Ratification happens only through that dialogue: the session that ran the sitting records the ruling on the option the author chose, with the response, the date, and the pin of the recommendation it answered, and the words that earned it are entered in the ledger and referenced by the option ruled on; a ruling whose words are not in the record, or whose option carries no reference to them, is invalid; transcribing the author's words from any other record confers nothing, and no command does, since a script that rules on request is a rubber stamp and the guard against rubber stamps is the dialectic itself, whose steps the round accounts for. Delegated means the author ruled delegated on the authority fact: the recommendation acts, the delegation covers the class of decision it names below the node, and the author does not want to be asked again. Deferred means the author ruled deferred on the authority fact: the recommendation acts, and the node stays on the alignment frontier until the author returns to it. A ruling of ratified on the authority fact is a different act from a ratification: it says the answer must be ratified, so it confers nothing until the answer fact is ruled, and it stops an ancestor's delegation from reaching that node. It stops it for that node alone: the walk continues past it, so a delegation ruled further up reaches the nodes beneath, and sealing a subtree takes a ruling on each node in it. Where a node refines more than one question and two ancestors at the same distance confer different classes, the narrower acts. A ruling on an ancestor grants the decisions its scope covers to the nodes beneath it, and authority only narrows on the way down. A class the AI writes for itself is not a grant: the deferred stamps the bootstrap wrote were unanswered, as the author classified them on 2026-09-03, and the record no longer carries them. Unanswered means no ruling grants the node: nothing on it acts, and reconciling anything under it takes an explicit grant from the author, given in their words and never assumed, never read from the announcement of one, and never carried into a later sitting; the grant's unit is the alignment sitting, which it reaches whole, and what it licenses within one is the question of the node beneath this one, what-acts-during-bootstrap; that is a standing rule of this record and not a shim, and it does not expire. Doctrine is the ratified answers taken together. A confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. A proposal is technical vocabulary and is not overloaded: it is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source, evidence, a signal, an instrument, a criterion, a conflict identified in reconciliation, or the loop on itself. In that state the confirmed choice keeps its full authority and the node returns to the alignment frontier for re-confirmation, at the movement the recording node's classification calls for, the review where only the recommendation moved. The AI exercises authority within scope: it may answer under a ratified ancestor, may add an option to any fact, may pass an option over and lift a status it wrote, may move a fact's recommendation on any node within the scope its class allows, what a move does being read from the class as the evaluation node says, and records anything that would contradict doctrine or exceed its scope as an option on the node it conflicts with, which acts on nothing until the author rules; an option that would leave a delegation's scope returns that node to the author with its class intact. What class the AI recommends on a node's authority fact is the question of the node beneath this one, class-recommendation; what it recommends there is a recommendation and confers nothing. During bootstrap no class acts; neither a declared shim nor the author's grant names a class, and what does act while nothing is ratified, and how that state ends, is the question of the node beneath this one, what-acts-during-bootstrap.
 ```
 
+#### no-standing-answer-but-a-confirmed-one
+
+The recommendation with the author's rule that the record keeps no standing
+answer but a confirmed one, and with what reconciliation may act on outside
+bootstrap. It is
+`the-ruling-is-quoted-in-the-record-and-referenced-by-the-option` with two
+insertions and no strike.
+
+**AI support.** Both are the author's, at `words/2026-09-08/39`, in their own
+words there: there is not a standing answer kept other than the author-confirmed
+option, and non-bootstrap reconciliation acts only on the confirmed author
+option. The words came as the answer to this node's probe
+`what-makes-a-single-valued-answer-the-authors`, and the first thing to say
+about them is what they decline. That probe opened with a flat declarative, that
+a node's answer is single-valued, and asked what makes the single value the
+author's. The author declined the premise rather than the question: a fact
+carries options, each carrying its own marks, and the question of which one is
+the answer has exactly one answer, the confirmed one, or none. The probe's own
+question then dissolves. What makes the standing answer the author's is that
+there is no standing answer that is not.
+
+That sentence had no home in the record before this, and its absence is why the
+reader could grow a fallback nobody ruled on. `authority` said which class lets a
+thing act and never what the answer is; `dialogue` says what an answer is and
+contradicts itself inside the one sentence that says it, holding that the answer
+is the confirmed option's content, where none is confirmed the option the answer
+fact recommends, and then that a node with neither has no answer, which is the
+state of every node no ruling reaches. Its own middle clause has just made that
+last clause false, since every node in this record carries a recommendation. The
+rule lands here because this node is where what acts is said, and the repair owed
+on `dialogue` is named in the account rather than assumed.
+
+The second insertion draws the record's two regimes on one axis with
+`what-acts-during-bootstrap`, which carries the author's other sentence. What
+changes at exit is not the class of a node but the strength of the mark
+required: a choice is enough while nothing can be confirmed, and a confirmation
+is required once one can be.
+
+**AI divergence.** The second insertion states a rule and then declines to say
+how far it reaches, which is a real cost and is not hidden here. Read narrowly,
+the author's clause strikes the delegated and the deferred sentences where they
+say the recommendation acts, and those are the author's own words of 2026-09-04
+at `words/2026-09-04/22`; it guts the delegated class entirely, since an author
+who asked not to be asked again would have to confirm each answer anyway. Read
+widely, it says only what the unanswered sentence already says, and adds a
+restatement to a rule that is long. Neither reading is available on the face of
+the words, and the AI can construct the case for either, which is exactly the
+condition under which this record raises a probe rather than choosing. Settling
+it under a grant would be the AI fixing the reach of the clause that governs what
+the AI may act on, which is the capture shape `class-recommendation` names. What
+the clause does bind in the meantime is stated, so that it is not inert.
+
+The first insertion has a cost of its own, paid on the implementation ref and not
+here, and it is large enough to name in the divergence rather than only in the
+account: the reader's fallback is load-bearing for the rules projection, for the
+published browser, and for the review's staleness pin, and on a record where
+nothing is confirmed, striking it without the repairs the account lists empties
+all three. That is an argument about what the repair costs and not about whether
+the rule is right, so under `evaluation` it does not bear on the recommendation;
+it bears on the order of the work, and it is recorded so that the order is
+chosen deliberately.
+
+**Content.**
+
+From: the-ruling-is-quoted-in-the-record-and-referenced-by-the-option
+
+```diff
+@@ -22,4 +22,4 @@
+ ---
+ ## Answer
+ 
+-Every answer carries its authority in the rulings recorded on its facts, and no stamp is written beside them: a node's class is read off those rulings, and a node no ruling grants is unanswered, as the unanswered node says. Ratified means the author ruled on the answer fact, in the alignment dialogue after its dialectic, and wants to be asked before it changes; the confirmed choice acts. Ratification happens only through that dialogue: the session that ran the sitting records the ruling on the option the author chose, with the response, the date, and the pin of the recommendation it answered, and the words that earned it are entered in the ledger and referenced by the option ruled on; a ruling whose words are not in the record, or whose option carries no reference to them, is invalid; transcribing the author's words from any other record confers nothing, and no command does, since a script that rules on request is a rubber stamp and the guard against rubber stamps is the dialectic itself, whose steps the round accounts for. Delegated means the author ruled delegated on the authority fact: the recommendation acts, the delegation covers the class of decision it names below the node, and the author does not want to be asked again. Deferred means the author ruled deferred on the authority fact: the recommendation acts, and the node stays on the alignment frontier until the author returns to it. A ruling of ratified on the authority fact is a different act from a ratification: it says the answer must be ratified, so it confers nothing until the answer fact is ruled, and it stops an ancestor's delegation from reaching that node. It stops it for that node alone: the walk continues past it, so a delegation ruled further up reaches the nodes beneath, and sealing a subtree takes a ruling on each node in it. Where a node refines more than one question and two ancestors at the same distance confer different classes, the narrower acts. A ruling on an ancestor grants the decisions its scope covers to the nodes beneath it, and authority only narrows on the way down. A class the AI writes for itself is not a grant: the deferred stamps the bootstrap wrote were unanswered, as the author classified them on 2026-09-03, and the record no longer carries them. Unanswered means no ruling grants the node: nothing on it acts, and reconciling anything under it takes an explicit grant from the author, given in their words and never assumed, never read from the announcement of one, and never carried into a later sitting; the grant's unit is the alignment sitting, which it reaches whole, and what it licenses within one is the question of the node beneath this one, what-acts-during-bootstrap; that is a standing rule of this record and not a shim, and it does not expire. Doctrine is the ratified answers taken together. A confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. A proposal is technical vocabulary and is not overloaded: it is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source, evidence, a signal, an instrument, a criterion, a conflict identified in reconciliation, or the loop on itself. In that state the confirmed choice keeps its full authority and the node returns to the alignment frontier for re-confirmation, at the movement the recording node's classification calls for, the review where only the recommendation moved. The AI exercises authority within scope: it may answer under a ratified ancestor, may add an option to any fact, may pass an option over and lift a status it wrote, may move a fact's recommendation on any node within the scope its class allows, what a move does being read from the class as the evaluation node says, and records anything that would contradict doctrine or exceed its scope as an option on the node it conflicts with, which acts on nothing until the author rules; an option that would leave a delegation's scope returns that node to the author with its class intact. What class the AI recommends on a node's authority fact is the question of the node beneath this one, class-recommendation; what it recommends there is a recommendation and confers nothing. During bootstrap no class acts; neither a declared shim nor the author's grant names a class, and what does act while nothing is ratified, and how that state ends, is the question of the node beneath this one, what-acts-during-bootstrap.
++Every answer carries its authority in the rulings recorded on its facts, and no stamp is written beside them: a node's class is read off those rulings, and a node no ruling grants is unanswered, as the unanswered node says. A node's answer is the content of the option the author has confirmed, and the record keeps no standing answer other than that one: where no option on the answer fact is confirmed the node has no answer, and the option the fact recommends is a recommendation and never a fallback answer standing in for one. The reader presently supplies the recommendation where it finds no confirmation, at the three sites this node's account names; that is a defect of the implementation against this rule and not a second reading of it, and what it costs to repair is named there too rather than left to be discovered at the repair. Ratified means the author ruled on the answer fact, in the alignment dialogue after its dialectic, and wants to be asked before it changes; the confirmed choice acts. Ratification happens only through that dialogue: the session that ran the sitting records the ruling on the option the author chose, with the response, the date, and the pin of the recommendation it answered, and the words that earned it are entered in the ledger and referenced by the option ruled on; a ruling whose words are not in the record, or whose option carries no reference to them, is invalid; transcribing the author's words from any other record confers nothing, and no command does, since a script that rules on request is a rubber stamp and the guard against rubber stamps is the dialectic itself, whose steps the round accounts for. Delegated means the author ruled delegated on the authority fact: the recommendation acts, the delegation covers the class of decision it names below the node, and the author does not want to be asked again. Deferred means the author ruled deferred on the authority fact: the recommendation acts, and the node stays on the alignment frontier until the author returns to it. Outside bootstrap, reconciliation acts only on an option the author has confirmed; within it, on the convergence of the author's choice with the AI's recommendation, which is what-acts-during-bootstrap's question and is answered there. The two are one rule seen from either side of exit, and what changes at exit is that a confirmation becomes available and a choice stops being enough. How far the first clause reaches is not settled here, and the record says so rather than settling it in passing, because either settlement changes what acts and neither is the AI's to make: read one way, a ruling of delegated or deferred is itself an option the author confirmed, confirmed on the authority fact and standing behind the recommendation on the answer fact, and the clause bars only what no ruling reaches at all; read the other way, it asks for a confirmation on the answer fact itself, and it strikes the two sentences above where they say the recommendation acts. The probe does-the-non-bootstrap-clause-reach-a-delegated-recommendation puts that to the author, and until it is answered the clause binds where both readings agree and no further, which is the node no ruling reaches. A ruling of ratified on the authority fact is a different act from a ratification: it says the answer must be ratified, so it confers nothing until the answer fact is ruled, and it stops an ancestor's delegation from reaching that node. It stops it for that node alone: the walk continues past it, so a delegation ruled further up reaches the nodes beneath, and sealing a subtree takes a ruling on each node in it. Where a node refines more than one question and two ancestors at the same distance confer different classes, the narrower acts. A ruling on an ancestor grants the decisions its scope covers to the nodes beneath it, and authority only narrows on the way down. A class the AI writes for itself is not a grant: the deferred stamps the bootstrap wrote were unanswered, as the author classified them on 2026-09-03, and the record no longer carries them. Unanswered means no ruling grants the node: nothing on it acts, and reconciling anything under it takes an explicit grant from the author, given in their words and never assumed, never read from the announcement of one, and never carried into a later sitting; the grant's unit is the alignment sitting, which it reaches whole, and what it licenses within one is the question of the node beneath this one, what-acts-during-bootstrap; that is a standing rule of this record and not a shim, and it does not expire. Doctrine is the ratified answers taken together. A confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. A proposal is technical vocabulary and is not overloaded: it is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source, evidence, a signal, an instrument, a criterion, a conflict identified in reconciliation, or the loop on itself. In that state the confirmed choice keeps its full authority and the node returns to the alignment frontier for re-confirmation, at the movement the recording node's classification calls for, the review where only the recommendation moved. The AI exercises authority within scope: it may answer under a ratified ancestor, may add an option to any fact, may pass an option over and lift a status it wrote, may move a fact's recommendation on any node within the scope its class allows, what a move does being read from the class as the evaluation node says, and records anything that would contradict doctrine or exceed its scope as an option on the node it conflicts with, which acts on nothing until the author rules; an option that would leave a delegation's scope returns that node to the author with its class intact. What class the AI recommends on a node's authority fact is the question of the node beneath this one, class-recommendation; what it recommends there is a recommendation and confers nothing. During bootstrap no class acts; neither a declared shim nor the author's grant names a class, and what does act while nothing is ratified, and how that state ends, is the question of the node beneath this one, what-acts-during-bootstrap.
+```
+
 ### authority
 
 Ratified, at moderate boldness: this node defines the classes themselves and what each lets act, so a wrong answer is expensive and capture-shaped, which is the escalation test the answer now states, and every consequence of the rule is ruled per fact under it. Moderate because the author has spoken to the classes in three sittings and never to this text whole, and the AI's additions are named on the answer fact.
@@ -1986,3 +2130,120 @@ fact. Confirmation is not blocked on draining all probes." So the node stands at
 review with an open probe on it, which is what the amendment recorded on
 `author-questions` as `no-cap-and-probes-do-not-block` makes ordinary. Nothing in
 the answer moved, and the rule projected from this node is unchanged.
+
+### The confirmed option is the only standing answer, 2026-09-08
+
+The author answered this node's probe `what-makes-a-single-valued-answer-the-authors`
+by declining its premise. Their words are at `words/2026-09-08/39`, and the two
+sentences of them that are this node's are that no standing answer is kept other
+than the author-confirmed option, and that non-bootstrap reconciliation acts only
+on the confirmed author option. The third sentence, on what bootstrap
+reconciliation acts on, is `what-acts-during-bootstrap`'s and is recorded there;
+the enumeration of the marks an option row carries is
+`what-an-option-row-carries`' and is recorded there.
+
+**The premise was the AI's.** The probe opened with a flat declarative, that a
+node's answer is single-valued, and asked what makes the single value the
+author's. A record survey run for this sitting looked for the disposition that
+sentence came from and found none: no answer, no option's content, and no rule
+file states it, and the only other occurrences of the phrase in the graph are two
+Rawls readings, on `movements` and on `round-termination`, which use it of
+something else. The sitting that raised the probe wrote the premise. That matters
+beyond this discharge, because a probe carrying an unrecorded premise asks the
+author to answer inside a frame the AI supplied, and the author here declined the
+frame rather than the question. It is the second reason a probe leaves the list
+that this sitting has recorded, the first being the one on `author-questions`;
+the pattern is worth watching for, and the guard is that a probe's `why` cite the
+disposition its premise comes from.
+
+**What the clause actually reaches is a fallback nobody ruled on.** The record
+survey traced the author's first sentence to a concrete thing in the
+implementation: the reader supplies the recommended option wherever it finds no
+confirmed one, at four sites in three files —
+`packages/disposition/read.mjs:2334`, inside `answerText`;
+`packages/disposition/project.mjs:151`, inside `answerOptionName`; and
+`packages/clean-context-review/brief.mjs:494` and `:1721`. Each is
+`confirmedOption(node, ANSWER_FACT) ?? fact.recommends`. `confirmedOption` itself,
+at `packages/disposition/derive.mjs:649`, is clean, and `resolveOptionContent` is
+not a fallback site. So the author's rule is not an abstraction: it says those
+four expressions are wrong, and on a record where nothing is confirmed they are
+what supplies every answer the record has.
+
+**Three things depend on the fallback, and striking it without them empties
+them.** The rules projection throws on the first `tier: global` node
+(`ruleFiles`, `project.mjs:337-368`), and all nine rule files under
+`.claude/rules/` are projections of unconfirmed drafts loaded as project
+instructions. The published browser silently publishes empty, since
+`excludeUnaligned` (`project.mjs:536-572`) would drop all 169 nodes. And the
+review's answer pin collapses to the hash of the empty string for every node
+(`brief.mjs:1793`), which is a staleness guard that passes vacuously rather than
+one that fails loudly. The other hashes are safe:
+`deriveFactRecommendationHash` and `deriveRecommendationHash` fold
+`option.resolved` and never go through the fallback. None of this bears on
+whether the author's rule is right, and under `evaluation` a migration cost is
+struck from the choosing; it bears on the order in which the repair is done, and
+it is recorded so the order is chosen rather than discovered.
+
+**The two projections the author reads already disagree.** The alignment page
+implements the author's rule today: `standingState` at `project.mjs:1092-1100`
+reads `confirmedOption(n, "answer") ? "ratified" : "none"` with no fallback, and
+`PANE_NONE_CONFIRMED` at `:1130` is the pane it shows. The browser does not. So
+one page has been telling the author that no node has a standing answer while the
+other has been rendering 169 of them, and the author's words settle which page
+was right.
+
+**Three reconciliation items, none of them this ref's.** First, `dialogue`
+contradicts itself inside the single sentence that defines an answer, at
+`dialogue.md:2980`: the answer is the confirmed option's content, "where none is,
+of the option the answer fact recommends; and where the node has neither, it has
+no answer, which is the state of every node no ruling reaches." The trailing
+clause is false under its own middle clause, since every node in this record
+carries a recommendation, so on that sentence's own terms no node is ever in the
+state it calls the state of every node no ruling reaches. Twenty-two lines above
+it, at `:2958`, the same node states the rule the author has now fixed and states
+it without any fallback at all — a node carries "its answer, which is the
+resolved content of the option labelled confirmed" — so `dialogue` holds both
+rules and does not know it. Second, `project.mjs:199` and `project.mjs:601` cite
+`commons.systems/disposition-graph/unconfirmed-accumulation` for the fallback,
+and that node's answer says the opposite of what it is cited for: "the node's
+answer is not [stored], being the resolved content of the option last confirmed",
+with no fallback clause. That is an unsupported citation and is a defect
+independent of any ruling here. Third, the fallback is restated in prose at
+`survey-selection.md:306`, `:312`, `:570` and `:629`, and in
+`.claude/skills/align/SKILL.md:173`. All of it lands on `greenfield` through
+reconciliation and none of it is this skill's to write.
+
+**The second clause is recorded with its reach open, and that is deliberate.**
+"non-bootstrap reconciliation acts only on confirmed author option" cannot be
+read literally beside this node's own sentences that under a delegation, and
+under a deferral, the recommendation acts — sentences that are the author's own
+words of 2026-09-04 at `words/2026-09-04/22`. The narrow reading strikes them and
+guts the delegated class, whose whole content is that the author asked not to be
+asked again; the wide reading, on which a ruling of delegated or deferred is
+itself a confirmed option sitting on the authority fact, leaves them standing and
+makes the clause a restatement of the unanswered sentence. A third is possible,
+that the contrast is between a choice and a confirmation rather than between the
+classes, splitting the two sentences the 2026-09-04 words joined. The AI can
+build the case for each. Choosing among them under a grant would be the AI
+setting the reach of the clause that governs what the AI may act on, which is
+`class-recommendation`'s capture limb exactly, so the answer records the rule,
+records that its reach is open, binds it where all the readings agree — the node
+no ruling reaches at all — and puts the choice to the author as the probe
+`does-the-non-bootstrap-clause-reach-a-delegated-recommendation`.
+
+**The three amendments are coupled and one of them cannot yet be encoded.**
+`what-acts-during-bootstrap` now makes the author's choice a term of the rule
+governing every reconciliation this record does today;
+`what-an-option-row-carries` is what makes that term representable, having gained
+the mark for an option the author chose and did not confirm; and `recording`'s
+ruling responses are `confirm` and `edit`, neither of which writes such a mark. So
+the amendment owed on `recording` is the hinge of all three and is named on
+`what-an-option-row-carries` rather than assumed. `viable-options` already
+describes the slot in its own answer, the option the author has selected without
+confirming, marked selected, which is one more place the record had reached for
+the thing and had nowhere to put it.
+
+**The rule projected from this node is now stale.** `authority` is `tier: global`
+and its answer changed, so `.claude/rules/authority.md` no longer matches the
+graph; `--rules --check` reports it, and the regeneration lands on `greenfield`
+and not here.

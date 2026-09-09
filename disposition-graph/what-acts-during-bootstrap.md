@@ -48,7 +48,12 @@ facts:
       - name: interim-doctrine-binds-as-last-seen
         source: ai
         ref: "2026-09-08"
-    recommends: shim-and-grant
+      - name: reconciliation-acts-on-a-convergence
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/39
+    recommends: reconciliation-acts-on-a-convergence
     boldness: high
     against: "Every rule file under `.claude/rules/` that a session loads, this node's own projection among them, is the projection of a node no ruling reaches, and the `session-context` node declares a shim on `CLAUDE.md` and on `.claude/settings.json` and on neither the rules projection nor this file, so this answer says the doctrine the record is running on today acts on nothing, and says it in a file that binds every session while saying it. It leaves a session no account at all of what those files bind it to, and the option that would give one is `projected-doctrine-acts`."
   - name: authority
@@ -94,9 +99,22 @@ defines:
 
 ### answer
 
-The recommendation is `shim-and-grant`, at high boldness, which in this
-record means low confidence. The two rules are the record's own words, from
-the evaluation node, the transience node and the authority node, and gathering
+The recommendation is `reconciliation-acts-on-a-convergence` since
+2026-09-08, at high boldness, which in this record means low confidence: it
+is `shim-and-grant` with the positive condition the author set at
+`words/2026-09-08/39` on what bootstrap reconciliation may act on, the
+convergence of their choice with the AI's recommendation. `shim-and-grant`
+stated one bar and never said what reconciliation acts on, and its own support
+and divergence, and the amendment's, are under their subsections. The boldness
+does not move on the amendment: the clause is the author's, so it is not what
+the boldness was ever marking, and the amendment adds a term the record cannot
+presently write down, which is a reason for the mark to stay rather than to
+fall. What follows is the reason the text it amends was recommended on, which
+the amendment carries except where it says otherwise.
+
+`shim-and-grant` was recommended from 2026-09-04 until then. The two rules
+are the record's own words, from the evaluation node, the transience node and
+the authority node, and gathering
 them here invents nothing. What is the AI's, and what the boldness marks, is
 that bootstrap relaxes node by node rather than ending in one act, and that the
 conditions the record declares elsewhere, gathered on the node beneath this one
@@ -743,6 +761,98 @@ From: shim-and-grant
  
 ```
 
+#### reconciliation-acts-on-a-convergence
+
+The recommendation with the positive condition the author set on what bootstrap
+reconciliation may act on. `shim-and-grant` says what acts by right and what the
+grant licenses within a sitting, and states one bar, confirmed ratified
+disposition, which is empty today. It never says what reconciliation acts *on*.
+This option says it: the convergence of the author's choice with the AI's
+recommendation.
+
+**AI support.** It is the author's, at `words/2026-09-08/39`: "non-bootstrap
+reconciliation acts only on confirmed author option. bootstrap reconciliation only
+acts on convergence of author choice and AI recommendation (which integrates expert
+choice, though expert consensus is not required)." The second sentence is this
+node's; the first is `authority`'s and is recorded there. Read together they draw
+the record's two regimes on one axis, and the axis is bootstrap and not class: what
+changes at exit is that a confirmation becomes available and a convergence stops
+being enough.
+
+What the clause repairs is a gap the node had and did not know it had. The word
+`grant` has been doing two jobs in this answer, a permission and a warrant, and the
+author's rule separates them. A grant is not the author saying the AI may act on
+its own recommendation; that reading makes the grant a blank cheque and makes the
+convergence a convergence of the AI with itself. A grant is the author choosing,
+for that node and that sitting, that the AI's recommendation is where they stand
+too. That is why the grant's unit is the sitting and why it may not be assumed or
+carried: an assumed grant is an assumed author's choice, and an assumed term is not
+a term.
+
+It also puts a bound on `deferring-on-a-probe` that neither node had stated. That
+mechanism produces the author's choice by reading the record back, on the main
+thread's own reading, and the main thread is the party that holds the
+recommendation. A convergence one party assembles from both sides is constructed
+rather than observed, which is not an accusation of bad faith and does not need to
+be: it is a structural claim about what the test can detect. The bound this option
+states is the narrowing that node's own recommendation already carries, that an
+answer written under a deferral names the recorded disposition it was read from,
+and it is stated here because this is the node whose rule the reading has to
+satisfy.
+
+**AI divergence.** The clause names a term the record cannot presently write down.
+`recording`'s ruling responses are `confirm` and `edit`, `what-an-option-row-carries`
+gained the mark for an unconfirmed author's choice only in the same sitting that
+recorded this, and neither is materialized. So a rule that governs every
+reconciliation this record does today is stated in terms of a mark no node carries,
+and a reader who tries to check a past reconciliation against it finds nothing to
+check it with. Two answers, neither complete. The first is that a rule stated before
+its encoding is how this record works everywhere, and the alternative is a rule
+written to fit the encoding it has. The second is that the day's own grant is the
+author's choice in the only form the record has ever had for it, their words in the
+ledger, so the term is not absent so much as held in a different place. Neither
+answer disposes of the objection that a convergence which cannot be pointed at
+cannot be audited, and the boldness on this fact stays where it is on that account.
+
+**Content.**
+
+From: shim-and-grant
+
+```diff
+@@ -37,7 +37,30 @@
+ findings have overtaken. Its one bar is confirmed ratified disposition, which
+ reconciliation may not contradict; during bootstrap nothing is ratified, so the
+ bar is presently empty, which the record says rather than leaving a reader to
+-find out. Nothing else acts by right: a
++find out. What it acts on is a positive condition and not only the absence of
++that bar: bootstrap reconciliation acts on the convergence of the author's
++choice with the AI's recommendation, as the author fixed it at
++`words/2026-09-08/39`, the choice being the unconfirmed mark
++`what-an-option-row-carries` puts on an option and never a confirmation, and the
++recommendation being the AI's, which integrates the choices of any experts
++convened on the fact without requiring that those experts agree. Three things
++follow that the clause would otherwise be read without. A grant is how the
++author's choice reaches a node where the record holds none, which is why a grant
++is given per sitting in the author's own words and is never assumed, never read
++off the announcement of one, and never carried forward: it is not a permission
++to act on the AI's recommendation alone, it is the author supplying the term the
++convergence would otherwise be missing. Where the author's choice is not
++independently recorded but read back from the record by the same party that
++holds the recommendation, the convergence is constructed and not observed, and
++`deferring-on-a-probe` is the mechanism that does exactly that; the bound this
++rule puts on it is that a choice so assembled names the recorded disposition it
++was read from, so that the author can see what was read and overturn it, because
++a convergence neither party can point at is not one. And the record cannot
++exhibit the first term today at all, since `recording`'s ruling responses are
++`confirm` and `edit` and neither writes a choice the author has made and not
++confirmed, so this clause states a rule whose encoding is owed, and says so here
++rather than leaving a reader to find that its central term is unrepresentable.
++Nothing else acts by right: a
+ recommendation on an unanswered node is a draft and grounds no work, and a class
+ the AI writes for itself is not a grant.
+ 
+```
+
 ### authority
 
 Ratified, at moderate boldness: this node says what an agent may act on by
@@ -1024,3 +1134,50 @@ kept because the expert is right about what it is an instance of. Under a run-on
 with no per-act checkpoint the record's own reader can be broken between two reads and
 nothing marks the moment, which is the cost the record named when the narrow clause was
 replaced, appearing in the wild within hours of the replacement.
+
+### What bootstrap reconciliation acts on, 2026-09-08
+
+The author answered the ranking probe on this node's own grant with a rule this
+node had never stated. Their words are at `words/2026-09-08/39`, and the second
+of their two sentences is this node's: "bootstrap reconciliation only acts on
+convergence of author choice and AI recommendation (which integrates expert
+choice, though expert consensus is not required)." The first sentence, on what
+non-bootstrap reconciliation acts on, is `authority`'s and is recorded there.
+
+What the sitting found in placing it is that the answer had a hole it had not
+noticed. `shim-and-grant` says what acts by right, what a shim licenses, what a
+grant licenses within a sitting, and one bar; it never says what reconciliation
+acts *on*. That is a gap of a particular kind, one a node can carry for a long
+time without anyone tripping over it, because every reader supplies the missing
+term from context and no two readers need supply the same one. The AI's own
+supplied term was the permissive one: that a grant lets the AI act on its own
+recommendation. The author's rule says otherwise. A grant is the author's
+choice, given for that node and that sitting, that the AI's recommendation is
+where they stand too, and the convergence is of two parties and not one. Read
+that way the sitting's own standing clauses stop being stipulations and become
+consequences: a grant is per sitting, is never assumed, and is never read off
+the announcement of one, because an assumed grant is an assumed author's choice
+and an assumed term is not a term at all.
+
+The clause also lands a bound on `deferring-on-a-probe`, minted in this same
+sitting, that neither node had stated. That mechanism produces the author's
+choice by reading the record back on the main thread's own reading, and the main
+thread is the party that holds the recommendation. A convergence one party
+assembles from both sides is constructed rather than observed. That is a
+structural claim about what the test can detect and not a charge of bad faith,
+and it is the reason that node's recommendation already requires a deferral's
+answer to name the recorded disposition it was read from: so the author can see
+what was read and overturn it.
+
+The amendment is recorded knowing the record cannot presently exhibit its first
+term. `recording`'s ruling responses are `confirm` and `edit`, and neither
+writes a choice the author has made and not confirmed;
+`what-an-option-row-carries` gained the mark for one in this same sitting and it
+is not materialized. So a rule that governs every reconciliation this record
+does today is stated in terms of a mark no node carries. The sitting chose to
+state the rule and name the gap rather than write a rule that fits the encoding
+it has, which is how this record works everywhere else; the objection that a
+convergence nobody can point at cannot be audited is not disposed of by that
+choice, and it is why the boldness on this fact does not fall. The amendment
+owed on `recording` is named on `what-an-option-row-carries` and is not assumed
+here.

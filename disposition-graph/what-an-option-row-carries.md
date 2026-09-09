@@ -59,7 +59,12 @@ facts:
           - words/2026-09-07/4
         diverges:
           - words/2026-09-08/36
-    recommends: the-details-carry-the-three-accumulations
+      - name: five-marks-and-the-two-the-author-added
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/39
+    recommends: five-marks-and-the-two-the-author-added
     boldness: moderate
     against: "The record asks the AI for a case against every recommendation — `dialogue`'s recommended text makes a fact's `against` the argument the recommendation had to beat, written when the recommendation is recorded — and under this answer the author never sees it at the level they read: on every fact of every node but one, the row carries a mark saying no reader's line bears and the AI's written objection, where one exists, sits behind a fold, because a reading returns one counter-argument for a node and `caseAgainst` substitutes it on the answer fact alone. The rule is mostly unmet today, 53 fact-level `against` fields beside 247 recommendations at this head, so on most rows the mark replaces nothing yet; that is back-fill debt against the rule, as `dialogue`'s own account records, and not a reason the rule will stay unmet, so what the fold hides grows as the debt is paid. The arrangement this answer forbids, the AI's line at the first level, is the only one under which an objection the record holds is always where the author reads."
   - name: authority
@@ -346,7 +351,9 @@ depends:
 
 ### answer
 
-`the-details-carry-the-three-accumulations` is recommended since 2026-09-07: it is `three-marks-and-the-case-against` with the confirmed mark read as the derived label and the expanded details given their three accumulations and the preview beneath them, on the author's refinement of that day quoted under `## Disposition`; the first level is unchanged. Its own support and divergence are under its subsection, and what follows is the reason the text it amends was recommended on, which the amendment carries except where it says otherwise.
+`five-marks-and-the-two-the-author-added` is recommended since 2026-09-08: it is `the-details-carry-the-three-accumulations` with the author's own enumeration of the marks at `words/2026-09-08/39` in place of the record's three, which adds the author's unconfirmed choice and the choice of a convened expert and strikes nothing. Its own support and divergence are under its subsection. The boldness does not fall on the author's enumeration, because the `against` on this fact is an argument about what the row's density hides and this amendment adds two marks to the row; the enumeration settles which marks belong and not whether the row can carry them.
+
+`the-details-carry-the-three-accumulations` was recommended from 2026-09-07 until then: it is `three-marks-and-the-case-against` with the confirmed mark read as the derived label and the expanded details given their three accumulations and the preview beneath them, on the author's refinement of that day, which is in the ledger on the disposition ref and referenced by the option it bears on. The first level was unchanged by it. What follows is the reason the text those two amend was recommended on, which both amendments carry except where they say otherwise.
 
 `three-marks-and-the-case-against` was recommended because every settlement on it is the author's words applied where
 they fall, except one clause, which is the readings' and is named as theirs. The
@@ -961,6 +968,82 @@ From: three-marks-and-the-case-against
  confirmed disposition, if any, so it appears on an option the author has ruled
 ```
 
+#### five-marks-and-the-two-the-author-added
+
+The recommendation with the author's own enumeration of the marks in place of the
+record's three. Two of the five it names are not on the row at all today: the
+author's choice where they have chosen and not confirmed, and the choice of an
+expert convened on the fact. The other three are the record's three under other
+names, so this option adds and strikes nothing.
+
+**AI support.** It is the author's, at `words/2026-09-08/39`: "Each option may be
+marked as either author confirmed, author choice (not confirmed), AI recommended,
+supported by tradition X, and/or choice of expert Y." The mapping is exact for
+three of them. "AI recommended" is what the fact's `recommends` already writes
+with its boldness; "supported by tradition X" is the `bears` relation seen from
+the option's side, which the row already carries per reading and marked support or
+divergence; and "author confirmed" is the confirmed mark this option leaves
+exactly as it stands, one mark and not two, for the reason the answer already
+gives.
+
+The fourth is the mark the rest of the record has been reaching for and has had
+nowhere to put. `viable-options` already describes it in its own answer, the
+option the author has selected without confirming, where there is one, marked
+selected. `deferring-on-a-probe` produces one on every deferral it receives, since
+what a deferral sets is the author's choice and expressly not a confirmation, and
+that node's own account says the record has nowhere to put it.
+`what-acts-during-bootstrap` makes it a term of the rule that governs every
+reconciliation this record does today, because bootstrap reconciliation acts on
+the convergence of the author's choice with the AI's recommendation and the
+author's choice is the first of those two terms. Against all three of them,
+`recording`'s ruling responses are `confirm` and `edit`, and neither records a
+choice the author has made and not confirmed. So the mark has been describable,
+required, and unrecordable at once. That is the strongest reason for this
+amendment and it is not a reason about a row on a page: a convergence whose first
+term the record cannot exhibit is a convergence nobody can check, and what goes
+unchecked is the AI's own recommendation, which
+`delegation-bounds-and-sizing` calls the one thing the alignment interview exists
+to check.
+
+The fifth is the expert's, and the author's parenthesis in the same sentence fixes
+its shape: bootstrap reconciliation "integrates expert choice, though expert
+consensus is not required". Not required means the marks do not aggregate. One
+mark per expert that chose the option, by that expert's name, and no tally,
+because a count on a row reads as a vote and the author has said there is no vote.
+That the record cannot yet convene an expert is not an argument against the mark:
+`expert-instructions` stands at the periagogic stage and `movements` at the
+maieutic, both carrying a ruling of deferred on their authority fact from the same
+entry, and a row schema with no place for what they produce would have to be
+amended the moment they are answered.
+
+**AI divergence.** Five marks is close to the limit of what a row carries before it
+stops being read, and the answer's own argument for sending `source` and `passed`
+down a level was exactly that. Two of the five have no producer today, so on this
+record every row would carry three marks and two absences, and a structural
+absence reads on the page the same as a defect. The reply is that both new marks
+are load-bearing for rules the record has already written down, and a schema that
+omits what its own rules require is not smaller, only later; but the reply does not
+dispose of the density objection, which stands and is the reason the boldness on
+this fact does not fall.
+
+**Content.**
+
+From: the-details-carry-the-three-accumulations
+
+```diff
+@@ -18,7 +18,9 @@
+ record not yet written and a defect to be found. The name also stays in the row's
+ markup, where a ruling is staged from it.
+ 
+-Beside that sentence the row carries three status marks and no others. That the recommendation adopts it, with its boldness. For each reading that bears on it, whether the tradition supports it or departs from it, by the reading's name. And, where the author has ruled for it with the response confirm, that it is the confirmed disposition, marked confirmed where it is the last so ruled on this fact, and keeps its authority until the author rules for another, with the response and the date. The row's expanded details carry three accumulations and no more, at every stage and before and after any confirmation: the author's words, the entries the option references, each marked support or divergence and shown as one quotation concatenated in date order; the traditions', projected from the readings that bear on the option, each marked the same way; and the AI's accumulated support and divergence, shown whether or not the fact recommends the option. Beneath them, the node as it would stand under this option, resolved from the option's content, which the page previews in the context pane when the option is selected.
++Beside that sentence the row carries five status marks and no others, which are the five the author enumerated at `words/2026-09-08/39`. That the recommendation adopts it, with its boldness. For each reading that bears on it, whether the tradition supports it or departs from it, by the reading's name. Where the author has ruled for it with the response confirm, that it is the confirmed disposition, marked confirmed where it is the last so ruled on this fact, and keeps its authority until the author rules for another, with the response and the date. Where the author has chosen it and not confirmed it, that it is the author's choice, marked unconfirmed in the same breath, since this is the one mark on the row that would do harm by being mistaken for the mark above it, and the author wrote the qualification into their own name for it. And where an expert convened on the fact chose it, that the expert chose it, by that expert's name, one mark per expert and no tally, because the author's rule integrates expert choice without requiring expert consensus, and a count on a row reads as a vote where there is none.
++
++The fourth mark and the fifth are new here and the first three are the record's own, renamed by the author's enumeration and not moved by it. The fourth is the one the rest of the record has been reaching for with nowhere to put it: `viable-options` describes it in its own answer, the option the author has selected without confirming, marked selected; `deferring-on-a-probe` produces one on every deferral it receives, since what a deferral sets is the author's choice and expressly not a confirmation; and `what-acts-during-bootstrap` makes it a term of the rule that governs every reconciliation this record does today. Against all three, `recording`'s ruling responses are `confirm` and `edit`, and neither records a choice made and not confirmed, so an amendment there is owed with this one and is named rather than assumed. Until it lands, a convergence whose first term the record cannot exhibit is a convergence nobody can check. The row's expanded details carry three accumulations and no more, at every stage and before and after any confirmation: the author's words, the entries the option references, each marked support or divergence and shown as one quotation concatenated in date order; the traditions', projected from the readings that bear on the option, each marked the same way; and the AI's accumulated support and divergence, shown whether or not the fact recommends the option. Beneath them, the node as it would stand under this option, resolved from the option's content, which the page previews in the context pane when the option is selected.
+ The first two are the author's words of 2026-09-04. The third is what their
+ answer of 2026-09-06 puts where the `stands` chip was: a mark records the prior
+ confirmed disposition, if any, so it appears on an option the author has ruled
+```
+
 ### authority
 
 Ratified, on the capture-shaped limb of `class-recommendation`'s test. The other
@@ -1128,3 +1211,61 @@ details. The third reading is the one the author's own words come closest to, an
 the one that would move this node's answer furthest; it is not recorded as an option
 because what it turns on is `dialogue`'s question of where a part of the dialogue's
 state is stored, and that node carries the divergence too.
+
+### The author's five marks, and the two the row does not have, 2026-09-08
+
+The author's enumeration at `words/2026-09-08/39` names five marks an option may
+carry: author confirmed, author choice not confirmed, AI recommended, supported
+by tradition X, and choice of expert Y. The record's answer had three. The
+mapping is exact for three of the five and the other two are new, so the
+amendment adds and strikes nothing: "AI recommended" is the fact's `recommends`
+with its boldness, "supported by tradition X" is the `bears` relation seen from
+the option's side, and "author confirmed" is the confirmed mark left exactly as
+it stands, one mark and not two, for the reason the answer already gives.
+
+The fourth mark is the one this record has been reaching for from three
+directions with nowhere to put it. `viable-options` describes it in its own
+answer — the option the author has selected without confirming, where there is
+one, marked selected. `deferring-on-a-probe`, minted in this sitting, produces
+one on every deferral it receives, since what a deferral sets is the author's
+choice and expressly not a confirmation. And `what-acts-during-bootstrap`, in
+this same sitting, makes it a term of the rule governing every reconciliation
+this record does today, because bootstrap reconciliation acts on the convergence
+of the author's choice with the AI's recommendation and the author's choice is
+the first of the two terms. Against all three of them, `recording`'s ruling
+responses are `confirm` and `edit`, and neither writes a choice the author has
+made and not confirmed.
+
+So the amendment owed on `recording` is the hinge, and it is named here rather
+than assumed: until it lands, a convergence whose first term the record cannot
+exhibit is a convergence nobody can check, and what goes unchecked is the AI's
+own recommendation, which `delegation-bounds-and-sizing` calls the one thing the
+alignment interview exists to check. That is a reconciliation item on
+`recording`, and it is the reason this amendment was not deferred until the
+encoding existed: the encoding is what the rule requires, so the rule comes
+first.
+
+The fifth mark takes its shape from the author's own parenthesis in the same
+sentence, that bootstrap reconciliation "integrates expert choice, though expert
+consensus is not required". Not required means the marks do not aggregate: one
+mark per expert that chose the option, by that expert's name, and no tally,
+because a count on a row reads as a vote and the author has said there is no
+vote. That the record cannot yet convene an expert is not an argument against
+the mark. `expert-instructions` stands at the periagogic stage and `movements` at
+the maieutic, and both carry a ruling of deferred on their authority fact from
+the same entry, so a row schema with no place for what they produce would have to
+be amended the moment they are answered.
+
+The boldness on this fact does not fall on the enumeration. The `against`
+recorded on it is an argument about what the row's density hides, and this
+amendment adds two marks to the row; the enumeration settles which marks belong
+and not whether the row can carry them, so the objection survives the author's
+words intact and the mark stays where it is. On this record every row would
+carry three marks and two absences, and a structural absence reads on a page the
+same as a defect, which is the density objection in its sharpest form and is not
+disposed of here.
+
+Owed on the implementation ref: `OPTION_SOURCES` in the reader admits `author`,
+`ai` and `review` and not `expert`, and nothing in the encoding carries either
+new mark, so this answer describes a row two of whose five marks no node can
+presently hold.
