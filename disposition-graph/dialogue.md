@@ -118,14 +118,14 @@ review:
   commit: c1128d49c3f3b295deef2f4d20e60aa4a8cd77f7
   against: "The amendment's own account asserts, without evidence this delta reading can check, that the two edits it credits to `node` and `viable-options` (options `a-node-file-is-facts-and-account` and `every-weighed-candidate-must-be-recorded`) actually landed at commit `d4ab0283`. If either did not land as claimed, the record would still be short the two merge-finding discharges validation 15 raised, and nothing in this node's own file would show it. This is a residual, non-blocking gap rather than a defect the amendment introduces or fails to answer on its own object: the last reading treated the identical item as unverifiable-but-not-kickback-worthy, and the repair changes nothing about that status."
   survey:
-    date: 2026-09-07
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "8e4cfda6b2cc73dd81ec7cec283420d29d6fb608b865228de8e58a8cf232715d"
-      answer: "e73307626b1a80c4edbd9c4eec72a4d58796560f4fbc91a766e374b69e4a35e7"
-      options: "6d37e97997fa84a7bc1023d8f9ed8f575048c013e61fb92f4d750cd190b0ea38"
-      rivals: "9daae666187b35a9788618a64198844f0809992bcd17ffca547d815500bbd058"
-      words: "e74de05bfa0fc4b3fdf9414b2b01ee71db7fcfd42df934432bb674054d642a08"
+      answer: "2522e3763fe97e44c089dadef7337f7405d5795a814f41ba4191beba66166480"
+      options: "ae18525770cb85eb7ba1ee477caa690f4a1be98eed6c77b7a658dd3b70f04a3f"
+      rivals: "ae490ac2771fe43e0241433d9b8884736d4f9c84f786a378927298b2725917a5"
+      words: "335f031b784522cc45b198485116f688ccc518c863b6706435c50cf914fdb8b3"
 facts:
   - name: answer
     options:
@@ -3620,3 +3620,23 @@ backlog or a false positive is `self-documentation`'s probe
 `does-a-declared-term-owe-a-sentence`, and the conflicts above wait on it: two
 nodes claiming a term is a different matter if a claim carries no sentence than
 if it must.
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+The third reserved fact is named `topology` in the schema and "Existence" wherever a reader meets it. `dialogue`'s `defines` list carries "- term: topology" whose gloss reads "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding.", two entries above "Keep is the choice on the topology fact that the node stays in the record with its question and its answer." — so one gloss list names the same fact both ways. `how-a-fact-is-headed`'s answer reads "The three reserved facts are headed \"Authority\", \"Existence\" and \"Persistence\"." `unanswered`'s sentence, quoted on `which-facts-are-listed`, reads "the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape".
+
+Also named: commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/how-a-fact-is-headed, commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/which-facts-are-listed.
+
+Proposed: The survivor is `topology`, the name the schema, the frontier and this reading's own output all use. `dialogue`'s gloss for the term `topology` is rewritten to open with the term it glosses; `how-a-fact-is-headed`'s answer heads the fact "Topology", which is a change to what the author reads on the alignment page and so is put as its own answer text rather than as an implementation note; and `unanswered`'s sentence names the topology fact. `which-facts-are-listed` is named because it quotes `unanswered`'s sentence and its own option about the asymmetry moves with the wording; its answer needs no other change.
+
+### Frontier finding, 2026-09-09
+
+Kind: supersession.
+
+`dialogue`'s standing answer states a census the record has since falsified: "and not one node carries a single ruling, so nothing anywhere in this record is confirmed today and every projection that shows a text in the confirmed place is showing the AI's draft." This brief shows four nodes ruled — `round-termination`, `movements` and `expert-instructions` each at "status answered | class: deferred (ruled here)", and `expert-identity` at "class: deferred (conferred by commons.systems/disposition-graph/movements)". The falsification also reaches the reason behind a pending option: `authority`'s `no-census-anywhere-in-a-node` argues "since the forty-six false census sentences this survey found are all in `### authority` prose and none in a `## Answer`, so the narrower rule" — and this locus is in a `## Answer`.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/round-termination, commons.systems/disposition-graph/movements, commons.systems/disposition-graph/expert-instructions, commons.systems/disposition-graph/expert-identity.
+
+Proposed: The survivor is `authority`'s wider rule, which now has a reason it did not have: a census sentence in a standing answer is exactly the case the narrower option `no-census-in-a-standing-answer` was drawn for and the wider option's measurement said did not exist. `dialogue`'s answer strikes the census clause rather than restating it with a new count, since a number in a standing answer is what both options exist to stop; `authority`'s option text is corrected so that the reason it gives is the reason that holds. The three expert nodes and `round-termination` are named as the evidence and need no change.

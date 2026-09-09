@@ -8,20 +8,20 @@ review:
   of: e2a45f86e02e587699b715e7bd116ab1f0280c83
   commit: 6d6704413cb6eda7d56e31ba632fd359e148af77
   survey:
-    date: 2026-09-07
-    of: e2a45f86e02e587699b715e7bd116ab1f0280c83
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: c2e6226b4246b72b4c10370f8320491b4aea7573
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "391cfe8148687d475a1c1636f26c08285ce0c341246dcdebc81f794833ce1f29"
-      answer: "6ff60bcf5373592940c0edbe304da9c00da35fe53b654f75ceb17917a60fa550"
-      options: "c30d65c29089a9db7050f67f628229f4e3dfb20e9c89c579fcba05d289285e12"
-      rivals: "0a60fc16e0198f6b13566f5714f357b76e2782416cd2a04cb5bc0a5bf908cf94"
-      words: "7404071396203f2a78f1316dbf83837099759ff7b78bc29877430fb5df6ef2fa"
+      answer: "2ee87f6eadac8127bf4ec485d119bbffc4ea7725081d98c189c653b4dda526c6"
+      options: "fd92195ee78aee8e6caa294522081a9ad02c140f15e63c3b58af5a57b4f12438"
+      rivals: "1508242325e5e1b8b89fc0041328b3862ed97acb57647af1ebab23bf25b5d0ea"
+      words: "ae35e208c10b96f4a67975135f65a880094fc9b38a9b251e783f5a79db279af4"
     findings:
-      - finding: "The term survey is used with two meanings across the frontier. `frontier-consistency`'s answer defines it as the reading of the whole graph, while `delegation`'s answer, projected at .claude/rules/delegation.md, makes it a kind of subagent unit: \"Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys.\" `review-skills` records the collision on its own face in `align-survey-renamed-for-the-family`: \"the vocabulary conflict behind it is already in the record, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys\". A term the record has made a skill name (`/align-survey`) and a validation subject cannot also name an ordinary unit."
-        kind: "vocabulary"
+      - finding: "The cap on open probes is struck by one node's recommendation and enforced by the instrument another node constitutes. `author-questions` recommends `a-probe-carries-a-target-and-a-type`, whose text reads \"The admission test is what bounds the list, and no number is.\" and \"A cap binds the movement and is checked by the readings and never by the graph's reader, which checks the shape of a probe as it checks the shape of a shim, so a movement that would exceed one does not fail; it writes what it found somewhere the count does not reach, and on 2026-09-08 that somewhere was prose.\" The survey brief that carries this reading instructs \"**The cap is three open probes on one node**\" and prints on every judged node \"The cap binds the movement and is checked by this reading, never by the parser.\" `recording`'s answer-fact `against` reasons from the cap — \"where the cap has been reached the rule bends rather than binds, so the author's last sight of the text is one no reader saw\" — and its answer fact carries the option `readiness-when-the-cap-is-reached`. The contradiction binds today, not in principle: `quotes` shows \"3 open of a cap of three, and 0 discharged.\""
+        kind: "contradiction"
         status: "new"
-        since: "2026-09-07"
+        since: "2026-09-09"
         supports:
           - "question"
           - "answer"
@@ -31,78 +31,95 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/quotes"
+      - finding: "The kickback rule is stated on `recording` — \"**What a kickback leaves standing.** A response given on one fact moves the whole node, because a node has one stage and one next movement owed on it\", and \"a kickback from either reading moves the nodes it names and no others.\" — and is restated or relied on across the frontier: within this brief's sections the word appears in `when-the-kickback-feedback-shows` (6 times), `review-cost` (9), `clean-context-review` (8), `frontier-consistency` (8) and `author-questions` (4). The option that would strike it, `no-kickback-from-the-confirmation`, stands on `recording`'s answer fact alone and names none of them; it is in the legacy encoding, so \"the option carries no content of its own, and what it would answer is its sentence above\". A ruling for it would leave five other nodes stating a rule the record no longer has."
+        kind: "coverage"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
+          - "commons.systems/disposition-graph/review-cost"
           - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/author-questions"
+      - finding: "Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: \"- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)\" (`growth`); \"- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)\" (`recording`); \"- Defines: `clean-context review` (no gloss yet)\"; \"- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)\" (`viable-options`); \"`doctrine` (no gloss yet); `proposal` (no gloss yet)\" (`authority`); \"- Defines: `neighbourhood` (no gloss yet)\" (`review-cost`); \"- Defines: `probe` (no gloss yet)\" (`author-questions`, at the ruling stage); \"- Defines: `frontier survey` (no gloss yet)\"; \"- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)\" (`readings`); \"- Defines: `seam` (no gloss yet)\" (`decomposition`); \"- Defines: `session context` (no gloss yet); `rules` (no gloss yet)\" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — \"Doctrine is the ratified answers taken together.\" and \"A proposal is technical vocabulary and is not overloaded\" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: \"`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant.\" The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term \"with no path to it over 'under', 'depends' or 'cites'\", which presupposes a definer and never asks whether the definer said anything."
+        kind: "vocabulary"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/growth"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/authority"
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/readings"
           - "commons.systems/disposition-graph/decomposition"
+          - "commons.systems/disposition-graph/session-context"
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
+      - finding: "The one brief the record generates for itself does not name the model or the effort, which `delegation`'s recommended answer requires of every brief. `delegation` recommends `the-model-is-named-in-every-brief`, whose text reads \"the model: a subagent is never launched on the harness's default, since a default is not a sizing and a brief that leaves the model unnamed has not sized the work.\" and \"the model as it names the effort, and no subagent runs on whatever model the harness would pick.\" This survey brief's third line reads \"The model and the effort you are running on are fixed by the `review-model` node for both readings of the clean-context review, and stated to you at the launch. Neither the model nor the effort is yours to re-decide, and no part of this brief argues either.\" The options `fixed-model-for-every-review` and `lock-at-launch` already on `clean-context-review`'s answer fact fix which model runs; neither puts it in the brief."
+        kind: "contradiction"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/clean-context-review"
           - "commons.systems/disposition-graph/delegation"
-          - "commons.systems/disposition-graph/review-skills"
+          - "commons.systems/disposition-graph/review-model"
+      - finding: "The bound `review-cost` recommends is broken by construction by the survey brief, and this reading is the measurement the record's pending option lacks. The binding answer reads \"no brief grows with the record.\" and \"a part of the brief that grows with the record rather than with the draft is carried as a list of pointers, and a part that is the draft's own is carried whole.\" The survey's object is the record, so its brief grows with it: this one enumerates the mechanical tier one finding to a line, having reported that \"the 4 that report a state of the record (recommendation-past-its-pin, term-without-a-path, duplicated-passage, unfolded-account-section) reported 214 finding(s), with 18 note(s) beside them\", prints a section per neighbourhood node and a one-line row per context node, and could not be read in one call — it was read in pages. The same answer names that outcome as a defect: \"A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim\", \"A brief that fits is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it.\" and \"an instrument whose brief is found growing with the record is a defect of the instrument, repaired before it runs again and never a cost the record carries.\" The option `the-brief-is-bounded-by-what-one-call-holds` already stands on this fact, as do `the-surveys-unreached-node-is-one-line` and `the-surveys-selection-moves-to-its-own-node`; what is added here is the measurement — the instrument's own reader reporting that it did not fit — and the observation that the clause as written binds a brief whose object makes it unsatisfiable."
+        kind: "coverage"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/frontier-consistency"
     pairs:
-      - with: "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/alignment-order"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
           - "cites"
       - with: "commons.systems/disposition-graph/alignment-page"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
           - "depends"
-          - "cites"
-      - with: "commons.systems/disposition-graph/alignment-target"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/anchoring-and-adjustment"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/aristotle-hexis"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/assumption-form"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/attention"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/audience"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/author-questions"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/authority"
-        keys:
-          - "term:authority (defines: commons.systems/disposition-graph/authority)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
-          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
-      - with: "commons.systems/disposition-graph/authors-words-on-the-page"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/blocking-and-canopies"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/bootstrap-exit-conditions"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/capture"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/capture-traditions"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/checkpoint"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/class-recommendation"
-        keys:
-          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/decomposition"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
           - "words:words/2026-09-04/23"
           - "words:words/2026-09-07/5"
           - "words:words/2026-09-07/6"
@@ -112,53 +129,24 @@ review:
           - "depends"
       - with: "commons.systems/disposition-graph/delegation"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:main thread (defines: commons.systems/disposition-graph/delegation)"
-          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
-          - "term:unit (defines: commons.systems/disposition-graph/delegation)"
-      - with: "commons.systems/disposition-graph/delegation-bounds-and-sizing"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "cites"
       - with: "commons.systems/disposition-graph/dialogue"
         keys:
-          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:persistence (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:standing answer (defines: commons.systems/disposition-graph/dialogue)"
           - "words:words/2026-09-03/34"
+          - "words:words/2026-09-08/37"
           - "cites"
           - "depends"
       - with: "commons.systems/disposition-graph/evaluation"
         keys:
           - "term:adversarial review (defines: commons.systems/disposition-graph/evaluation)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+      - with: "commons.systems/disposition-graph/fagan-inspection-roles"
+        keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/event-sourcing-with-snapshots"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/fagan-entry-criteria"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/fidelity"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
           - "cites"
-      - with: "commons.systems/disposition-graph/forms"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/frontier-consistency"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
           - "words:words/2026-09-03/34"
           - "words:words/2026-09-04/23"
           - "words:words/2026-09-07/5"
@@ -168,139 +156,38 @@ review:
           - "words:words/2026-09-07/9"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/graph-topology"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/growth"
         keys:
-          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
-          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
-      - with: "commons.systems/disposition-graph/hexis"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/how-a-fact-is-headed"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "words:words/2026-09-08/37"
       - with: "commons.systems/disposition-graph/information-hiding"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/instruments"
-        keys:
-          - "term:check (defines: commons.systems/disposition-graph/instruments)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
-      - with: "commons.systems/disposition-graph/knowledge-store"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/legacy"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/madr-decision-records"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/mapreduce-and-cross-shard-blindness"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "cites"
       - with: "commons.systems/disposition-graph/materialization"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
           - "term:package (defines: commons.systems/disposition-graph/materialization)"
-      - with: "commons.systems/disposition-graph/model"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:disposition (defines: commons.systems/disposition-graph/model)"
-          - "term:node (defines: commons.systems/disposition-graph/model)"
-      - with: "commons.systems/disposition-graph/namespaces"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:id (defines: commons.systems/disposition-graph/namespaces)"
-      - with: "commons.systems/disposition-graph/node"
-        keys:
-          - "term:answer (defines: commons.systems/disposition-graph/node)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:form (defines: commons.systems/disposition-graph/node)"
-          - "term:question (defines: commons.systems/disposition-graph/node)"
-          - "term:rationale (defines: commons.systems/disposition-graph/node)"
       - with: "commons.systems/disposition-graph/notarial-minute"
         keys:
           - "parent:commons.systems/disposition-graph/recording"
-          - "cites"
       - with: "commons.systems/disposition-graph/peirce-paper-doubt"
         keys:
           - "parent:commons.systems/disposition-graph/recording"
-          - "cites"
-      - with: "commons.systems/disposition-graph/persistence"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/plato-maieutics"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/plato-periagoge"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/probe-or-node"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/progressive-disclosure"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/projection"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+          - "words:words/2026-09-08/37"
       - with: "commons.systems/disposition-graph/promotor-fidei"
         keys:
           - "parent:commons.systems/disposition-graph/recording"
-          - "cites"
-      - with: "commons.systems/disposition-graph/prose-and-structure"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/purpose"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/purpose-criteria"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/quotes"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
-      - with: "commons.systems/disposition-graph/rationale-edge"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/readings"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "words:words/2026-09-08/37"
       - with: "commons.systems/disposition-graph/recording"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
           - "words:words/2026-09-04/23"
+          - "words:words/2026-09-08/37"
           - "cites"
           - "depends"
-      - with: "commons.systems/disposition-graph/regression-test-selection"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/rejected"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/review"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:review (defines: commons.systems/disposition-graph/review)"
       - with: "commons.systems/disposition-graph/review-cost"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "words:words/2026-09-07/5"
           - "words:words/2026-09-07/6"
           - "words:words/2026-09-07/7"
@@ -310,7 +197,6 @@ review:
           - "depends"
       - with: "commons.systems/disposition-graph/review-model"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
           - "words:words/2026-09-07/5"
           - "words:words/2026-09-07/6"
           - "words:words/2026-09-07/7"
@@ -319,132 +205,43 @@ review:
           - "depends"
       - with: "commons.systems/disposition-graph/review-skills"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
           - "cites"
           - "depends"
-      - with: "commons.systems/disposition-graph/scholastic-articulus"
+      - with: "commons.systems/disposition-graph/round-termination"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/scope"
+          - "term:recorded divergence (defines: commons.systems/disposition-graph/round-termination)"
+      - with: "commons.systems/disposition-graph/standard-report"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:order (defines: commons.systems/disposition-graph/scope)"
-          - "term:section (defines: commons.systems/disposition-graph/scope)"
-      - with: "commons.systems/disposition-graph/second-stop"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/self-documentation"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/session-context"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
-      - with: "commons.systems/disposition-graph/software-factories"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/spec-driven-development"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/srs-introduction"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "words:words/2026-09-08/38"
       - with: "commons.systems/disposition-graph/survey-selection"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "term:candidate pair (defines: commons.systems/disposition-graph/survey-selection)"
           - "term:frozen set (defines: commons.systems/disposition-graph/survey-selection)"
-          - "term:judged set (defines: commons.systems/disposition-graph/survey-selection)"
+          - "term:mechanical tier (defines: commons.systems/disposition-graph/survey-selection)"
           - "words:words/2026-09-07/9"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/tier"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/tolerated-inconsistency"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/traditions-home"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/transience"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:persistence (defines: commons.systems/disposition-graph/transience)"
-          - "term:shim (defines: commons.systems/disposition-graph/transience)"
-          - "term:standing (defines: commons.systems/disposition-graph/transience)"
           - "cites"
-      - with: "commons.systems/disposition-graph/turn-form"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/un-aligned-children"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/unanswered"
-        keys:
-          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:unanswered (defines: commons.systems/disposition-graph/unanswered)"
       - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
         keys:
           - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/under"
         keys:
-          - "term:context (defines: commons.systems/disposition-graph/under)"
-          - "term:under (defines: commons.systems/disposition-graph/under)"
           - "cites"
-      - with: "commons.systems/disposition-graph/unit-skills"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/validation-order"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
       - with: "commons.systems/disposition-graph/viable-options"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
-      - with: "commons.systems/disposition-graph/vocabulary-option-summary"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/web-routing"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "cites"
       - with: "commons.systems/disposition-graph/what-an-option-row-carries"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "cites"
       - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "words:words/2026-09-08/37"
       - with: "commons.systems/disposition-graph/where-a-change-request-goes"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/where-the-unconfirmed-indication-goes"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/which-facts-are-listed"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/work-loop"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
-      - with: "commons.systems/public/agency"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/public/aristotle-arche-of-action"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/public/pettit-non-domination"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "words:words/2026-09-08/37"
 facts:
   - name: answer
     options:
@@ -558,6 +355,12 @@ facts:
       - name: independence-by-model-diversity-and-one-whole-object-per-reader
         source: ai
         ref: "2026-09-08"
+      - name: the-reading-checks-admission-not-a-number
+        source: review
+        ref: "2026-09-09"
+      - name: the-brief-prints-the-model-and-effort-it-was-launched-on
+        source: review
+        ref: "2026-09-09"
     recommends: the-independent-reading-is-constituted-and-sequenced-after-the-experts
     boldness: moderate
     against: "The clause that would do the most work names a party the record does not have. \"Convened by something other than the party under test\" is the clause that separates a constituted independence from an asserted one, and the record's parties are the author, the main thread, and what the main thread launches: the first is the party the instrument exists to protect and the other two are the party under test. So the recommendation carries one clause it cannot perform, and it is `movements`' open probe `who-convenes-the-experts` that decides it, which means the answer is recommended ahead of a question it depends on. The sequencing is the second charge: this places the reading after the expert exchange, and the author's words of 2026-09-08 at `/37` describe probe review as iterative and superseding the sequential movements, so a phase placed after another phase is in tension with the shape the same author has just described, and the tension is real rather than a detail of wording. Nemeth still bites at the third: a reader briefed to attack is an assigned advocate whichever phase it runs in, and the content answers this by striking the adversarial assignment, which is a change to what the incumbent brief does and is not yet materialized in `packages/clean-context-review`. And auditor tenure is not monotone, so the permanently fresh stranger this option keeps is not the measured optimum, and the persistent scoped expert it declines has a defence this option gives up."
@@ -1356,6 +1159,13 @@ about, which is the survey's selection and its state, and on the survey half gen
 the expert's grounding reaches the reading and not the selection, and it says so. Taken
 alone the option would leave the fact answering less than it answers today.
 
+#### the-reading-checks-admission-not-a-number
+
+What the reading checks on a node's probe list is the admission test and the order, never a count: that each probe's `why` names a locus that does not settle the matter, that its `discharges` names a recommendation on that node, that no probe on the list would have to stand as a disposition, and that the list is ordered by what a `discharges` would move. The brief prints the node's probes and stops printing a count against a ceiling, and the reading reports an unadmitted probe rather than an excess. It is on the table because `author-questions` recommends that "The admission test is what bounds the list, and no number is", and the reading is the party that node names as the one which checks a cap, so the strike is inert until this node's answer stops asking for the count.
+
+#### the-brief-prints-the-model-and-effort-it-was-launched-on
+
+The brief names, in its opening lines and beside the graph commit, the model and the effort `review-model` fixes for the reading it carries, as a statement of fact and not as an argument. It is on the table because `delegation` holds that "a brief that leaves the model unnamed has not sized the work", and the brief the record generates for its own reading leaves both unnamed and points at the launch instead; a reading whose brief does not say what it was sized for cannot be checked later against the sizing, and the options that fix the model on this node do not put it where the reader or a later session can see it.
 
 ### authority
 
@@ -1781,3 +1591,73 @@ rather than done here, since this skill does not write that ref. It is recorded
 on this node because this is where a reader's brief is decided, and because a
 brief that states a struck rule is a defect of the review and not of the node
 whose reading happened to surface it.
+
+### Frontier survey, 2026-09-09, of c2e6226b
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The reading this node constitutes enforces a cap the record has struck. This brief instructs "**The cap is three open probes on one node**" and prints on every judged node "The cap binds the movement and is checked by this reading, never by the parser.", while `author-questions`' recommended answer reads "The admission test is what bounds the list, and no number is." and "A cap binds the movement and is checked by the readings and never by the graph's reader, which checks the shape of a probe as it checks the shape of a shim, so a movement that would exceed one does not fail; it writes what it found somewhere the count does not reach, and on 2026-09-08 that somewhere was prose." The cap binds this reading today: `quotes` shows "3 open of a cap of three, and 0 discharged."
+- The brief this node's answer constitutes does not name the model or the effort it launches a reading on, which `delegation`'s recommended answer requires. This brief's third line reads "The model and the effort you are running on are fixed by the `review-model` node for both readings of the clean-context review, and stated to you at the launch.", while `delegation` recommends `the-model-is-named-in-every-brief`, whose text reads "the model: a subagent is never launched on the harness's default, since a default is not a sizing and a brief that leaves the model unnamed has not sized the work." The options `fixed-model-for-every-review` and `lock-at-launch` already on this node's answer fact fix which model runs; neither puts it in the brief.
+- The independence of the reading is recommended ahead of the question that decides it, on this node's own account: its `against` reads that "it is `movements`' open probe `who-convenes-the-experts` that decides it, which means the answer is recommended ahead of a question it depends on", and `movements` is one of the four nodes in this brief carrying "status answered | class: deferred (ruled here)", so the deciding node is ruled while the probe on it is open.
+
+Strongest counter-argument (strong): The instrument this node constitutes is out of step with the record it reads on two measurable points: it checks a probe cap that `author-questions` recommends striking, and it launches a reading without naming in the brief the model and effort `delegation` requires every brief to name. Both are failures of the same kind — the reading enforcing a rule the frontier has moved past, and omitting one the frontier holds — and both are invisible from inside the reading, since the reader is told the cap binds "never by the parser" and that the model is "stated to you at the launch". A reading whose own brief has drifted from the doctrine it applies is the weakest possible check on drift.
+
+The session's reply: All three findings kept. The cap half of this finding is answered in the implementation and not by an amendment here: the author struck the cap at `words/2026-09-08/32`, and this sitting struck it from all fourteen sites in eleven files at `9db16ed9` on `greenfield`, before this reading returned and independently of it. The brief this reading was given was generated before that commit, so where it reports the brief still instructing a count against a ceiling it is reporting a state the implementation has since left; the convergence is evidence for the finding and not against it, since two readings in clean context reached the same strike from the same words. What remains on this node after that commit is its own answer, which still does not say what the reading checks in the cap's place; `the-reading-checks-admission-not-a-number` is recorded for exactly that gap, and it is the half of the strike an implementation commit could not land. Finding[1] and the frontier's F9 are kept whole and unmitigated: the one brief the record generates for its own reading names neither the model nor the effort, while `delegation` holds that a brief leaving the model unnamed has not sized the work, and `the-brief-prints-the-model-and-effort-it-was-launched-on` is recorded. Finding[2] stands as the reading wrote it: the independence of this reading is recommended ahead of `movements`' open probe `who-convenes-the-experts`, which decides it.
+
+### Frontier finding, 2026-09-09
+
+Kind: contradiction.
+
+The cap on open probes is struck by one node's recommendation and enforced by the instrument another node constitutes. `author-questions` recommends `a-probe-carries-a-target-and-a-type`, whose text reads "The admission test is what bounds the list, and no number is." and "A cap binds the movement and is checked by the readings and never by the graph's reader, which checks the shape of a probe as it checks the shape of a shim, so a movement that would exceed one does not fail; it writes what it found somewhere the count does not reach, and on 2026-09-08 that somewhere was prose." The survey brief that carries this reading instructs "**The cap is three open probes on one node**" and prints on every judged node "The cap binds the movement and is checked by this reading, never by the parser." `recording`'s answer-fact `against` reasons from the cap — "where the cap has been reached the rule bends rather than binds, so the author's last sight of the text is one no reader saw" — and its answer fact carries the option `readiness-when-the-cap-is-reached`. The contradiction binds today, not in principle: `quotes` shows "3 open of a cap of three, and 0 discharged."
+
+Also named: commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/quotes.
+
+Proposed: The survivor is `author-questions`' admission test. `clean-context-review`'s answer says what the reading checks — the three admission limbs, the `discharges` order, and the withdrawal of probes the record has since answered — and no number; the per-node "N open of a cap of three" line and the "The cap is three open probes on one node" instruction go from the brief with it. `recording`'s confirmation rule loses its cap-bending clause and the option `readiness-when-the-cap-is-reached` is passed with the reason that the bound it is conditioned on has been struck. `author-questions` and `quotes` need no change of text.
+
+Recorded as an option on this node's answer fact: `the-reading-checks-admission-not-a-number` (source review, 2026-09-09).
+
+### Frontier finding, 2026-09-09
+
+Kind: coverage.
+
+The kickback rule is stated on `recording` — "**What a kickback leaves standing.** A response given on one fact moves the whole node, because a node has one stage and one next movement owed on it", and "a kickback from either reading moves the nodes it names and no others." — and is restated or relied on across the frontier: within this brief's sections the word appears in `when-the-kickback-feedback-shows` (6 times), `review-cost` (9), `clean-context-review` (8), `frontier-consistency` (8) and `author-questions` (4). The option that would strike it, `no-kickback-from-the-confirmation`, stands on `recording`'s answer fact alone and names none of them; it is in the legacy encoding, so "the option carries no content of its own, and what it would answer is its sentence above". A ruling for it would leave five other nodes stating a rule the record no longer has.
+
+Also named: commons.systems/disposition-graph/recording, commons.systems/disposition-graph/when-the-kickback-feedback-shows, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions.
+
+Proposed: The survivor is `recording`, which owns how a disposition is confirmed and recorded. The strike option is re-encoded so that it names what falls with it, and the other nodes cite `recording` for the rule instead of restating it, so that a ruling on one fact changes one text. `when-the-kickback-feedback-shows` already carries the author-sourced option `the-question-has-no-subject-and-the-node-is-a-prune-proposal` and is named here as the largest restatement rather than for a change of its own.
+
+Recorded as an option on commons.systems/disposition-graph/recording's answer fact: `the-kickback-rule-names-what-falls-with-it` (source review, 2026-09-09).
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: "- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)" (`growth`); "- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)" (`recording`); "- Defines: `clean-context review` (no gloss yet)"; "- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)" (`viable-options`); "`doctrine` (no gloss yet); `proposal` (no gloss yet)" (`authority`); "- Defines: `neighbourhood` (no gloss yet)" (`review-cost`); "- Defines: `probe` (no gloss yet)" (`author-questions`, at the ruling stage); "- Defines: `frontier survey` (no gloss yet)"; "- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)" (`readings`); "- Defines: `seam` (no gloss yet)" (`decomposition`); "- Defines: `session context` (no gloss yet); `rules` (no gloss yet)" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — "Doctrine is the ratified answers taken together." and "A proposal is technical vocabulary and is not overloaded" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant." The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term "with no path to it over 'under', 'depends' or 'cites'", which presupposes a definer and never asks whether the definer said anything.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: Each node fills the glosses it claims, which is a fill and not a redraft, so no stage is owed for it and none is named here except where the answer itself is implicated. The two exceptions: `authority`'s glosses are copied from its own answer, which is bookkeeping; and `viable-options` and `what-acts-during-bootstrap` settle between them who defines the grant, since one claims the term with nothing behind it and the other defines the thing under the name `bootstrap authority` — the survivor is `what-acts-during-bootstrap`, which has the author's own term and a gloss, and `viable-options` drops the claim or points at it. A node that cannot gloss a term it claims is claiming a term it does not own, and dropping the entry is the other way to close it.
+
+### Frontier finding, 2026-09-09
+
+Kind: contradiction.
+
+The one brief the record generates for itself does not name the model or the effort, which `delegation`'s recommended answer requires of every brief. `delegation` recommends `the-model-is-named-in-every-brief`, whose text reads "the model: a subagent is never launched on the harness's default, since a default is not a sizing and a brief that leaves the model unnamed has not sized the work." and "the model as it names the effort, and no subagent runs on whatever model the harness would pick." This survey brief's third line reads "The model and the effort you are running on are fixed by the `review-model` node for both readings of the clean-context review, and stated to you at the launch. Neither the model nor the effort is yours to re-decide, and no part of this brief argues either." The options `fixed-model-for-every-review` and `lock-at-launch` already on `clean-context-review`'s answer fact fix which model runs; neither puts it in the brief.
+
+Also named: commons.systems/disposition-graph/delegation, commons.systems/disposition-graph/review-model.
+
+Proposed: The survivor is `delegation`'s clause. `clean-context-review`'s answer has the brief print the model and the effort it was generated for, taken from `review-model`, in the same place it already names the graph commit — one line, no argument, so that a reader holding only the brief can tell what the reading was sized for and a later session can check that it was. `review-model` is named because it fixes the values and needs no change. The alternative reading, that the launch and not the brief file is where the sizing is stated, is settled by the same ruling, and then it is `delegation`'s sentence that is redrawn.
+
+Recorded as an option on this node's answer fact: `the-brief-prints-the-model-and-effort-it-was-launched-on` (source review, 2026-09-09).
+
+### Frontier finding, 2026-09-09
+
+Kind: coverage.
+
+The bound `review-cost` recommends is broken by construction by the survey brief, and this reading is the measurement the record's pending option lacks. The binding answer reads "no brief grows with the record." and "a part of the brief that grows with the record rather than with the draft is carried as a list of pointers, and a part that is the draft's own is carried whole." The survey's object is the record, so its brief grows with it: this one enumerates the mechanical tier one finding to a line, having reported that "the 4 that report a state of the record (recommendation-past-its-pin, term-without-a-path, duplicated-passage, unfolded-account-section) reported 214 finding(s), with 18 note(s) beside them", prints a section per neighbourhood node and a one-line row per context node, and could not be read in one call — it was read in pages. The same answer names that outcome as a defect: "A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim", "A brief that fits is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it." and "an instrument whose brief is found growing with the record is a defect of the instrument, repaired before it runs again and never a cost the record carries." The option `the-brief-is-bounded-by-what-one-call-holds` already stands on this fact, as do `the-surveys-unreached-node-is-one-line` and `the-surveys-selection-moves-to-its-own-node`; what is added here is the measurement — the instrument's own reader reporting that it did not fit — and the observation that the clause as written binds a brief whose object makes it unsatisfiable.
+
+Also named: commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/frontier-consistency.
+
+Proposed: No new option: the three already on this fact are the candidates. What is proposed is that the answer say which of its clauses reach the survey brief and which reach the draft brief only, since "no brief grows with the record" cannot bind a reading whose object is the record, and that the survey's bound be stated as its selection — which is where `frontier-consistency`'s recommendation `the-judged-set-and-its-comparisons-move-to-survey-selection` already puts it — rather than as a growth rule the survey must break to run. `clean-context-review` is named because it constitutes the brief and would carry the division.

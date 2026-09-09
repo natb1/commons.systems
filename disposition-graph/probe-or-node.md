@@ -128,15 +128,166 @@ review:
   commit: f0325d88ed52196f0551e86a7e6830e724f93c4b
   against: "The amendment can be read as a real repair rather than a relocation: by explicitly disclaiming reliance on the unruled 'a-standing-direction-acts-by-right' option ('rests... on nothing that node confers until the option is ruled') it stops claiming record-conferred authority altogether and instead treats the interim as a bounded, honest description of what one session does on its own account -- the same posture the fact's own `against` and the option's own prose already concede and price in ('honoured on trust', 'the same session that wants the file gone'). Read that way there is no new claim of right, only an accurate label for a stopgap already disclosed elsewhere on the node, and the remaining objection is to the interim's existence (already argued and already priced into its moderate boldness), not to anything this diff newly asserts."
   survey:
-    date: 2026-09-07
-    of: 7bd00f2a353005aebe5c3a8f16a0a381deb8ebe6
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: 7076d2e82036c83204ecb70924c1b5f1a3164688
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "0c9bfdaddafdd74f09b9f878ee81f7c3af056920d35a3117f452e3a10e237de9"
-      answer: "ab6b830870478a9a66671c2ba6c8dc31cf42684e0b5e59e77638171486a1834b"
-      options: "90f7240fcbab26b47ce31fabe84d9089f2b30bab6d83ba2864e9c78357294f23"
-      rivals: "c21ffcb51749c37a94c9c1bd1c1760e0d62156f3af921e34b2c4e665f6af6f49"
-      words: "6d5b46c34ad090e379efc30fdd4800f9b424ecd5fb210c48edf66f8f1c6a2737"
+      answer: "ca7abdc70fafa3d2c934bc661fbdd7471ee71b4c470fd14b91b6c40356657a7e"
+      options: "413d1a3a67fd268ce863ea4ba61fcb14553288d3665380360b971ea567579eb8"
+      rivals: "698ea2e45d38c3347c2a6df1c97a94cd7d61b7720c00cbb16e78b51ff313889b"
+      words: "5b120cee1d6cb29dc37c53979a97e06bf4139dc1de05ec328a1315eba156fc8c"
+    findings:
+      - finding: "Two nodes quote `what-acts-during-bootstrap`'s definition of a grant in a form it no longer carries. That node defines \"`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant.\" `probe-or-node` quotes it inside quotation marks as \"a grant is the author's word, given for one named reconciliation of one unanswered node\" and restates it as \"which reaches one named reconciliation and no class\"; `graph-topology`'s binding answer reads \"the grant the `commons.systems/disposition-graph/what-acts-during-bootstrap` node defines reaches one named reconciliation and no class\". Both interims — `interim-follows-the-authors-word` and `topology-is-a-field-until-it-is-contested` — argue from the narrower reach, and both nodes carry `commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right` in `depends`."
+        kind: "cross-reference"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/probe-or-node"
+          - "commons.systems/disposition-graph/graph-topology"
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-target"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/attention"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/audience"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-04/21"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/checkpoint"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "words:words/2026-09-08/37"
+      - with: "commons.systems/disposition-graph/codd-update-anomaly"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/decomposition"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/37"
+          - "cites"
+      - with: "commons.systems/disposition-graph/expert-identity"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/expert-instructions"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/frontier-metrics"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/graph-topology"
+        keys:
+          - "words:words/2026-09-06/6"
+          - "words:words/2026-09-07/17"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "words:words/2026-09-08/37"
+      - with: "commons.systems/disposition-graph/hexis"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/materialization"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/movements"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/probe-response-treatment"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "parent:commons.systems/disposition-graph/author-questions"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "words:words/2026-09-08/37"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "words:words/2026-09-08/37"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/round-termination"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/second-stop"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/self-documentation"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/session-state"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "cites"
+      - with: "commons.systems/disposition-graph/standard-report"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/topology-criteria"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/unreached-traditions"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/what-an-option-row-carries"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
+        keys:
+          - "words:words/2026-09-08/37"
+      - with: "commons.systems/disposition-graph/where-a-change-request-goes"
+        keys:
+          - "words:words/2026-09-08/37"
 depends:
   - commons.systems/disposition-graph/graph-topology
   - commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right
@@ -755,3 +906,31 @@ It is recorded and the mark does not move, for the reason the account above this
 gives: the option it widens is not a rival of this fact's recommendation but an addition
 to it, so the fact cannot carry both marks, and the sitting reads that as evidence the
 fact holds two questions rather than as a choice to be made.
+
+### Frontier survey, 2026-09-09, of 7076d2e8
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The answer quotes the grant in a form the defining node no longer carries. It reads "a grant is the author's word, given for one named reconciliation of one unanswered node" in quotation marks as `what-acts-during-bootstrap`'s, and again as "which reaches one named reconciliation and no class", while that node now defines "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it". The recommended interim `interim-follows-the-authors-word` is built on the narrower quotation, and this node's `depends` names `commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right`, an option that has not been ruled.
+
+Strongest counter-argument (moderate): The interim that acts today rests on a quotation of the grant that has since been widened from one named reconciliation to a whole alignment sitting, so the ground given for treating a standing direction as acting by right is not the ground the defining node now states. Under the current definition the argument may be stronger, not weaker, but it has not been made: what is recorded is a reading of a sentence the record has replaced, and an interim resting on a superseded quotation is not one the author can check by reading the node it cites.
+
+The session's reply: Kept and confirmed against the record. This node quotes the grant inside quotation marks as reaching 'one named reconciliation of one unanswered node' and restates it as reaching 'one named reconciliation and no class', while `what-acts-during-bootstrap` now defines it as given for one alignment sitting and reaching every alignment in it. The interim `interim-follows-the-authors-word` is built on the superseded quotation. The counter-argument states the right test: the argument may be stronger under the wider reach, but it has not been made, and an interim resting on a quotation the record has replaced is not one the author can check by reading the node it cites.
+
+### Frontier finding, 2026-09-09
+
+Kind: cross-reference.
+
+Two nodes quote `what-acts-during-bootstrap`'s definition of a grant in a form it no longer carries. That node defines "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant." `probe-or-node` quotes it inside quotation marks as "a grant is the author's word, given for one named reconciliation of one unanswered node" and restates it as "which reaches one named reconciliation and no class"; `graph-topology`'s binding answer reads "the grant the `commons.systems/disposition-graph/what-acts-during-bootstrap` node defines reaches one named reconciliation and no class". Both interims — `interim-follows-the-authors-word` and `topology-is-a-field-until-it-is-contested` — argue from the narrower reach, and both nodes carry `commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right` in `depends`.
+
+Also named: commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: The survivor is `what-acts-during-bootstrap`'s current definition. `probe-or-node` and `graph-topology` re-quote it as it now stands and re-make the argument against the wider reach: a grant that reaches a whole alignment sitting may or may not carry a standing direction about a class of act, and the case each node makes for its interim must be written against "one alignment sitting and reaching every alignment in it" rather than "one named reconciliation of one unanswered node". Where the wider reach makes the argument unnecessary, the interim is withdrawn rather than re-quoted. `what-acts-during-bootstrap` needs no change.
+
+### Subtree divergence, 2026-09-09
+
+Two unruled nodes rest their interims on one option pending on `what-acts-during-bootstrap`, which recommends another. `graph-topology`'s header reads "- Depends: commons.systems/disposition-graph/recording#prune-of-an-unruled-node-needs-no-ruling, commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right", and `probe-or-node`'s reads "- Depends: commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right". Both answers make the dependence explicit: `graph-topology` says "a direction about a class acts by right only if that node's option `a-standing-direction-acts-by-right` is ruled, on which this interim rests", and `probe-or-node` says "the interim rests on the author's words and on nothing that node confers until the option is ruled". The ancestor recommends `reconciliation-acts-on-a-convergence`, not that option, so a ruling for the recommendation discards the ground both interims stand on — and both interims are what acts today, one of them a prune.
+
+Stands under commons.systems/disposition-graph/what-acts-during-bootstrap, option `a-standing-direction-acts-by-right`.

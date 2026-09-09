@@ -1,6 +1,16 @@
 ---
 question: What do the browser's graph headings say about the frontier?
 stage: periagogic
+review:
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "6d6ebf421d16cc303d0ce782ba8dc00a922a17c83ea09fd9feac8e8bbce3e663"
+      answer: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      options: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      rivals: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 probes:
   - id: which-queue-the-heading-summarizes
     asks: >-

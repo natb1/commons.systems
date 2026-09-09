@@ -8,8 +8,15 @@ review:
   of: 90a3dff1b2594eee4f193686af8578d86400971f
   against: "The reading adopts 'addresses do not change' and the record then declares two exceptions to it: the public graph's prefix rewrite, now recorded, and the framed viewer's inability to show or receive an address, recorded as a clause in the answer. A principle with two live exceptions, one of which the record imposes on itself and one of which is a stand-in with no liquidation condition anything reads, is adopted more strongly than the record can honour. The honest form is a relation of diverged with both exceptions named, which is what the sibling readings' `relation-diverged` alternatives propose for the same shape."
   survey:
-    date: 2026-09-05
+    date: 2026-09-09
     of: 90a3dff1b2594eee4f193686af8578d86400971f
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "bd2508452dda8113e49acf0b78490ae565a52e9fef41895f0859a0a2c3b5ad25"
+      answer: "95cc66f85ebf201eac8097efe05328a03ae51b7ced31ada111052df7333947cc"
+      options: "42829a06d8369de0d82c9df52e903cc0890f033c406a1c19335a3cdf11e7b899"
+      rivals: "f0ce768fac0097a6d1caac32e16eafc7d28e3d8cf2e4508db92ba8bb85b8c062"
+      words: "42f4b68c057cebc3936c355e5dfb2456149bb41322f7ed72ecae6e4297695f0b"
 facts:
   - name: answer
     options:

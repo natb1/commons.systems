@@ -1,7 +1,7 @@
 ---
 question: What does an option's row carry at the first level?
 form: rule
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -92,20 +92,20 @@ review:
   commit: 7663ad04b910a3cbef62c4bd2bbbceba3daa8cfb
   against: "The amendment's own new prose leans on claims about sibling and freshly-minted nodes -- `viable-options`, `deferring-on-a-probe`, `expert-instructions`, `movements`, and `what-acts-during-bootstrap` -- that this delta's scope cannot check, in the same way `a-term-is-its-own-sentence`'s '134 nodes' claim could not be checked at the last reading; none is a false statement, a broken pin, or a contradiction this node's own text shows, so by the standard the last reading itself applied these are gaps for the neighbourhood to close rather than defects in the amendment. Separately, the previous reading's own finding about `a-term-is-its-own-sentence` remains open -- neither the 2026-09-08 amendment nor the 2026-09-07 survey touched it -- so it is carried forward rather than closed by this round. And the frontier survey's vocabulary finding, which quotes this node twice for a 'reader' sense that collides with the agent sense, is not yet answered either, though the fix it proposes is recorded as an unruled option on `review-cost`'s own answer fact and so is not yet this node's to make on its own."
   survey:
-    date: 2026-09-07
-    of: e1d748d7c323ead845059b3d87d540c21d49439a
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: 1e0b37a2b7f2c4faebb8bf0d5feb9535b830af8e
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "0ac548d22006fec806b8fea188722d1ebca28a6fb5025222518f708b148d79de"
-      answer: "ff5dadd14416e35d9a1e1625a106f33f0bd63363e795adc1f80f34075b61e102"
-      options: "d44e8cb741277a9cb65eb3d9d1e33886552e62e8693cc214e2a150ef6c624a11"
-      rivals: "2323f3b9c1fec74fe29e1eff22da2808501db1594d97f5f03bd7904534960d48"
-      words: "e5480f1b746213f1764069ed99f5180d98d6aef6fb067475beb9ae6123ff23da"
+      answer: "43ad20eb370e5308f6750ab4f90b97294d8cbd3b28897db7a46360aa60e3726d"
+      options: "3b9cd9a592c53902c8487456a09d0c6740f0e6bfd739b57b46d03afc9a429e93"
+      rivals: "94c6745f2a7e18ede31460e048c21dd36a47f513b27ea2e9054219624f3d84cf"
+      words: "586d187119b9c800cd54238215d22decd9f9f93d383f21308ac62efb8d7c4f95"
     findings:
-      - finding: "Two live options on `quotes`' answer fact are written in vocabulary `authority` has struck and would restore the thing the vocabulary named. `ruling-stays-in-node` reads \"A ratified stamp whose ruling is not in the node is invalid, and the ruling a stamp requires is the one the author gives at that sitting, quoted then; words the author said earlier are the ground a draft rests on and bar no stamp.\" and `the-quotation-is-copied-onto-every-option` reads \"A ratified stamp whose ruling is not in the record is invalid, and the ruling a stamp requires is the one the author gives at that sitting, entered in the ledger then and referenced by the option ruled on\". `authority`'s answer holds that \"Every answer carries its authority in the rulings recorded on its facts, and no stamp is written beside them\" and that \"the deferred stamps the bootstrap wrote were unanswered, as the author classified them on 2026-09-03, and the record no longer carries them\". Neither option carries a `status`, so both are live and either is one ruling from contradicting doctrine."
-        kind: "contradiction"
+      - finding: "No node answers how an author's choice short of a confirmation is written, and three depend on there being one. The reading `festo-surrendered-subject-matter` states it: \"The node's own text records that the record cannot presently encode the first of them at all, `recording`'s ruling responses being `confirm` and `edit`, neither of which writes a choice made and not confirmed. So on the recommendation as it stands there is a mark with no producer and no retraction, on a row the machinery reads.\" `what-an-option-row-carries` recommends `five-marks-and-the-two-the-author-added` and `viable-options` recommends `an-option-carries-a-selection-per-party`, both of which put the mark on a row; `what-acts-during-bootstrap`'s rule text makes the unconfirmed choice the first term of the convergence reconciliation acts on and concedes that the clause \"states a rule whose encoding is owed\". None of the twenty-eight options on `recording`'s answer fact adds a response that writes one."
+        kind: "coverage"
         status: "new"
-        since: "2026-09-07"
+        since: "2026-09-09"
         supports:
           - "question"
           - "answer"
@@ -115,22 +115,9 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/what-an-option-row-carries"
-          - "commons.systems/disposition-graph/quotes"
-          - "commons.systems/disposition-graph/authority"
-      - finding: "One option row on `quotes` summarizes itself as the contrary of its own content, so the author would rule from a line the record would not apply. The row reads \"Each option carries the quotation itself, concatenated in date order, with no ledger and no reference, and a validator check that copies of one entry agree.\", and the content fence of the same option, `the-quotation-is-copied-onto-every-option`, reads \"When a sitting records a ruling, the author's words are written as an entry of the ledger, `disposition/words/<date>.md` on the disposition ref beside the graphs, verbatim and dated, and the option the author ruled on carries the reference to it\". The summary denies both the ledger and the reference that the content requires."
-        kind: "contradiction"
-        status: "new"
-        since: "2026-09-07"
-        supports:
-          - "question"
-          - "answer"
-          - "options"
-          - "rivals"
-          - "words"
-        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
-        nodes:
-          - "commons.systems/disposition-graph/what-an-option-row-carries"
-          - "commons.systems/disposition-graph/quotes"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
     pairs:
       - with: "commons.systems/disposition-graph/alignment-page"
         keys:
@@ -141,17 +128,21 @@ review:
           - "words:words/2026-09-07/4"
           - "depends"
           - "cites"
+      - with: "commons.systems/disposition-graph/alignment-target"
+        keys:
+          - "words:words/2026-09-08/36"
       - with: "commons.systems/disposition-graph/anchoring-and-adjustment"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
       - with: "commons.systems/disposition-graph/author-questions"
         keys:
-          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+          - "cites"
       - with: "commons.systems/disposition-graph/authority"
         keys:
-          - "term:authority (defines: commons.systems/disposition-graph/authority)"
-          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
-          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
+          - "words:words/2026-09-08/39"
+          - "cites"
       - with: "commons.systems/disposition-graph/authors-words-on-the-page"
         keys:
           - "words:words/2026-09-07/2"
@@ -164,74 +155,63 @@ review:
       - with: "commons.systems/disposition-graph/chenery-reasoned-decision"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
+      - with: "commons.systems/disposition-graph/cjeu-secret-deliberation"
+        keys:
+          - "cites"
       - with: "commons.systems/disposition-graph/class-recommendation"
         keys:
-          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "words:words/2026-09-08/39"
       - with: "commons.systems/disposition-graph/clean-context-review"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/delegation"
+          - "cites"
+      - with: "commons.systems/disposition-graph/deferring-on-a-probe"
         keys:
-          - "term:main thread (defines: commons.systems/disposition-graph/delegation)"
-          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/design-rationale-capture-disparity"
+        keys:
+          - "cites"
       - with: "commons.systems/disposition-graph/dialogue"
         keys:
-          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:topology (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
           - "words:words/2026-09-07/2"
           - "words:words/2026-09-07/3"
           - "words:words/2026-09-07/4"
+          - "words:words/2026-09-08/36"
           - "cites"
-      - with: "commons.systems/disposition-graph/frontier-consistency"
+      - with: "commons.systems/disposition-graph/eduyot-minority-opinion"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-      - with: "commons.systems/disposition-graph/growth"
+          - "cites"
+      - with: "commons.systems/disposition-graph/expert-identity"
         keys:
-          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
-          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
-          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
-          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/expert-instructions"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/festo-surrendered-subject-matter"
+        keys:
+          - "cites"
       - with: "commons.systems/disposition-graph/hansard-verbatim-record"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
-          - "cites"
       - with: "commons.systems/disposition-graph/how-a-fact-is-headed"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
-      - with: "commons.systems/disposition-graph/instruments"
+      - with: "commons.systems/disposition-graph/lessons-learned-harvest-gap"
         keys:
-          - "term:check (defines: commons.systems/disposition-graph/instruments)"
-          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
+          - "cites"
       - with: "commons.systems/disposition-graph/master-detail-selection"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
-      - with: "commons.systems/disposition-graph/model"
-        keys:
-          - "term:disposition (defines: commons.systems/disposition-graph/model)"
-          - "term:node (defines: commons.systems/disposition-graph/model)"
       - with: "commons.systems/disposition-graph/montgomery-informed-consent"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
+      - with: "commons.systems/disposition-graph/movements"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
       - with: "commons.systems/disposition-graph/nielsen-user-control-and-freedom"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
-      - with: "commons.systems/disposition-graph/node"
-        keys:
-          - "term:answer (defines: commons.systems/disposition-graph/node)"
-          - "term:form (defines: commons.systems/disposition-graph/node)"
-          - "term:question (defines: commons.systems/disposition-graph/node)"
-          - "term:rationale (defines: commons.systems/disposition-graph/node)"
       - with: "commons.systems/disposition-graph/non-liquet"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
@@ -241,88 +221,88 @@ review:
       - with: "commons.systems/disposition-graph/not-proven-third-verdict"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
+      - with: "commons.systems/disposition-graph/nygard-adr-proposed-status"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/persistence"
+        keys:
+          - "term:disposition ref (defines: commons.systems/disposition-graph/persistence)"
+      - with: "commons.systems/disposition-graph/probe-or-node"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/probe-response-treatment"
+        keys:
+          - "words:words/2026-09-08/36"
       - with: "commons.systems/disposition-graph/progressive-disclosure"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
           - "cites"
-      - with: "commons.systems/disposition-graph/projection"
+      - with: "commons.systems/disposition-graph/qoc-design-space-analysis"
         keys:
-          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+          - "cites"
       - with: "commons.systems/disposition-graph/quotes"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "words:words/2026-09-07/4"
+          - "cites"
       - with: "commons.systems/disposition-graph/readings"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
           - "words:words/2026-09-07/4"
           - "cites"
       - with: "commons.systems/disposition-graph/recording"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
           - "cites"
-      - with: "commons.systems/disposition-graph/rejected"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/review"
-        keys:
-          - "term:review (defines: commons.systems/disposition-graph/review)"
       - with: "commons.systems/disposition-graph/review-cost"
         keys:
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
           - "words:words/2026-09-07/2"
           - "words:words/2026-09-07/3"
           - "words:words/2026-09-07/4"
+          - "cites"
       - with: "commons.systems/disposition-graph/roberts-rules-commit-or-refer"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
+      - with: "commons.systems/disposition-graph/round-termination"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
       - with: "commons.systems/disposition-graph/ruling-transport"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
       - with: "commons.systems/disposition-graph/scholastic-articulus"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
-          - "cites"
-      - with: "commons.systems/disposition-graph/scope"
+      - with: "commons.systems/disposition-graph/session-state"
         keys:
-          - "term:order (defines: commons.systems/disposition-graph/scope)"
-          - "term:section (defines: commons.systems/disposition-graph/scope)"
-      - with: "commons.systems/disposition-graph/session-context"
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/standard-report"
         keys:
-          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
-      - with: "commons.systems/disposition-graph/transience"
-        keys:
-          - "term:standing (defines: commons.systems/disposition-graph/transience)"
-      - with: "commons.systems/disposition-graph/unanswered"
-        keys:
-          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+          - "words:words/2026-09-08/36"
       - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
         keys:
           - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
-          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
           - "words:words/2026-09-07/2"
           - "words:words/2026-09-07/3"
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/under"
+      - with: "commons.systems/disposition-graph/unreached-traditions"
         keys:
-          - "term:context (defines: commons.systems/disposition-graph/under)"
-          - "term:under (defines: commons.systems/disposition-graph/under)"
+          - "words:words/2026-09-08/36"
       - with: "commons.systems/disposition-graph/viable-options"
         keys:
-          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
           - "words:words/2026-09-07/2"
           - "words:words/2026-09-07/3"
           - "words:words/2026-09-07/4"
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
           - "cites"
       - with: "commons.systems/disposition-graph/vocabulary-option-summary"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
           - "depends"
           - "cites"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
       - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
@@ -337,12 +317,8 @@ review:
       - with: "commons.systems/disposition-graph/which-facts-are-listed"
         keys:
           - "parent:commons.systems/disposition-graph/alignment-page"
-      - with: "commons.systems/disposition-graph/work-loop"
-        keys:
-          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
       - with: "commons.systems/public/agency"
         keys:
-          - "term:agency (defines: commons.systems/public/agency)"
           - "cites"
 under:
   - commons.systems/disposition-graph/alignment-page
@@ -1425,3 +1401,27 @@ On the viability of the options: Every option on the answer fact's list keeps a 
 Strongest counter-argument (weak): The amendment's own new prose leans on claims about sibling and freshly-minted nodes -- `viable-options`, `deferring-on-a-probe`, `expert-instructions`, `movements`, and `what-acts-during-bootstrap` -- that this delta's scope cannot check, in the same way `a-term-is-its-own-sentence`'s '134 nodes' claim could not be checked at the last reading; none is a false statement, a broken pin, or a contradiction this node's own text shows, so by the standard the last reading itself applied these are gaps for the neighbourhood to close rather than defects in the amendment. Separately, the previous reading's own finding about `a-term-is-its-own-sentence` remains open -- neither the 2026-09-08 amendment nor the 2026-09-07 survey touched it -- so it is carried forward rather than closed by this round. And the frontier survey's vocabulary finding, which quotes this node twice for a 'reader' sense that collides with the agent sense, is not yet answered either, though the fix it proposes is recorded as an unruled option on `review-cost`'s own answer fact and so is not yet this node's to make on its own.
 
 The session's reply: Forward taken. Of the three findings, the first is right and is answered by striking the count rather than correcting it: the claim about `vocabulary-option-summary` verifies, the number 134 does not, and dating it (133 nodes at the end of 2026-09-06, 150 mid-2026-09-07, 164 when the finding was raised) shows drift rather than error, so correcting it would have restarted the same clock. The sentence now states the rule. The second finding is left standing as the reading put it, a defensible split with the recommended option's own subsection carrying the argument for the accumulation layer. The third is not a defect of this node: the reading was right to decline cross-node verification from its own context, for a further reason recorded on `clean-context-review`, and the sitting checked the claims against the node files directly, where all of them hold. Beyond the findings, the node took the tradition survey's return: a new option `names-on-the-row-stances-in-a-companion` sourced to the CJEU reading, and an `against` extended with the survey's finding that no surveyed tradition offers a measured result on mark density while three hardened against the two marks the author's enumeration added. All of that is outside the review pin, so the forward verdict stands on what was read.
+
+### Frontier survey, 2026-09-09, of 1e0b37a2
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The recommendation `five-marks-and-the-two-the-author-added` puts a mark on a row that nothing in the record writes. The reading `festo-surrendered-subject-matter` records it verbatim: "The node's own text records that the record cannot presently encode the first of them at all, `recording`'s ruling responses being `confirm` and `edit`, neither of which writes a choice made and not confirmed. So on the recommendation as it stands there is a mark with no producer and no retraction, on a row the machinery reads." The mark is load-bearing elsewhere: `what-acts-during-bootstrap` makes the author's unconfirmed choice the first term of the convergence bootstrap reconciliation acts on.
+
+Strongest counter-argument (strong): The row this node designs carries a mark the record cannot produce or lift, and the frontier depends on that mark rather than merely displaying it: `what-acts-during-bootstrap` makes the unconfirmed choice one of the two terms whose convergence licenses reconciliation during bootstrap. So the defect is not cosmetic — a row that shows a state no act can enter or leave is a row the machinery reads and the author cannot correct, and it is the state on which the record's only active licence turns.
+
+The session's reply: Kept, and it is the display side of the gap now recorded as an option on `recording`. The row this node designs carries a mark no ruling response writes and none lifts, and the finding's force is that the mark is load-bearing rather than cosmetic: `what-acts-during-bootstrap` makes the author's unconfirmed choice the first term of the convergence that licenses reconciliation during bootstrap, so the record's only active licence turns on a state the record cannot enter. The repair is `recording`'s to make; this node either cites the response once it exists or loses the mark by the same ruling.
+
+### Frontier finding, 2026-09-09
+
+Kind: coverage.
+
+No node answers how an author's choice short of a confirmation is written, and three depend on there being one. The reading `festo-surrendered-subject-matter` states it: "The node's own text records that the record cannot presently encode the first of them at all, `recording`'s ruling responses being `confirm` and `edit`, neither of which writes a choice made and not confirmed. So on the recommendation as it stands there is a mark with no producer and no retraction, on a row the machinery reads." `what-an-option-row-carries` recommends `five-marks-and-the-two-the-author-added` and `viable-options` recommends `an-option-carries-a-selection-per-party`, both of which put the mark on a row; `what-acts-during-bootstrap`'s rule text makes the unconfirmed choice the first term of the convergence reconciliation acts on and concedes that the clause "states a rule whose encoding is owed". None of the twenty-eight options on `recording`'s answer fact adds a response that writes one.
+
+Also named: commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: The survivor is `recording`, which owns the ruling responses, and the gap is closed there rather than on the three nodes that read the mark. The option below puts a third response on the table so that the author can mark a choice without confirming it and can lift the mark, and the two display nodes and `what-acts-during-bootstrap` then cite it instead of describing a state nothing produces. If the author does not want such a response, the same ruling settles it, and the three nodes lose the mark rather than keeping a row the machinery reads and no act can enter.
+
+Recorded as an option on commons.systems/disposition-graph/recording's answer fact: `a-response-that-records-a-choice-short-of-confirmation` (source review, 2026-09-09).

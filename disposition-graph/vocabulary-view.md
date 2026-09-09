@@ -15,6 +15,16 @@ facts:
       - name: ratified
       - name: delegated
       - name: deferred
+review:
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "0cdec3129f07def96907e8ff350b145973fca2c7d266498c1cc387f59693a9be"
+      answer: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      options: "848de48bb3fcd96deae08eb0f89cd27c7373e15b5fe302aa0f389a8690fdf2d6"
+      rivals: "1c29aa62b4d5bb797dfb381562205a26c81b71756b6376556214b8fb5038d44d"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 under:
   - commons.systems/disposition-graph/projection
 ---

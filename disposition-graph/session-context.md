@@ -8,15 +8,102 @@ review:
   of: 5022100045d3fec87a66697115d238de6eead5cc
   against: "The node's rule is right and its second shim is the counter-example to it. Session-context says a session loads three projections 'and nothing else', and that anything in them no node projects is a prune-by-default proposal — yet the harness configuration that decides the permissions and the worktree base every session runs with is declared as a shim over a file that is not in the checkout, is not on the ref, and no projection reads. The one surface with the most operational force over a session is the one the record cannot see, and the node ratifies that state as a declared interim rather than naming it as the gap it is."
   survey:
-    date: 2026-09-07
+    date: 2026-09-09
     of: bf6c88ee6b04e35ad8db8744598ce1471a6076ef
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "09b7b92651a44a1467b5142e9265279297b3ae0f5c119cbad400dbd03e6d6d43"
       answer: "c6a9ec0b048a426d9d6b01abc9f36eaa0c37e97fbf0b53cde9c30c83826018cb"
-      options: "6d8935aba87a7a6821750356e3e8df803d49b0c4275c80091a47ff204797705d"
-      rivals: "be0543bb8f6100743812e3782c1f45edf6dcb5e82a8ea3d906bcffc6753b08a2"
-      words: "6f6facbf05937f9385a713dc3db1dc6b8be363df73981c20847b86206df33110"
+      options: "9832a05efc5156f8a654479f4ed2e13581d5a9523a88cdd6a486167bbb38c3b4"
+      rivals: "3db2b57b27b1f9f44dbb20ef8e0f75c3f591359180dc644ed1a46a1599b4ee47"
+      words: "cba3f90a8dce6543d1c1022eece568f34cf6a4d1289be6122ddda037498727d7"
+    findings:
+      - finding: "Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: \"- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)\" (`growth`); \"- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)\" (`recording`); \"- Defines: `clean-context review` (no gloss yet)\"; \"- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)\" (`viable-options`); \"`doctrine` (no gloss yet); `proposal` (no gloss yet)\" (`authority`); \"- Defines: `neighbourhood` (no gloss yet)\" (`review-cost`); \"- Defines: `probe` (no gloss yet)\" (`author-questions`, at the ruling stage); \"- Defines: `frontier survey` (no gloss yet)\"; \"- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)\" (`readings`); \"- Defines: `seam` (no gloss yet)\" (`decomposition`); \"- Defines: `session context` (no gloss yet); `rules` (no gloss yet)\" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — \"Doctrine is the ratified answers taken together.\" and \"A proposal is technical vocabulary and is not overloaded\" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: \"`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant.\" The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term \"with no path to it over 'under', 'depends' or 'cites'\", which presupposes a definer and never asks whether the definer said anything."
+        kind: "vocabulary"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/session-context"
+          - "commons.systems/disposition-graph/growth"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/authority"
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/readings"
+          - "commons.systems/disposition-graph/decomposition"
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-page"
+        keys:
+          - "parent:commons.systems/disposition-graph/projection"
+      - with: "commons.systems/disposition-graph/attention"
+        keys:
+          - "term:boost (defines: commons.systems/disposition-graph/attention)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/frontier-metrics"
+        keys:
+          - "parent:commons.systems/disposition-graph/projection"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/materialization"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/purpose"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/session-state"
+        keys:
+          - "term:staging store (defines: commons.systems/disposition-graph/session-state)"
+          - "words:words/2026-09-08/21"
+          - "cites"
+      - with: "commons.systems/disposition-graph/tier"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:ceiling (defines: commons.systems/disposition-graph/under)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/vocabulary-view"
+        keys:
+          - "parent:commons.systems/disposition-graph/projection"
+      - with: "commons.systems/disposition-graph/web-routing"
+        keys:
+          - "parent:commons.systems/disposition-graph/projection"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "cites"
 facts:
   - name: answer
     options:
@@ -698,3 +785,25 @@ authority that says what acts -- and neither answer references the other. Nothin
 moved here, because a recommendation that changed on this fact would change what the
 projector writes for every session, and that is the author's to rule. It is recorded so
 that whoever takes either node sees both.
+
+### Frontier survey, 2026-09-09, of bf6c88ee
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The node stands at the ruling stage defining neither of the terms it claims: "- Defines: `session context` (no gloss yet); `rules` (no gloss yet)", while its binding answer uses one of them as a term of art — "From three projections and nothing else. Rules, one file per global-tier node under `.claude/rules/`, carry the doctrine every session works under". The question the author would rule on is "What does a session load, and where does it come from?", and the answer to it turns on a word the node undertakes to define and leaves empty.
+
+Strongest counter-argument (moderate): This is the node closest to a ruling — stage `ruling`, recommending `standing` — and it is the node whose two defined terms are both empty. What the author would confirm is that a session loads three projections and nothing else, where `rules` is one of the three and is defined nowhere the term index can read; a later session reading the projection has the sentence and not the definition. Confirming a load rule whose central term is undefined fixes the boundary of what every session sees without fixing what the boundary is drawn around.
+
+The session's reply: Kept, and it is the sharpest instance of the vocabulary finding because of where this node stands. It is at the ruling stage recommending `standing`, and both terms it claims are empty. What the author would confirm is that a session loads three projections and nothing else, where `rules` is one of the three and is defined nowhere the term index can read. The fill is bookkeeping and no stage moves for it, but it is owed before this node goes to the author rather than after.
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: "- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)" (`growth`); "- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)" (`recording`); "- Defines: `clean-context review` (no gloss yet)"; "- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)" (`viable-options`); "`doctrine` (no gloss yet); `proposal` (no gloss yet)" (`authority`); "- Defines: `neighbourhood` (no gloss yet)" (`review-cost`); "- Defines: `probe` (no gloss yet)" (`author-questions`, at the ruling stage); "- Defines: `frontier survey` (no gloss yet)"; "- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)" (`readings`); "- Defines: `seam` (no gloss yet)" (`decomposition`); "- Defines: `session context` (no gloss yet); `rules` (no gloss yet)" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — "Doctrine is the ratified answers taken together." and "A proposal is technical vocabulary and is not overloaded" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant." The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term "with no path to it over 'under', 'depends' or 'cites'", which presupposes a definer and never asks whether the definer said anything.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: Each node fills the glosses it claims, which is a fill and not a redraft, so no stage is owed for it and none is named here except where the answer itself is implicated. The two exceptions: `authority`'s glosses are copied from its own answer, which is bookkeeping; and `viable-options` and `what-acts-during-bootstrap` settle between them who defines the grant, since one claims the term with nothing behind it and the other defines the thing under the name `bootstrap authority` — the survivor is `what-acts-during-bootstrap`, which has the author's own term and a gloss, and `viable-options` drops the claim or points at it. A node that cannot gloss a term it claims is claiming a term it does not own, and dropping the entry is the other way to close it.

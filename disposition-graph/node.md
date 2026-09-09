@@ -8,13 +8,13 @@ review:
   of: 50b9ea4f40a07e8facf86b081e6183c2381cce21
   against: "The four-form model rests on a merge whose carrier does not exist: no criterion in the graph says whether its answer is to be achieved or maintained, no field holds it, and instruments' draft sentence that would have introduced it is withdrawn. Instruments' current text uses the distinction operationally — 'A target's failing check is work. A rule's failing check is a variance that gates the work that broke it' — which is how the frontier decides what to do with a failure, and almost every node is unguarded, so under the merge an unguarded node's failure would have no class at all. Ratifying this draft bakes the merge into the schema definition after the record has already decided against it."
   survey:
-    date: 2026-09-07
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "2ea5499ddd085088e665e15b342081b9e4148e9838b65c78d813322d98db202d"
       answer: "6ce6fe02c674d2bf6ccab0b6d1175203120ddf86c99329da43d36af60f5cdb5d"
-      options: "27086639e5025de9b75b7b2c82e775dec15015ed073bfab48ea187d74a1d2c75"
-      rivals: "cb068173ccbe4d7df53355e2dfee6d48bfa4b4595aaa956a6f808de866e9b5ac"
+      options: "474ec4e43904d0748ab39b0abb6e1deef130afe85216edf0814697cef07e0284"
+      rivals: "e316c716a1a69398baf7aa684a90c43dbd8731ad36a3cb841fea6445ba0f90ef"
       words: "7aedaea0cb8f5b1fa93aeb4e24a7752903a6bce34d90ebe043da922b262f0e83"
 facts:
   - name: answer

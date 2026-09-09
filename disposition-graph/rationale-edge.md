@@ -8,8 +8,15 @@ review:
   of: dcef237c051b8b1ca92ca7e6baf8189f0b0983a0
   against: "Option 2, a because clause on each under entry, is cheap and would put the refinement in structure exactly where the two questions do not show it — the case the recommendation leaves to a convention nothing checks. Toulmin separates warrant from backing, but a warrant is still written down; the recommendation writes it down only sometimes and only in prose, so the projector can never show why a node hangs where it does, which is the navigation the author asked for when they asked for cites to be projected. Against it, a clause on every edge will be filled with restatements of the two questions in the common case."
   survey:
-    date: 2026-09-05
+    date: 2026-09-09
     of: 23e4fb08cc7ad832c5985f15b8a1b2ba96e50ba0
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "d5910dbb5178b4a8c6ef612fd4deed099345cffc816f04b70d7f9fb579cf6d6e"
+      answer: "facf9f1128355c5357de2c80f1843406fcabb5853d56a60b75bff5179c98ca00"
+      options: "c2dc20b350f4afe3323f6db0ec56a262a859639ff506c4b05d1c49ce10a44833"
+      rivals: "1fa748781ac593095bb8120a966c83470717bfe23f57a402046b027797763aff"
+      words: "cf698faadfae578977634eab9216ec9442ec9d3a2172acd12d14b03a74c25e3d"
 facts:
   - name: answer
     options:

@@ -9,20 +9,20 @@ review:
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "The disclaim answering Finding 4 is itself a new, unverified assertion about `recording`'s current answer fact and its recommended option's fence content, made in a delta-scoped reading that has no access to `recording`'s file to confirm it. If `recording` in fact carries some form of the promised option under a different name, or its cited fence does not do what this account claims, the repair would be inaccurate rather than merely silent — a stronger defect than the silence it replaces. But this is the same category of cross-node uncertainty the previous reading itself accepted as deferrable to the survey (its Finding 3 on the `commit` field), so treating this disclaim the same way is consistent rather than a double standard."
   survey:
-    date: 2026-09-07
-    of: 476d5db9dafc154cce6deb25aa6b2d74cd5511b8
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: b3b844dd154f889b4548abe1e0e29804d99f9b63
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "8c47ddf791b1a5708972c2a0f138fef97e2dbf8fb45e8670f89720b485ac28d5"
-      answer: "afa36a77715f4695cbab52e603b76d9b1f63b7d92f98c60301d5321cf8882ff3"
-      options: "47e4a9512268649499d6a630d83d5de10ec05eb9ac56cc7bf5d85a3a9216356a"
-      rivals: "630d8637d6a3cce1d1ea87070d7a122bd4043421873359b844827075b8dc2867"
-      words: "8c9f75c649c0f5f6dfa05b0e7d5f213722c8565e52048c62d2918515ba816e39"
+      answer: "5e942f8dadee37b74058fdfbcd8d0abf3a809d7472769bdae0a1f09fe2ba03da"
+      options: "8a8b28ce4a88d4346cfc3af405caba1ccd8ab5096da14d0edd2d9aadc8f5bb8f"
+      rivals: "2a62538ce93be013f63320058116e0f94fd8d9ae4e246eababc23ce97d1dd9ef"
+      words: "9363e700fcf302d1b9c17d1130d6a2ca8d36a510c847fc13aa7ed7680c32f3cb"
     findings:
-      - finding: "persistence's standing answer: 'The ref\\'s tree holds the graphs and only the graphs: the manifest and the node files.' materialization's standing answer: 'The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author\\'s words the quotes node keeps, and nothing else.' quotes' Facts: 'answer: recommends words-in-a-ledger-on-the-ref (moderate)'. persistence carries '`the-tree-holds-the-ledger-beside-the-graphs` — source commons.systems/disposition-graph/materialization' and does not recommend it."
+      - finding: "The cap on open probes is struck by one node's recommendation and enforced by the instrument another node constitutes. `author-questions` recommends `a-probe-carries-a-target-and-a-type`, whose text reads \"The admission test is what bounds the list, and no number is.\" and \"A cap binds the movement and is checked by the readings and never by the graph's reader, which checks the shape of a probe as it checks the shape of a shim, so a movement that would exceed one does not fail; it writes what it found somewhere the count does not reach, and on 2026-09-08 that somewhere was prose.\" The survey brief that carries this reading instructs \"**The cap is three open probes on one node**\" and prints on every judged node \"The cap binds the movement and is checked by this reading, never by the parser.\" `recording`'s answer-fact `against` reasons from the cap — \"where the cap has been reached the rule bends rather than binds, so the author's last sight of the text is one no reader saw\" — and its answer fact carries the option `readiness-when-the-cap-is-reached`. The contradiction binds today, not in principle: `quotes` shows \"3 open of a cap of three, and 0 discharged.\""
         kind: "contradiction"
         status: "new"
-        since: "2026-09-07"
+        since: "2026-09-09"
         supports:
           - "question"
           - "answer"
@@ -32,51 +32,15 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/quotes"
-          - "commons.systems/disposition-graph/persistence"
-          - "commons.systems/disposition-graph/materialization"
-      - finding: "dialogue's standing answer: 'The author\\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\\'s on it move to the parent\\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\\'s `## Disposition`, where their words already are.'; transience 'the author\\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\\'s third term unmaterialized' are dated past."
-        kind: "supersession"
-        status: "new"
-        since: "2026-09-07"
-        supports:
-          - "question"
-          - "answer"
-          - "options"
-          - "rivals"
-          - "words"
-        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
-        nodes:
-          - "commons.systems/disposition-graph/quotes"
-          - "commons.systems/disposition-graph/dialogue"
-          - "commons.systems/disposition-graph/recording"
-          - "commons.systems/disposition-graph/materialization"
-          - "commons.systems/disposition-graph/frontier-consistency"
           - "commons.systems/disposition-graph/author-questions"
-          - "commons.systems/disposition-graph/probe-or-node"
-          - "commons.systems/disposition-graph/decomposition"
-          - "commons.systems/disposition-graph/transience"
-      - finding: "authority's standing answer: 'no stamp is written beside them: a node\\'s class is read off those rulings, and a node no ruling grants is unanswered'. Standing answers that still define the node by a stamp: node 'Every node carries a stamp, or it is an open question awaiting its answer'; growth 'a ratification is recorded as the stamp in the author\\'s name with the ruling quoted'; projection 'an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected'; traditions-home 'A tradition root is a node like any other, a question, an answer, a form and a stamp'. quotes' option `stamp-vocabulary-struck-from-the-live-options` reaches only quotes' own options."
-        kind: "vocabulary"
-        status: "new"
-        since: "2026-09-07"
-        supports:
-          - "question"
-          - "answer"
-          - "options"
-          - "rivals"
-          - "words"
-        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
-        nodes:
-          - "commons.systems/disposition-graph/quotes"
-          - "commons.systems/disposition-graph/authority"
-          - "commons.systems/disposition-graph/node"
-          - "commons.systems/disposition-graph/growth"
-          - "commons.systems/disposition-graph/projection"
-          - "commons.systems/disposition-graph/traditions-home"
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/recording"
     pairs:
       - with: "commons.systems/disposition-graph/alignment-page"
         keys:
           - "words:words/2026-09-07/4"
+      - with: "commons.systems/disposition-graph/alignment-target"
+        keys:
           - "cites"
       - with: "commons.systems/disposition-graph/authority"
         keys:
@@ -96,10 +60,6 @@ review:
           - "words:words/2026-09-07/14"
           - "words:words/2026-09-07/15"
           - "depends"
-          - "cites"
-      - with: "commons.systems/disposition-graph/evaluation"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/fidelity"
         keys:
           - "cites"
@@ -112,12 +72,6 @@ review:
       - with: "commons.systems/disposition-graph/hexis"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/instruments"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/legacy"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/materialization"
         keys:
           - "depends"
@@ -128,14 +82,7 @@ review:
       - with: "commons.systems/disposition-graph/persistence"
         keys:
           - "term:disposition ref (defines: commons.systems/disposition-graph/persistence)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/projection"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/prose-and-structure"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/purpose"
+      - with: "commons.systems/disposition-graph/probe-or-node"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/purpose-criteria"
@@ -144,35 +91,18 @@ review:
       - with: "commons.systems/disposition-graph/readings"
         keys:
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/recording"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/review"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/review-cost"
         keys:
           - "words:words/2026-09-07/4"
           - "words:words/2026-09-07/15"
-      - with: "commons.systems/disposition-graph/scope"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/second-stop"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/software-factories"
+      - with: "commons.systems/disposition-graph/session-state"
         keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/spec-driven-development"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/stub-traditions"
-        keys:
+          - "term:staging store (defines: commons.systems/disposition-graph/session-state)"
           - "cites"
       - with: "commons.systems/disposition-graph/traditions-home"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/transience"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
@@ -183,26 +113,16 @@ review:
           - "words:words/2026-09-07/15"
           - "depends"
           - "cites"
-      - with: "commons.systems/disposition-graph/validation-order"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/viable-options"
         keys:
           - "words:words/2026-09-07/4"
           - "parent:commons.systems/disposition-graph/authority"
-          - "cites"
-      - with: "commons.systems/disposition-graph/web-routing"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
         keys:
           - "parent:commons.systems/disposition-graph/authority"
       - with: "commons.systems/disposition-graph/what-an-option-row-carries"
         keys:
           - "words:words/2026-09-07/4"
-          - "cites"
-      - with: "commons.systems/disposition-graph/work-loop"
-        keys:
           - "cites"
 probes:
   - id: does-the-ledger-admit-a-grant
@@ -965,3 +885,27 @@ is therefore a fourth. That collision is the new node's first probe and is the a
 to settle. The new node recommends a file whose path a global rule fixes, which is
 reached through the rules projection and so is not a fourth thing, and it names the
 path so that a session which has lost the thread can still find the store.
+
+### Frontier survey, 2026-09-09, of b3b844dd
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- This node is where the struck cap binds first. Its probe block reads "3 open of a cap of three, and 0 discharged. A compound probe counts as the probes it compounds. The cap binds the movement and is checked by this reading, never by the parser.", so the next probe a movement would raise here is one the reading is instructed to refuse, while `author-questions` recommends "The admission test is what bounds the list, and no number is."
+
+Strongest counter-argument (weak): The node stands at exactly the number the record has recommended striking, so whichever way `author-questions` is ruled changes what may be asked here next, and the answer this node recommends about what the ledger admits was drawn while the ceiling was still in place. The frontier's argument is not against the admission rule itself but against confirming it before the node's own three open probes are answered, since a ledger rule settled while its node is at the ceiling is settled with the questions that would test it unasked.
+
+The session's reply: Kept, and made moot in its operative half by this sitting's own commit. The cap half of this finding is answered in the implementation and not by an amendment here: the author struck the cap at `words/2026-09-08/32`, and this sitting struck it from all fourteen sites in eleven files at `9db16ed9` on `greenfield`, before this reading returned and independently of it. The brief this reading was given was generated before that commit, so where it reports the brief still instructing a count against a ceiling it is reporting a state the implementation has since left; the convergence is evidence for the finding and not against it, since two readings in clean context reached the same strike from the same words. The finding's claim that 'the next probe a movement would raise here is one the reading is instructed to refuse' stopped being true at `9db16ed9`. What survives is the counter-argument, which does not depend on the cap binding: this node's answer about what the ledger admits was drawn while the ceiling was still in place, and three probes stand open on it unanswered. That is an argument against confirming the answer yet, and it is untouched by the strike.
+
+### Frontier finding, 2026-09-09
+
+Kind: contradiction.
+
+The cap on open probes is struck by one node's recommendation and enforced by the instrument another node constitutes. `author-questions` recommends `a-probe-carries-a-target-and-a-type`, whose text reads "The admission test is what bounds the list, and no number is." and "A cap binds the movement and is checked by the readings and never by the graph's reader, which checks the shape of a probe as it checks the shape of a shim, so a movement that would exceed one does not fail; it writes what it found somewhere the count does not reach, and on 2026-09-08 that somewhere was prose." The survey brief that carries this reading instructs "**The cap is three open probes on one node**" and prints on every judged node "The cap binds the movement and is checked by this reading, never by the parser." `recording`'s answer-fact `against` reasons from the cap — "where the cap has been reached the rule bends rather than binds, so the author's last sight of the text is one no reader saw" — and its answer fact carries the option `readiness-when-the-cap-is-reached`. The contradiction binds today, not in principle: `quotes` shows "3 open of a cap of three, and 0 discharged."
+
+Also named: commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/recording.
+
+Proposed: The survivor is `author-questions`' admission test. `clean-context-review`'s answer says what the reading checks — the three admission limbs, the `discharges` order, and the withdrawal of probes the record has since answered — and no number; the per-node "N open of a cap of three" line and the "The cap is three open probes on one node" instruction go from the brief with it. `recording`'s confirmation rule loses its cap-bending clause and the option `readiness-when-the-cap-is-reached` is passed with the reason that the bound it is conditioned on has been struck. `author-questions` and `quotes` need no change of text.
+
+Recorded as an option on commons.systems/disposition-graph/clean-context-review's answer fact: `the-reading-checks-admission-not-a-number` (source review, 2026-09-09).

@@ -9,20 +9,20 @@ review:
   commit: abb15a3e8dbf6291b4a07db98466c158ac0acbbe
   against: "The previous reading's own weak counter-argument -- that the account entry \"Repaired after the re-reading, 2026-09-07\" still states unqualified that the authority fact's case against no longer claims every reading recommends delegated for itself, when that exact sentence was never itself corrected or flagged as imprecise -- remains true of the node after this amendment: nothing in this diff touches that sentence. It is carried forward here rather than re-raised as a new finding, since the previous reading already surfaced it as a weak counter-argument and not as a blocking finding, and this amendment did not purport to address it."
   survey:
-    date: 2026-09-07
-    of: 6921ee74fa2ccceefa9da7c9e4903cec76af7c9f
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: f3e7b820635ba1e681d90b194867895ba2152401
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "4a0f94e153e5d5882c6a1da6fa40c28a6329c12a547bd9d8a571aa98d0e8e14c"
-      answer: "8c241b0319e99701bbeec4bd526ca2b3a6339e4676816c84441bcdda345d554b"
-      options: "e4ca9f6daa2c57ebe7d384ce8f6ae91102e80818e778fc5876fc5b5f0e7cccfb"
-      rivals: "153210286beb71873ef498a07d06718c16f05194b30983460b6402d5bc3ef0f4"
-      words: "295e2be6bffb069f1edaf3e90c25e1b3f8ab831fda9878302a1ccb5f6e812ea9"
+      answer: "b6a01490656065965078840dba4df8252e0e1505ae2fe99132e79f07ef0dd981"
+      options: "3eae487632f81d2fc896df9199554f21504ff9f2c4505ffe16cf6616923588ba"
+      rivals: "4a683426181ee8af06fae69f6427c68c9cf77749b0fc685cd09510ae126ab66b"
+      words: "4ea904121c3def32d237d3d8338d4ff1aa75e4f564544c1d0019f2819a917107"
     findings:
-      - finding: "readings' answer: 'the option\\'s readings are the derived inverse of what the readings bear on' and 'the duty to re-point is stated here and unchecked, unmet across the record at this commit as the account measures'; its option `the-rung-clause-is-stated-once` quotes the rule 'where an option is a lower rung of another, contained in it and not declined, the relation stays on the containing option, since a relation stored on the rung would project as chosen over'. Readings whose `bears` name an option the target no longer recommends: eight under review-skills carry 'option: two-skills-one-package' while review-skills 'recommends the-survey-skill-launches-a-selected-reading (moderate)'; fagan-inspection-roles carries 'option: split-survey-from-per-draft' on frontier-consistency, which 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'; codd-update-anomaly bears on recording#per-fact-after-two-readings while recording recommends `the-confirmation-folds-an-already-accumulated-node`; ibis-issue-based-information bears on readings#relation-per-option while readings 'recommends the-relation-is-projected-onto-the-option-as-one-of-three'; plato-maieutics carries 'commons.systems/disposition-graph/growth#answer#standing (adopted), commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)' while growth's list marks '`turn-form-to-a-child-and-terms-aligned` — source ai, recommended', and plato-maieutics' own option says 'so the record currently derives this tradition as chosen over on `growth` — the opposite of what the reading\\'s own answer says.' Each of these traditions projects today as chosen over on the node it was read for."
-        kind: "stale-recommendation"
+      - finding: "Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: \"- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)\" (`growth`); \"- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)\" (`recording`); \"- Defines: `clean-context review` (no gloss yet)\"; \"- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)\" (`viable-options`); \"`doctrine` (no gloss yet); `proposal` (no gloss yet)\" (`authority`); \"- Defines: `neighbourhood` (no gloss yet)\" (`review-cost`); \"- Defines: `probe` (no gloss yet)\" (`author-questions`, at the ruling stage); \"- Defines: `frontier survey` (no gloss yet)\"; \"- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)\" (`readings`); \"- Defines: `seam` (no gloss yet)\" (`decomposition`); \"- Defines: `session context` (no gloss yet); `rules` (no gloss yet)\" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — \"Doctrine is the ratified answers taken together.\" and \"A proposal is technical vocabulary and is not overloaded\" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: \"`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant.\" The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term \"with no path to it over 'under', 'depends' or 'cites'\", which presupposes a definer and never asks whether the definer said anything."
+        kind: "vocabulary"
         status: "new"
-        since: "2026-09-07"
+        since: "2026-09-09"
         supports:
           - "question"
           - "answer"
@@ -32,22 +32,17 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/readings"
-          - "commons.systems/disposition-graph/review-skills"
-          - "commons.systems/disposition-graph/frontier-consistency"
-          - "commons.systems/disposition-graph/recording"
           - "commons.systems/disposition-graph/growth"
-          - "commons.systems/disposition-graph/alignment-page"
-          - "commons.systems/disposition-graph/plato-maieutics"
-          - "commons.systems/disposition-graph/codd-update-anomaly"
-          - "commons.systems/disposition-graph/ibis-issue-based-information"
-          - "commons.systems/disposition-graph/dry-single-source-of-truth"
-          - "commons.systems/disposition-graph/fagan-inspection-roles"
-          - "commons.systems/disposition-graph/information-hiding"
-          - "commons.systems/disposition-graph/literate-programming"
-          - "commons.systems/disposition-graph/multi-call-binary-and-facade"
-          - "commons.systems/disposition-graph/operation-naming-in-telemetry"
-          - "commons.systems/disposition-graph/the-wrong-abstraction"
-          - "commons.systems/disposition-graph/utility-syntax-flag-or-subcommand"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/authority"
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/decomposition"
+          - "commons.systems/disposition-graph/session-context"
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
     pairs:
       - with: "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
         keys:
@@ -55,127 +50,52 @@ review:
       - with: "commons.systems/disposition-graph/alignment-page"
         keys:
           - "words:words/2026-09-07/4"
-          - "cites"
-      - with: "commons.systems/disposition-graph/anchoring-and-adjustment"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/appellate-review-en-banc"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/approval-directed-agents"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/aristotle-hexis"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/attention"
         keys:
           - "parent:commons.systems/disposition-graph/model"
-      - with: "commons.systems/disposition-graph/audience"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/authority"
         keys:
           - "parent:commons.systems/disposition-graph/model"
       - with: "commons.systems/disposition-graph/authors-words-on-the-page"
         keys:
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/bentham-publicity"
+      - with: "commons.systems/disposition-graph/clean-context-review"
         keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/brooks-surgical-team"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/change-reviewed-as-a-diff"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/chenery-reasoned-decision"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/chestertons-fence"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/codd-update-anomaly"
-        keys:
-          - "cites"
+          - "words:words/2026-09-08/37"
       - with: "commons.systems/disposition-graph/coverage"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/delegation"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/deprecation-not-deletion"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/dialogue"
         keys:
           - "words:words/2026-09-07/4"
-          - "cites"
-      - with: "commons.systems/disposition-graph/dissent-and-reconsideration"
+          - "words:words/2026-09-08/37"
+      - with: "commons.systems/disposition-graph/expert-identity"
         keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/dry-single-source-of-truth"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/evaluation"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/event-sourcing-derived-view"
-        keys:
-          - "cites"
+          - "depends"
       - with: "commons.systems/disposition-graph/fagan-entry-criteria"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/fagan-inspection-roles"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/file-drawer-and-pre-registration"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/form-vocabulary"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/frontier-consistency"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/growth"
         keys:
+          - "words:words/2026-09-08/37"
           - "parent:commons.systems/disposition-graph/model"
-          - "cites"
-      - with: "commons.systems/disposition-graph/hansard-verbatim-record"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/ibis-issue-based-information"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/information-hiding"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/instruments"
         keys:
           - "term:re-grasp (defines: commons.systems/disposition-graph/instruments)"
           - "parent:commons.systems/disposition-graph/model"
-          - "cites"
       - with: "commons.systems/disposition-graph/legacy"
         keys:
           - "parent:commons.systems/disposition-graph/model"
-          - "cites"
-      - with: "commons.systems/disposition-graph/legislative-amendment-in-context"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/level-triggered-reconciliation"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/literate-programming"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/lockfile"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/madr-decision-records"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/materialization"
@@ -184,153 +104,50 @@ review:
       - with: "commons.systems/disposition-graph/model"
         keys:
           - "term:disposition graph (defines: commons.systems/disposition-graph/model)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/montgomery-informed-consent"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/multi-call-binary-and-facade"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/n-version-programming"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/namespaces"
         keys:
           - "term:mount (defines: commons.systems/disposition-graph/namespaces)"
           - "parent:commons.systems/disposition-graph/model"
           - "cites"
-      - with: "commons.systems/disposition-graph/nielsen-user-control-and-freedom"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/node"
         keys:
           - "parent:commons.systems/disposition-graph/model"
-      - with: "commons.systems/disposition-graph/non-liquet"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/none-of-the-above-ballot"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/not-proven-third-verdict"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/notarial-minute"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/npm-committed-lockfile"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/ocap-attenuation"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/operation-naming-in-telemetry"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/pareto-frontier"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/peirce-paper-doubt"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/persistence"
         keys:
           - "parent:commons.systems/disposition-graph/model"
-          - "cites"
-      - with: "commons.systems/disposition-graph/plato-maieutics"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/plato-periagoge"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/progressive-disclosure"
+      - with: "commons.systems/disposition-graph/probe-or-node"
         keys:
-          - "cites"
+          - "words:words/2026-09-08/37"
       - with: "commons.systems/disposition-graph/projection"
         keys:
           - "parent:commons.systems/disposition-graph/model"
-          - "cites"
-      - with: "commons.systems/disposition-graph/promotor-fidei"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/prose-and-structure"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/purpose"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/quotes"
         keys:
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/regression-test-selection"
+      - with: "commons.systems/disposition-graph/recording"
         keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/rejected"
+          - "words:words/2026-09-08/37"
+      - with: "commons.systems/disposition-graph/regression-test-selection"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/review"
         keys:
           - "term:blocking finding (defines: commons.systems/disposition-graph/review)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/review-approval-pinned-to-a-revision"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/review-cost"
         keys:
           - "words:words/2026-09-07/4"
-      - with: "commons.systems/disposition-graph/review-skills"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/rfc-pep-status-field"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/roberts-rules-commit-or-refer"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/rsi"
         keys:
           - "parent:commons.systems/disposition-graph/model"
-      - with: "commons.systems/disposition-graph/scholarly-peer-review"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/scholastic-articulus"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/scope"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/second-stop"
         keys:
           - "parent:commons.systems/disposition-graph/model"
-      - with: "commons.systems/disposition-graph/segregation-of-duties"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/self-contained-specification"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/single-subject-rule"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/software-factories"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/spec-driven-development"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/special-verdict-form"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/srs-introduction"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/stub-traditions"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/survey-selection"
         keys:
           - "term:mechanical tier (defines: commons.systems/disposition-graph/survey-selection)"
-      - with: "commons.systems/disposition-graph/the-wrong-abstraction"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/tier"
         keys:
           - "cites"
@@ -344,7 +161,6 @@ review:
       - with: "commons.systems/disposition-graph/transience"
         keys:
           - "parent:commons.systems/disposition-graph/model"
-          - "cites"
       - with: "commons.systems/disposition-graph/unanswered"
         keys:
           - "cites"
@@ -356,13 +172,7 @@ review:
         keys:
           - "parent:commons.systems/disposition-graph/model"
           - "cites"
-      - with: "commons.systems/disposition-graph/utility-syntax-flag-or-subcommand"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/validation-order"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/value-of-information"
+      - with: "commons.systems/disposition-graph/unreached-traditions"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
@@ -372,14 +182,16 @@ review:
         keys:
           - "words:words/2026-09-07/4"
           - "depends"
-          - "cites"
-      - with: "commons.systems/disposition-graph/web-routing"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/what-an-option-row-carries"
         keys:
           - "words:words/2026-09-07/4"
           - "cites"
+      - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
+        keys:
+          - "words:words/2026-09-08/37"
+      - with: "commons.systems/disposition-graph/where-a-change-request-goes"
+        keys:
+          - "words:words/2026-09-08/37"
       - with: "commons.systems/disposition-graph/work-loop"
         keys:
           - "parent:commons.systems/disposition-graph/model"
@@ -1047,3 +859,25 @@ entry 36 called for that the sitting of 2026-09-08 did not do, because entry 36'
 step 3 requires tradition's support and divergence per option and the sitting could
 not tell whether that relation was stored or projected without asking. It is
 recorded as residual R27 in the sitting's store, and this account discharges it.
+
+### Frontier survey, 2026-09-09, of f3e7b820
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The node that fixes how a tradition is recorded glosses none of the five terms it claims: "- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)". Its recommended answer, `the-edge-carries-a-support-and-a-divergence-string`, turns on `adopted` and `diverged` as recorded values, and neither has a definition anywhere the term index can read.
+
+Strongest counter-argument (moderate): The answer encodes the tradition relation as a string on an edge and leaves every term of that encoding undefined on the node that mints them — `adopted` and `diverged` are the values the edge carries, and both stand in this node's `defines` as "(no gloss yet)". A vocabulary that is written into the data model before it is defined is one that later readings will diverge on silently, which is the failure this node exists to prevent for traditions and is committing for its own terms.
+
+The session's reply: Kept. The counter-argument is the substance and is accepted: `adopted` and `diverged` are the values the recommended encoding writes onto an edge, and both stand in this node's `defines` as claimed and unglossed, so the vocabulary is being written into the data model before it is defined. That is the exact failure this node exists to prevent for traditions, committed on its own terms.
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: "- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)" (`growth`); "- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)" (`recording`); "- Defines: `clean-context review` (no gloss yet)"; "- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)" (`viable-options`); "`doctrine` (no gloss yet); `proposal` (no gloss yet)" (`authority`); "- Defines: `neighbourhood` (no gloss yet)" (`review-cost`); "- Defines: `probe` (no gloss yet)" (`author-questions`, at the ruling stage); "- Defines: `frontier survey` (no gloss yet)"; "- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)" (`readings`); "- Defines: `seam` (no gloss yet)" (`decomposition`); "- Defines: `session context` (no gloss yet); `rules` (no gloss yet)" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — "Doctrine is the ratified answers taken together." and "A proposal is technical vocabulary and is not overloaded" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant." The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term "with no path to it over 'under', 'depends' or 'cites'", which presupposes a definer and never asks whether the definer said anything.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: Each node fills the glosses it claims, which is a fill and not a redraft, so no stage is owed for it and none is named here except where the answer itself is implicated. The two exceptions: `authority`'s glosses are copied from its own answer, which is bookkeeping; and `viable-options` and `what-acts-during-bootstrap` settle between them who defines the grant, since one claims the term with nothing behind it and the other defines the thing under the name `bootstrap authority` — the survivor is `what-acts-during-bootstrap`, which has the author's own term and a gloss, and `viable-options` drops the claim or points at it. A node that cannot gloss a term it claims is claiming a term it does not own, and dropping the entry is the other way to close it.

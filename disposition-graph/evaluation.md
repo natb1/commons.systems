@@ -8,14 +8,14 @@ review:
   of: 6d87ee51ffab4195c5465354a36d4a2bc1f4fa1e
   against: "'Nothing is sacred', 'no doctrine is implied by what exists' and 'the AI may overrule delegated and deferred answers on its best judgment' are stated without limit and exempt nothing, including this node. Since unanswered made every answer in the record deferred, the rule licenses an AI to re-decide the entire graph between two author sittings, with the author's review as the only brake. The session's answer — that an overrule sends the node back to review and shows on the frontier — is now materially true, which is a real brake; what it does not brake is an overrule of a node at the review or maieutic stage, where no review state exists to go stale."
   survey:
-    date: 2026-09-07
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "2850c585d8a431c7ee6704b50253ef94157290936a7eaff4b1a8650845a6ba6e"
-      answer: "2fac57762e9f5ddb165e48ce282a48b6878682d324d228d2e079985d42127016"
-      options: "760b712851cd0bdea55aea066db3b1b679a002c086da4da863f3057c72d3bba1"
-      rivals: "6382b234c768ecfb7953bc8d3b7706de57f6b487465d18898c07aec700f7981f"
-      words: "3e1c0d980fd98865e4545e6068f886dbcea284b3b57aee5f006da73d4f2ec7ec"
+      answer: "08c0d45fdf84e463c3ef0b6f5df834bac68548641e7e76f414648a546f4aee5c"
+      options: "bb75377a7d854064272379d30a2fabd4d0dfe0c2853a66156e1cd3454c0e3ce2"
+      rivals: "250f93303325a35d7395c16908a1ff487ea46ba07c421ea3bc0201c1135ae475"
+      words: "a4b79f42d96da49322b2952c9857c4c002258de8b4da7972d17fd122c0f35327"
 facts:
   - name: answer
     options:

@@ -85,8 +85,15 @@ review:
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "One could argue the fix cured the fence's self-contradiction by deletion rather than reconciliation: the fence's Rationale dropped its entire discussion of the two traditions (bentham-publicity, hansard-verbatim-record) and the authority-reach paragraph that bounded the passed-over design, replacing several paragraphs of reasoning with one consolidated paragraph, so the recommended option's Rationale is now markedly thinner than the standing option's. That does not survive scrutiny: nothing in the node's own rules or the previous reading's findings required the fence to preserve every clause of the superseded Rationale, only that it argue the option it recommends without contradicting its own Answer body, which the single paragraph does, quoting the author's 2026-09-07 refinement directly and reasoning from it to the reference-both-ways match; the traditions remain adopted and cited on the option's own entry outside the fence, so nothing the author would need to rule on has gone missing."
   survey:
-    date: 2026-09-07
+    date: 2026-09-09
     of: b41bd908254e08cdd52e3dd02a06a241d83a429c
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "ffa7ae6250f97aa3d27a487d8186a2aa8d4b818a9a3bfb69aca65049ccd6422b"
+      answer: "952ad35ebababa9eaf0a4fd30b6fc3477459642448affefafe2250ad3e63f94f"
+      options: "47afd063581bb6d6dc9e59b6bf91d8453642953a849835f17de94105c0fa1f7c"
+      rivals: "8b38786558464549721ed75a2fdaafa42a411e8f4c79b856cabbab6a1b762008"
+      words: "d0f9b9333d0c8b92e3ab30d1d6dc040ac27a10a95d7ef04c767b3a16add41e37"
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:

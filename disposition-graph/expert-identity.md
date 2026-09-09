@@ -18,6 +18,16 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: low
+review:
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "c167ce1232e9ce84a2f71fe9509ebd0545f1e4cfd43f8c3685a559602240bb28"
+      answer: "505ff93f22085f4ed96f27fa6dcc238912ae8baef6ea76c2dfbbbdb4190630c1"
+      options: "06c9e8dfb3e42b91f69a059c18103dc50bd273993eb78e2641ff7360642fff3e"
+      rivals: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      words: "85f1d906266c497495f3a141f7e721a285bc304e402c9c5f92a1be7361c162f2"
 form: rule
 under:
   - commons.systems/disposition-graph/movements
@@ -206,3 +216,13 @@ the cost of leaving the question open: the record is now accumulating expert pos
 a form that cannot be queried, counted or projected, so every sitting that convenes an
 expert before this node is answered adds to a backlog of returns that will have to be
 re-encoded by hand.
+
+### Frontier finding, 2026-09-09
+
+Kind: supersession.
+
+`dialogue`'s standing answer states a census the record has since falsified: "and not one node carries a single ruling, so nothing anywhere in this record is confirmed today and every projection that shows a text in the confirmed place is showing the AI's draft." This brief shows four nodes ruled — `round-termination`, `movements` and `expert-instructions` each at "status answered | class: deferred (ruled here)", and `expert-identity` at "class: deferred (conferred by commons.systems/disposition-graph/movements)". The falsification also reaches the reason behind a pending option: `authority`'s `no-census-anywhere-in-a-node` argues "since the forty-six false census sentences this survey found are all in `### authority` prose and none in a `## Answer`, so the narrower rule" — and this locus is in a `## Answer`.
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/round-termination, commons.systems/disposition-graph/movements, commons.systems/disposition-graph/expert-instructions.
+
+Proposed: The survivor is `authority`'s wider rule, which now has a reason it did not have: a census sentence in a standing answer is exactly the case the narrower option `no-census-in-a-standing-answer` was drawn for and the wider option's measurement said did not exist. `dialogue`'s answer strikes the census clause rather than restating it with a new count, since a number in a standing answer is what both options exist to stop; `authority`'s option text is corrected so that the reason it gives is the reason that holds. The three expert nodes and `round-termination` are named as the evidence and need no change.

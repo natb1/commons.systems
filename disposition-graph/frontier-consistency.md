@@ -9,20 +9,20 @@ review:
   commit: d35b0014367874f0376fea8e271f1737b798857c
   against: "The amendment's actual content -- delegating the judged set and its comparisons to `survey-selection` and localizing the generator's comparison to the node's survey-block hashes -- answers the author's separate 2026-09-07 instruction to optimize survey cost, not any of the three frontier findings recorded since the last reading. All three findings (contradiction, vocabulary, placement) ask for edits on other nodes (`clean-context-review`, `review-cost`, `decomposition`) and each states this node's own cited sentences are already correct or already the survivor, so the amendment leaves the sentences those findings turn on untouched and unbroken -- but it does not itself act on any of the three. If answering a finding requires an affirmative response rather than mere non-interference, none of the three has actually been engaged by this node's amendment; they remain to be closed at the nodes that own the required edits."
   survey:
-    date: 2026-09-07
+    date: 2026-09-09
     of: a398ef534e6ce15eac954a856af8d9c6c56bf46d
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "927c47bb607e1ce62ea18f694439509f2b7713eff4b34390182af7f589028c6c"
       answer: "79f4c079f6eca0dbc0a567a239f6d9dafe45e7b412e088120fd7beeee5217898"
-      options: "21437275f1faca6c6a69b2442e57c55958f4ce7816d4dbaa8a9e4f26599820e9"
-      rivals: "0dca327613b576b7908958a6b57299a905be675897648402823ad09b7bfb7a80"
+      options: "fb55d3cc1ef7f15397629a920add21cea43e59e78764713fc60891b187db6044"
+      rivals: "1c2cd9f03f99429366cccdf4c41b98b0cac70a5d778f572532aa0dfa58309cb7"
       words: "5eb5e3e7375227ac227ac3fcf646a0dd0774fd16bbfcfd9f200b12f1616cbb32"
     findings:
-      - finding: "dialogue's standing answer: 'The author\\'s words are not a section of the node. They are entries of the ledger, verbatim and dated' and 'There is no `## Recommendation` section, no `## Answer` section, no `## Rationale` section and no `## Disposition` section.' Superseded texts still standing: frontier-consistency 'So the words under `## Disposition` are carried for every node, judged, reached or unreached'; author-questions 'the reason names their words, which are under `## Disposition` verbatim and dated as the checkpoint node requires and are never copied into the field'; probe-or-node 'the response is quoted under `## Disposition`, the recommendation moves' and 'any words of the author\\'s on it move to the parent\\'s `## Disposition`'; decomposition 'The questions refused fold back into the parent\\'s `## Disposition`, where their words already are.'; transience 'the author\\'s words, verbatim and dated, in a `## Disposition` section'. The migration the two dated clauses wait on has landed at least in part: the brief prints '`the-survey-skill-launches-a-selected-reading` (answer) supports words/2026-09-04/10' resolved to the author's text, and dialogue's account names '`packages/disposition/words.mjs`, which parses the ledger, resolves a reference to an entry', so recording's 'until it lands no instrument resolves a reference into one' and materialization's 'before that migration lands, a session reading this rule finds the enumeration\\'s third term unmaterialized' are dated past."
-        kind: "supersession"
+      - finding: "The kickback rule is stated on `recording` — \"**What a kickback leaves standing.** A response given on one fact moves the whole node, because a node has one stage and one next movement owed on it\", and \"a kickback from either reading moves the nodes it names and no others.\" — and is restated or relied on across the frontier: within this brief's sections the word appears in `when-the-kickback-feedback-shows` (6 times), `review-cost` (9), `clean-context-review` (8), `frontier-consistency` (8) and `author-questions` (4). The option that would strike it, `no-kickback-from-the-confirmation`, stands on `recording`'s answer fact alone and names none of them; it is in the legacy encoding, so \"the option carries no content of its own, and what it would answer is its sentence above\". A ruling for it would leave five other nodes stating a rule the record no longer has."
+        kind: "coverage"
         status: "new"
-        since: "2026-09-07"
+        since: "2026-09-09"
         supports:
           - "question"
           - "answer"
@@ -32,52 +32,15 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/frontier-consistency"
-          - "commons.systems/disposition-graph/dialogue"
-          - "commons.systems/disposition-graph/quotes"
           - "commons.systems/disposition-graph/recording"
-          - "commons.systems/disposition-graph/materialization"
-          - "commons.systems/disposition-graph/author-questions"
-          - "commons.systems/disposition-graph/probe-or-node"
-          - "commons.systems/disposition-graph/decomposition"
-          - "commons.systems/disposition-graph/transience"
-      - finding: "The record's term is option, and growth carries '`rejected-alternative-is-an-option` — source commons.systems/disposition-graph/rejected, passed over' while the brief's vocabulary line still reads 'rejected — term: rejected alternative'. Standing texts using the struck term: frontier-consistency 'it is recorded as an alternative on the node it conflicts with, a proposal under the authority node when it arose outside alignment, and the review says which' and 'it adopts a listed alternative or the node as it stands'; node 'The rationale says why, and which alternatives were rejected and for what reason; the page projects those alternatives beside the stamp.'; transience 'the alternatives pending, each with its source'; projection 'the alternatives the rationale rejected'. node's 'The rationale says why' and prose-and-structure's 'A node\\'s prose is its disposition, its answer, its rationale and its account' also name a `## Rationale` that dialogue strikes."
-        kind: "vocabulary"
-        status: "new"
-        since: "2026-09-07"
-        supports:
-          - "question"
-          - "answer"
-          - "options"
-          - "rivals"
-          - "words"
-        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
-        nodes:
-          - "commons.systems/disposition-graph/frontier-consistency"
-          - "commons.systems/disposition-graph/viable-options"
-          - "commons.systems/disposition-graph/node"
-          - "commons.systems/disposition-graph/transience"
-          - "commons.systems/disposition-graph/projection"
-          - "commons.systems/disposition-graph/growth"
-      - finding: "The one-line carriage of an unreached or unchanged node is stated on four nodes. survey-selection: 'a node the judged set reaches but whose read text has not changed since a survey read it, judged or reached, is carried on one line rather than by what it answers'. frontier-consistency: 'a node whose text stands as an earlier survey read it is carried on one line, and a node minted or amended since is carried by what it answers until a survey has read it again', while its Facts 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'. clean-context-review's recommended answer: 'of a node no judged node reaches, what the frontier-consistency node\\'s condition on its text gives, its question alone on one line'. review-cost: option `the-surveys-unreached-node-is-one-line`, of which frontier-consistency's account says 'a rule drafted twice in one day on two nodes is evidence that the seam is in the wrong place'."
-        kind: "redundancy"
-        status: "new"
-        since: "2026-09-07"
-        supports:
-          - "question"
-          - "answer"
-          - "options"
-          - "rivals"
-          - "words"
-        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
-        nodes:
-          - "commons.systems/disposition-graph/frontier-consistency"
-          - "commons.systems/disposition-graph/survey-selection"
+          - "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
           - "commons.systems/disposition-graph/clean-context-review"
           - "commons.systems/disposition-graph/review-cost"
-      - finding: "information-hiding's answer: 'They change for different reasons: the first six validations and the fifteenth against the seventh to the fifteenth, one node\\'s verdict against a graph commit and a set of recommendation hashes.' frontier-consistency numbers sixteen validations, and the sibling reading fagan-inspection-roles has 'the first six validations and the fifteenth over one draft\\'s neighbourhood, the seventh to the sixteenth over the whole graph', as clean-context-review has 'on validations seven to sixteen of the frontier-consistency node'."
-        kind: "cross-reference"
+          - "commons.systems/disposition-graph/author-questions"
+      - finding: "Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: \"- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)\" (`growth`); \"- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)\" (`recording`); \"- Defines: `clean-context review` (no gloss yet)\"; \"- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)\" (`viable-options`); \"`doctrine` (no gloss yet); `proposal` (no gloss yet)\" (`authority`); \"- Defines: `neighbourhood` (no gloss yet)\" (`review-cost`); \"- Defines: `probe` (no gloss yet)\" (`author-questions`, at the ruling stage); \"- Defines: `frontier survey` (no gloss yet)\"; \"- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)\" (`readings`); \"- Defines: `seam` (no gloss yet)\" (`decomposition`); \"- Defines: `session context` (no gloss yet); `rules` (no gloss yet)\" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — \"Doctrine is the ratified answers taken together.\" and \"A proposal is technical vocabulary and is not overloaded\" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: \"`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant.\" The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term \"with no path to it over 'under', 'depends' or 'cites'\", which presupposes a definer and never asks whether the definer said anything."
+        kind: "vocabulary"
         status: "new"
-        since: "2026-09-07"
+        since: "2026-09-09"
         supports:
           - "question"
           - "answer"
@@ -87,52 +50,36 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/frontier-consistency"
-          - "commons.systems/disposition-graph/information-hiding"
-          - "commons.systems/disposition-graph/fagan-inspection-roles"
-          - "commons.systems/disposition-graph/clean-context-review"
-      - finding: "readings' answer: 'the option\\'s readings are the derived inverse of what the readings bear on' and 'the duty to re-point is stated here and unchecked, unmet across the record at this commit as the account measures'; its option `the-rung-clause-is-stated-once` quotes the rule 'where an option is a lower rung of another, contained in it and not declined, the relation stays on the containing option, since a relation stored on the rung would project as chosen over'. Readings whose `bears` name an option the target no longer recommends: eight under review-skills carry 'option: two-skills-one-package' while review-skills 'recommends the-survey-skill-launches-a-selected-reading (moderate)'; fagan-inspection-roles carries 'option: split-survey-from-per-draft' on frontier-consistency, which 'recommends the-judged-set-and-its-comparisons-move-to-survey-selection'; codd-update-anomaly bears on recording#per-fact-after-two-readings while recording recommends `the-confirmation-folds-an-already-accumulated-node`; ibis-issue-based-information bears on readings#relation-per-option while readings 'recommends the-relation-is-projected-onto-the-option-as-one-of-three'; plato-maieutics carries 'commons.systems/disposition-graph/growth#answer#standing (adopted), commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)' while growth's list marks '`turn-form-to-a-child-and-terms-aligned` — source ai, recommended', and plato-maieutics' own option says 'so the record currently derives this tradition as chosen over on `growth` — the opposite of what the reading\\'s own answer says.' Each of these traditions projects today as chosen over on the node it was read for."
-        kind: "stale-recommendation"
-        status: "new"
-        since: "2026-09-07"
-        supports:
-          - "question"
-          - "answer"
-          - "options"
-          - "rivals"
-          - "words"
-        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
-        nodes:
-          - "commons.systems/disposition-graph/frontier-consistency"
-          - "commons.systems/disposition-graph/readings"
-          - "commons.systems/disposition-graph/review-skills"
-          - "commons.systems/disposition-graph/recording"
           - "commons.systems/disposition-graph/growth"
-          - "commons.systems/disposition-graph/alignment-page"
-          - "commons.systems/disposition-graph/plato-maieutics"
-          - "commons.systems/disposition-graph/codd-update-anomaly"
-          - "commons.systems/disposition-graph/ibis-issue-based-information"
-          - "commons.systems/disposition-graph/dry-single-source-of-truth"
-          - "commons.systems/disposition-graph/fagan-inspection-roles"
-          - "commons.systems/disposition-graph/information-hiding"
-          - "commons.systems/disposition-graph/literate-programming"
-          - "commons.systems/disposition-graph/multi-call-binary-and-facade"
-          - "commons.systems/disposition-graph/operation-naming-in-telemetry"
-          - "commons.systems/disposition-graph/the-wrong-abstraction"
-          - "commons.systems/disposition-graph/utility-syntax-flag-or-subcommand"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/authority"
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/readings"
+          - "commons.systems/disposition-graph/decomposition"
+          - "commons.systems/disposition-graph/session-context"
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
+      - finding: "The bound `review-cost` recommends is broken by construction by the survey brief, and this reading is the measurement the record's pending option lacks. The binding answer reads \"no brief grows with the record.\" and \"a part of the brief that grows with the record rather than with the draft is carried as a list of pointers, and a part that is the draft's own is carried whole.\" The survey's object is the record, so its brief grows with it: this one enumerates the mechanical tier one finding to a line, having reported that \"the 4 that report a state of the record (recommendation-past-its-pin, term-without-a-path, duplicated-passage, unfolded-account-section) reported 214 finding(s), with 18 note(s) beside them\", prints a section per neighbourhood node and a one-line row per context node, and could not be read in one call — it was read in pages. The same answer names that outcome as a defect: \"A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim\", \"A brief that fits is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it.\" and \"an instrument whose brief is found growing with the record is a defect of the instrument, repaired before it runs again and never a cost the record carries.\" The option `the-brief-is-bounded-by-what-one-call-holds` already stands on this fact, as do `the-surveys-unreached-node-is-one-line` and `the-surveys-selection-moves-to-its-own-node`; what is added here is the measurement — the instrument's own reader reporting that it did not fit — and the observation that the clause as written binds a brief whose object makes it unsatisfiable."
+        kind: "coverage"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/clean-context-review"
     pairs:
       - with: "commons.systems/disposition-graph/alignment-order"
         keys:
           - "depends"
-          - "cites"
-      - with: "commons.systems/disposition-graph/alignment-page"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/author-questions"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/authority"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/clean-context-review"
         keys:
           - "words:words/2026-09-03/34"
@@ -153,58 +100,31 @@ review:
           - "words:words/2026-09-07/7"
           - "words:words/2026-09-07/8"
           - "depends"
-          - "cites"
-      - with: "commons.systems/disposition-graph/delegation"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/dialogue"
         keys:
           - "words:words/2026-09-03/34"
           - "depends"
-          - "cites"
       - with: "commons.systems/disposition-graph/evaluation"
         keys:
           - "term:adversarial review (defines: commons.systems/disposition-graph/evaluation)"
-      - with: "commons.systems/disposition-graph/fagan-inspection-roles"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/fidelity"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/graph-topology"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/growth"
         keys:
           - "term:propose (defines: commons.systems/disposition-graph/growth)"
-      - with: "commons.systems/disposition-graph/instruments"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/legacy"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/materialization"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/node"
         keys:
           - "cites"
       - with: "commons.systems/disposition-graph/probe-or-node"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/projection"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/readings"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/recording"
         keys:
           - "words:words/2026-09-04/23"
-          - "cites"
       - with: "commons.systems/disposition-graph/rejected"
         keys:
-          - "cites"
+          - "term:rejected alternative (defines: commons.systems/disposition-graph/rejected)"
       - with: "commons.systems/disposition-graph/review-cost"
         keys:
           - "words:words/2026-09-07/5"
@@ -215,7 +135,6 @@ review:
           - "words:words/2026-09-07/16"
           - "parent:commons.systems/disposition-graph/clean-context-review"
           - "depends"
-          - "cites"
       - with: "commons.systems/disposition-graph/review-model"
         keys:
           - "words:words/2026-09-07/5"
@@ -227,19 +146,12 @@ review:
       - with: "commons.systems/disposition-graph/review-skills"
         keys:
           - "parent:commons.systems/disposition-graph/clean-context-review"
-          - "cites"
           - "depends"
       - with: "commons.systems/disposition-graph/survey-selection"
         keys:
           - "words:words/2026-09-07/9"
           - "words:words/2026-09-07/16"
           - "depends"
-          - "cites"
-      - with: "commons.systems/disposition-graph/transience"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/unanswered"
-        keys:
           - "cites"
       - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
         keys:
@@ -1384,3 +1296,49 @@ Also named: commons.systems/disposition-graph/readings, commons.systems/disposit
 Proposed: readings survives. Each reading named is re-pointed under the rung clause: where the recommended option contains the one borne on, the relation moves to the containing option; where it does not, the reading records diverged on the recommended option with its reason. plato-maieutics' existing option `bears-repointed-to-the-recommended-option` is the same proposal on that node; frontier-consistency's validation 4 gains the re-pointing check readings' `re-pointing-checked` records there.
 
 Recorded as an option on commons.systems/disposition-graph/readings's answer fact: `the-relation-is-derived-through-containment` (source review, 2026-09-07).
+
+### Frontier survey, 2026-09-09, of a398ef53
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- This node's answer moves the survey's selection to its own node while the survey's other bound stays on `review-cost`, whose binding answer reads "no brief grows with the record." — a bound this brief breaks by construction, since a survey's object is the record. The pending options are split across the two nodes: `the-surveys-selection-moves-to-its-own-node`, `the-surveys-unreached-node-is-one-line` and `the-brief-is-bounded-by-what-one-call-holds` all stand on `review-cost`'s answer fact, not here.
+- The kickback rule this node restates is stated on `recording`, whose answer fact carries the option `no-kickback-from-the-confirmation` that would strike it; the word occurs eight times in this node's section of the brief, and `recording`'s option names no node but its own.
+- The node that defines the survey defines it nowhere: "- Defines: `frontier survey` (no gloss yet)".
+
+Strongest counter-argument (moderate): The consistency this node keeps is not kept over the terms it uses: the reserved fact is `topology` in the schema and "Existence" in `dialogue`'s gloss, in `how-a-fact-is-headed`'s answer and in `unanswered`'s sentence, and the survey that would catch that is constituted by this node while the term for it here is left "(no gloss yet)". A frontier-consistency answer that adds a sixteenth validation before its own vocabulary is settled adds a check the record cannot yet run cleanly against itself.
+
+The session's reply: All three findings kept. The vocabulary point in the counter-argument is the one that reaches furthest and is recorded as its own frontier finding: the third reserved fact is `topology` in the schema and 'Existence' in every place the author actually reads it, and the survey that would catch that is constituted by this node while its own term for that survey is left unglossed. On the split bound, the finding is accurate that the three pending options all stand on `review-cost` and not here; the division between the two nodes is what `review-cost`'s reply names as owed.
+
+### Frontier finding, 2026-09-09
+
+Kind: coverage.
+
+The kickback rule is stated on `recording` — "**What a kickback leaves standing.** A response given on one fact moves the whole node, because a node has one stage and one next movement owed on it", and "a kickback from either reading moves the nodes it names and no others." — and is restated or relied on across the frontier: within this brief's sections the word appears in `when-the-kickback-feedback-shows` (6 times), `review-cost` (9), `clean-context-review` (8), `frontier-consistency` (8) and `author-questions` (4). The option that would strike it, `no-kickback-from-the-confirmation`, stands on `recording`'s answer fact alone and names none of them; it is in the legacy encoding, so "the option carries no content of its own, and what it would answer is its sentence above". A ruling for it would leave five other nodes stating a rule the record no longer has.
+
+Also named: commons.systems/disposition-graph/recording, commons.systems/disposition-graph/when-the-kickback-feedback-shows, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/author-questions.
+
+Proposed: The survivor is `recording`, which owns how a disposition is confirmed and recorded. The strike option is re-encoded so that it names what falls with it, and the other nodes cite `recording` for the rule instead of restating it, so that a ruling on one fact changes one text. `when-the-kickback-feedback-shows` already carries the author-sourced option `the-question-has-no-subject-and-the-node-is-a-prune-proposal` and is named here as the largest restatement rather than for a change of its own.
+
+Recorded as an option on commons.systems/disposition-graph/recording's answer fact: `the-kickback-rule-names-what-falls-with-it` (source review, 2026-09-09).
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: "- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)" (`growth`); "- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)" (`recording`); "- Defines: `clean-context review` (no gloss yet)"; "- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)" (`viable-options`); "`doctrine` (no gloss yet); `proposal` (no gloss yet)" (`authority`); "- Defines: `neighbourhood` (no gloss yet)" (`review-cost`); "- Defines: `probe` (no gloss yet)" (`author-questions`, at the ruling stage); "- Defines: `frontier survey` (no gloss yet)"; "- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)" (`readings`); "- Defines: `seam` (no gloss yet)" (`decomposition`); "- Defines: `session context` (no gloss yet); `rules` (no gloss yet)" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — "Doctrine is the ratified answers taken together." and "A proposal is technical vocabulary and is not overloaded" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant." The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term "with no path to it over 'under', 'depends' or 'cites'", which presupposes a definer and never asks whether the definer said anything.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: Each node fills the glosses it claims, which is a fill and not a redraft, so no stage is owed for it and none is named here except where the answer itself is implicated. The two exceptions: `authority`'s glosses are copied from its own answer, which is bookkeeping; and `viable-options` and `what-acts-during-bootstrap` settle between them who defines the grant, since one claims the term with nothing behind it and the other defines the thing under the name `bootstrap authority` — the survivor is `what-acts-during-bootstrap`, which has the author's own term and a gloss, and `viable-options` drops the claim or points at it. A node that cannot gloss a term it claims is claiming a term it does not own, and dropping the entry is the other way to close it.
+
+### Frontier finding, 2026-09-09
+
+Kind: coverage.
+
+The bound `review-cost` recommends is broken by construction by the survey brief, and this reading is the measurement the record's pending option lacks. The binding answer reads "no brief grows with the record." and "a part of the brief that grows with the record rather than with the draft is carried as a list of pointers, and a part that is the draft's own is carried whole." The survey's object is the record, so its brief grows with it: this one enumerates the mechanical tier one finding to a line, having reported that "the 4 that report a state of the record (recommendation-past-its-pin, term-without-a-path, duplicated-passage, unfolded-account-section) reported 214 finding(s), with 18 note(s) beside them", prints a section per neighbourhood node and a one-line row per context node, and could not be read in one call — it was read in pages. The same answer names that outcome as a defect: "A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim", "A brief that fits is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it." and "an instrument whose brief is found growing with the record is a defect of the instrument, repaired before it runs again and never a cost the record carries." The option `the-brief-is-bounded-by-what-one-call-holds` already stands on this fact, as do `the-surveys-unreached-node-is-one-line` and `the-surveys-selection-moves-to-its-own-node`; what is added here is the measurement — the instrument's own reader reporting that it did not fit — and the observation that the clause as written binds a brief whose object makes it unsatisfiable.
+
+Also named: commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/clean-context-review.
+
+Proposed: No new option: the three already on this fact are the candidates. What is proposed is that the answer say which of its clauses reach the survey brief and which reach the draft brief only, since "no brief grows with the record" cannot bind a reading whose object is the record, and that the survey's bound be stated as its selection — which is where `frontier-consistency`'s recommendation `the-judged-set-and-its-comparisons-move-to-survey-selection` already puts it — rather than as a growth rule the survey must break to run. `clean-context-review` is named because it constitutes the brief and would carry the division.

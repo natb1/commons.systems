@@ -30,14 +30,14 @@ review:
   of: 5a1158c3c67eaa7e81097e7faeb737b46aeb8ede
   against: "The amendment narrows the author's literal instruction while appearing to record it: the author said unanswered nodes are hidden from the browser and listed by the alignment page, and the record now hides only the nodes with no '## Answer' and shows the rest as drafts. The session's defence is sound and the stage is genuinely rendered, so the reversal is disclosed and mitigated — but the answer still states the narrowed rule as though it were the author's, and the clause that would say plainly 'this narrows what you said' exists only as the pending `narrowing-disclosed` alternative. The author is being asked to confirm a change to their own ruling that the text presents as a restatement of it."
   survey:
-    date: 2026-09-07
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "cdefb59a945de7487f5979d5c7fd925a8c577779f868cbcb3f02063c79a283d8"
       answer: "775603936a24544fc26faac280a91db81a35b5e6a95c077ddbeb7e4844e9b184"
-      options: "69fbb7fc5fb2e69cd52271cdb1b67313daf360bdd2859629878a46b85aa5ca5d"
-      rivals: "89ce91f6c31e8d875b3b0eefdf55c8d2b3bc9d412fb649470e3211b6c86b4fd9"
-      words: "1b33ce82584ebc06c860c2e0432f04e2677da60c856fb4a2ffda79d0e4dff2ef"
+      options: "6bbb906ec1e31d68856640745b7e74d2f3247bd8b41d605b4152109059c644a5"
+      rivals: "27ea5375a7fd4c509c31fd7a77b303bed4563492a3f6a90f6cbfadcfc162941e"
+      words: "2e9f4dc7ead7a7c3d0d284d3dad719ca0c7edc8eef6a1a4c02098116367f806d"
 facts:
   - name: answer
     options:

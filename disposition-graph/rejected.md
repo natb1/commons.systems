@@ -10,8 +10,15 @@ review:
   commit: a644c2bb101b7f2e652c9c8d0100dd071c17d3d8
   against: "The recommended answer has little ground left of its own once its restatements are cited away. Its membership rule is viable-options' `passed-over-options-stay` seen from this side, its account of what an option carries is dialogue's, its account of what the projections show is alignment-page's, and its rule about the rationale is prose-and-structure's — and findings 4 and 5 show the fence still carries three of those as text rather than as citations, which is what `membership-cited-not-restated` exists to fix. What is left as this node's own is a liquidation the implementation already performed at 29d285d5 and a `defines` entry carrying a bare term with no gloss, and the third claim it makes for itself, that the record keeps no second home for a rejection, is not yet true of the record: projection's own recommended text still proposes a section carrying \"the alternatives the rationale rejected\". So a ratification here spends a ruling on a decision the author will have made one node earlier, and the answer that stands, `non-chosen-viable-options`, is the author's own words already answering the question they asked. Against that: the author asked this question twice, in 2026-09-02 and 2026-09-03, and it is entitled to an answer somewhere; deferred on the authority fact would let that answer act and keep the pair on the frontier to be ruled together, which is the exit the fact's own `against` names."
   survey:
-    date: 2026-09-05
+    date: 2026-09-09
     of: 5f3b0712edb438ae1287198c82b9a2a817cb929c
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "0cabde5bc10491646abbe3c0d0f8e2cd5ecc515aa4bb641bac778cdd06cacaf7"
+      answer: "f6bf509c7d3ac70bf78385a89c572e2a5e61f81cc8d89bbc1d5ab2ca3c1632e2"
+      options: "d6d713622e3787972ed850065cb9cc06e505b422993b1150ac76dad1d8530901"
+      rivals: "e8c8976a5f1d1ea785300e5096d4a03af4359fd42b32086383cb85b0b2748892"
+      words: "533c13aa441367fdf7851b4b1309c40f4fb9baa5f9547a8f14ca2d0e773249f7"
 facts:
   - name: answer
     options:

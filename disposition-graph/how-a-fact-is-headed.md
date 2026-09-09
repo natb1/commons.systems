@@ -1,6 +1,6 @@
 ---
 question: How is a fact's section headed on the alignment page?
-stage: ruling
+stage: maieutic
 form: rule
 facts:
   - name: answer
@@ -64,8 +64,15 @@ review:
   commit: f146f8f44b295c64e47a13bff338748035183d87
   against: "All five findings of the previous reading are answered, each verified at its locus: the false 'nothing in the record defines the term answer' claim is replaced with an accurate account of the bare entry at node.md:65; the passed-over reason and the fact's `against` on `heading-is-the-name-and-a-link` are corrected to the same effect; the fallback-to-dialogue clause is removed entirely rather than patched, since the new recommendation needs no fallback; every stale project.mjs/derive.mjs line citation is now given by function name; and the Account no longer calls the periagogic question a probe, instead correctly routing it through the fact's own options under `probe-or-node`. Question two also turns up nothing false: the new design (glossing `answer` and `persistence` on `dialogue` and releasing the bare entries on `node` and `transience`) is a genuinely new decision beyond what the previous reading's own suggested missing option sketched (which touched only two nodes, `node` and `transience`, by glossing them directly rather than writing to `dialogue`), but it is drawn from cited evidence (`glossary`/`definerIndex` both take the first definer and ignore later ones) and its cost is stated plainly in the fact's own `against`, so it reads as a defensible design choice made in the open rather than an unexamined addition."
   survey:
-    date: 2026-09-07
+    date: 2026-09-09
     of: 156b5aa31530095e69f7d25e2127f79c62f5557b
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "a2840b9248943fb0dd9e6459b0d1c063daaaeaa7c69862d4048c8d4b424b5b08"
+      answer: "57e30521e7bf1b9676b21c8950c7b3d69c7c1cd422fa6a2c905885b680b99a9f"
+      options: "a57b9a7cbc7b40154ed63b28b8918d92baeb8270059430545ba6275c01a4aa27"
+      rivals: "78d54fe6856fcdd58c6ab67de7f26cff94b42883b1442d2bcd502a5d5d907121"
+      words: "ddfcced16cab317048a31e2ec005883007833634c6e58d5855b1b740ed536818"
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -583,3 +590,13 @@ Recorded as an option on commons.systems/disposition-graph/transience's answer f
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/how-a-fact-is-headed stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `glosses-written-with-this-ruling`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/29, referenced by 1 option the entry's own date names. The content of `name-linked-to-the-definer (at 0f4c594d)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `heading-is-the-name-and-a-link`, `question-as-the-heading`, `name-with-no-link`, `link-to-the-definer-or-to-dialogue`, `name-and-question-together`, `answer-keeps-the-question`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `ffc2656dd3a15f8511154e684286ae01dfdb8027` is re-computed for the encoding as `b81b6e224511ac07c31a06cc7d14c8e27af2e798`; nothing it read changed. The survey's pin `ffc2656dd3a15f8511154e684286ae01dfdb8027` is re-computed for the encoding as `b81b6e224511ac07c31a06cc7d14c8e27af2e798`; nothing it read changed.
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+The third reserved fact is named `topology` in the schema and "Existence" wherever a reader meets it. `dialogue`'s `defines` list carries "- term: topology" whose gloss reads "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding.", two entries above "Keep is the choice on the topology fact that the node stays in the record with its question and its answer." — so one gloss list names the same fact both ways. `how-a-fact-is-headed`'s answer reads "The three reserved facts are headed \"Authority\", \"Existence\" and \"Persistence\"." `unanswered`'s sentence, quoted on `which-facts-are-listed`, reads "the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape".
+
+Also named: commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/which-facts-are-listed.
+
+Proposed: The survivor is `topology`, the name the schema, the frontier and this reading's own output all use. `dialogue`'s gloss for the term `topology` is rewritten to open with the term it glosses; `how-a-fact-is-headed`'s answer heads the fact "Topology", which is a change to what the author reads on the alignment page and so is put as its own answer text rather than as an implementation note; and `unanswered`'s sentence names the topology fact. `which-facts-are-listed` is named because it quotes `unanswered`'s sentence and its own option about the asymmetry moves with the wording; its answer needs no other change.

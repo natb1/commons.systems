@@ -105,15 +105,120 @@ review:
   commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
   against: "The measured byte totals for the eight design units (16,432 to 44,306 bytes, 281,879 total) recompute today to 282,151 bytes across the same files, roughly 0.1% over the stated figure, which is within noise (the files may have been touched fractionally after the cited commit) and not a material misstatement. No other gap found."
   survey:
-    date: 2026-09-07
+    date: 2026-09-09
     of: 9a3698fa12d32547a11bf9152f06f839156d136a
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "b7be0c0bccbe17b9e3ae32c87cf3c070e291493bb1277d94af19536c80084481"
-      answer: "03740cf9e80201461b02d424af40fb9f6e34011a3a70e47c3bab9fc020a38318"
-      options: "23aa78c221cd280c6183d1f22b4c44e06574fb08ac18f55da09b7a2726d55e0c"
-      rivals: "f62628bf4bb3c890c1a23f71d5620d511ed22defa180ea1509aaec4bc8a0bf26"
+      answer: "9814ea95b0d4148800160c8fad8f25450197493076dfa06bc09c97a072b35b01"
+      options: "94c276bded9b99fab3cac5eb3b8c3bc5ce0e70854311278ba5972850da5eabbd"
+      rivals: "1a58e7567ce89cac689f1abc7522d587148bc50597a96f2007ad36cb5820464b"
       words: "b372d10c54ff730b0603ff96942cfdb70aa458eb35dccc12738cd4cde8135e75"
+    findings:
+      - finding: "Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: \"- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)\" (`growth`); \"- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)\" (`recording`); \"- Defines: `clean-context review` (no gloss yet)\"; \"- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)\" (`viable-options`); \"`doctrine` (no gloss yet); `proposal` (no gloss yet)\" (`authority`); \"- Defines: `neighbourhood` (no gloss yet)\" (`review-cost`); \"- Defines: `probe` (no gloss yet)\" (`author-questions`, at the ruling stage); \"- Defines: `frontier survey` (no gloss yet)\"; \"- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)\" (`readings`); \"- Defines: `seam` (no gloss yet)\" (`decomposition`); \"- Defines: `session context` (no gloss yet); `rules` (no gloss yet)\" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — \"Doctrine is the ratified answers taken together.\" and \"A proposal is technical vocabulary and is not overloaded\" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: \"`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant.\" The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term \"with no path to it over 'under', 'depends' or 'cites'\", which presupposes a definer and never asks whether the definer said anything."
+        kind: "vocabulary"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/decomposition"
+          - "commons.systems/disposition-graph/growth"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/authority"
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/readings"
+          - "commons.systems/disposition-graph/session-context"
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-page"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+      - with: "commons.systems/disposition-graph/authors-words-on-the-page"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+          - "words:words/2026-09-04/23"
+          - "words:words/2026-09-07/5"
+          - "words:words/2026-09-07/6"
+          - "words:words/2026-09-07/7"
+          - "words:words/2026-09-07/8"
+          - "cites"
+          - "depends"
+      - with: "commons.systems/disposition-graph/delegation-bounds-and-sizing"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+          - "parent:commons.systems/disposition-graph/delegation"
+          - "cites"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "term:adversarial review (defines: commons.systems/disposition-graph/evaluation)"
+      - with: "commons.systems/disposition-graph/expert-instructions"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+          - "words:words/2026-09-04/23"
+          - "words:words/2026-09-07/5"
+          - "words:words/2026-09-07/6"
+          - "words:words/2026-09-07/7"
+          - "words:words/2026-09-07/8"
+          - "depends"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/materialization"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/probe-or-node"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "words:words/2026-09-04/23"
+      - with: "commons.systems/disposition-graph/review-cost"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+          - "words:words/2026-09-07/5"
+          - "words:words/2026-09-07/6"
+          - "words:words/2026-09-07/7"
+          - "words:words/2026-09-07/8"
+      - with: "commons.systems/disposition-graph/review-model"
+        keys:
+          - "words:words/2026-09-07/5"
+          - "words:words/2026-09-07/6"
+          - "words:words/2026-09-07/7"
+          - "words:words/2026-09-07/8"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review-skills"
+        keys:
+          - "words:words/2026-09-07/10"
+      - with: "commons.systems/disposition-graph/survey-selection"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+      - with: "commons.systems/disposition-graph/tier"
+        keys:
+          - "depends"
+      - with: "commons.systems/disposition-graph/unit-skills"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+          - "words:words/2026-09-07/10"
+          - "cites"
 form: rule
 under:
   - commons.systems/disposition-graph/delegation
@@ -659,3 +764,25 @@ dialogue's standing answer: 'The author\'s words are not a section of the node. 
 Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/transience.
 
 Proposed: dialogue and quotes survive. The five nodes that place words under `## Disposition` are amended to say the words are ledger entries referenced from the option or probe they bear on; recording and materialization strike or date their 'until it lands' clauses once the applying session confirms the migration's extent; quotes' answer states the partial state if any node's words are still unmigrated.
+
+### Frontier survey, 2026-09-09, of 9a3698fa
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The node that decomposes a disposition into units defines its one term nowhere: "- Defines: `seam` (no gloss yet)", while its recommended answer `a-unit-returns-the-amendment` turns on where the seams between units fall.
+
+Strongest counter-argument (weak): The answer has a unit return an amendment, and the term that decides where one unit ends and the next begins — `seam` — is claimed by this node and left undefined, so the rule that a unit needing a second contract is two units has no stated test behind it. Two sittings decomposing the same disposition can therefore return different unit sets and both be within the answer, which is the outcome the answer exists to prevent.
+
+The session's reply: Kept. `seam` is the term that decides where one unit ends and the next begins, this node claims it, and it is unglossed, so the rule that a unit needing a second contract is two units has no stated test behind it. The counter-argument names the consequence precisely: two sittings decomposing one disposition can return different unit sets and both be within the answer.
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: "- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)" (`growth`); "- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)" (`recording`); "- Defines: `clean-context review` (no gloss yet)"; "- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)" (`viable-options`); "`doctrine` (no gloss yet); `proposal` (no gloss yet)" (`authority`); "- Defines: `neighbourhood` (no gloss yet)" (`review-cost`); "- Defines: `probe` (no gloss yet)" (`author-questions`, at the ruling stage); "- Defines: `frontier survey` (no gloss yet)"; "- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)" (`readings`); "- Defines: `seam` (no gloss yet)" (`decomposition`); "- Defines: `session context` (no gloss yet); `rules` (no gloss yet)" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — "Doctrine is the ratified answers taken together." and "A proposal is technical vocabulary and is not overloaded" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant." The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term "with no path to it over 'under', 'depends' or 'cites'", which presupposes a definer and never asks whether the definer said anything.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: Each node fills the glosses it claims, which is a fill and not a redraft, so no stage is owed for it and none is named here except where the answer itself is implicated. The two exceptions: `authority`'s glosses are copied from its own answer, which is bookkeeping; and `viable-options` and `what-acts-during-bootstrap` settle between them who defines the grant, since one claims the term with nothing behind it and the other defines the thing under the name `bootstrap authority` — the survivor is `what-acts-during-bootstrap`, which has the author's own term and a gloss, and `viable-options` drops the claim or points at it. A node that cannot gloss a term it claims is claiming a term it does not own, and dropping the entry is the other way to close it.

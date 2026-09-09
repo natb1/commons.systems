@@ -72,8 +72,15 @@ review:
   of: 776f43f6f04c2806a37655dda263896f8b5db63c
   commit: f146f8f44b295c64e47a13bff338748035183d87
   survey:
-    date: 2026-09-07
+    date: 2026-09-09
     of: 776f43f6f04c2806a37655dda263896f8b5db63c
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "23adf98d9215464fd7d5647970b426a5b60044db7a8411446fc18cea7d866f6f"
+      answer: "6a4908704af409f56834831c36b05fb0ae1d1f531e0d4da01ba4ee40fa65cab7"
+      options: "d33b579e7fd01d60dd298562d7120bdaa8b3be651b3c871a61cd450816af7c44"
+      rivals: "b775ff5c9fe865b50da7b6043d0dc0b84a92bf88fc36fbf37daefd69c4fa6177"
+      words: "d39feea182351f180c70d9aab45e291b7f10d6dd236c2e4083aa98957f687816"
 ---
 
 ## Facts
@@ -638,3 +645,15 @@ part of its question that survives -- when a control collecting the author's wor
 revealed, and what becomes of what is written in it -- is a real question about the
 alignment page that would be lost if the node were simply deleted; the option names
 `alignment-page` as where it goes.
+
+### Frontier finding, 2026-09-09
+
+Kind: coverage.
+
+The kickback rule is stated on `recording` — "**What a kickback leaves standing.** A response given on one fact moves the whole node, because a node has one stage and one next movement owed on it", and "a kickback from either reading moves the nodes it names and no others." — and is restated or relied on across the frontier: within this brief's sections the word appears in `when-the-kickback-feedback-shows` (6 times), `review-cost` (9), `clean-context-review` (8), `frontier-consistency` (8) and `author-questions` (4). The option that would strike it, `no-kickback-from-the-confirmation`, stands on `recording`'s answer fact alone and names none of them; it is in the legacy encoding, so "the option carries no content of its own, and what it would answer is its sentence above". A ruling for it would leave five other nodes stating a rule the record no longer has.
+
+Also named: commons.systems/disposition-graph/recording, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions.
+
+Proposed: The survivor is `recording`, which owns how a disposition is confirmed and recorded. The strike option is re-encoded so that it names what falls with it, and the other nodes cite `recording` for the rule instead of restating it, so that a ruling on one fact changes one text. `when-the-kickback-feedback-shows` already carries the author-sourced option `the-question-has-no-subject-and-the-node-is-a-prune-proposal` and is named here as the largest restatement rather than for a change of its own.
+
+Recorded as an option on commons.systems/disposition-graph/recording's answer fact: `the-kickback-rule-names-what-falls-with-it` (source review, 2026-09-09).

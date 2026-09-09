@@ -68,8 +68,15 @@ review:
   of: 128aad9b132a46a1b691b8bc3659e1374509daa1
   commit: f146f8f44b295c64e47a13bff338748035183d87
   survey:
-    date: 2026-09-07
+    date: 2026-09-09
     of: 128aad9b132a46a1b691b8bc3659e1374509daa1
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "5325890471ec99e7d67f731c2130c21905f9a1e6e9e758d8969a024e7b91ac3e"
+      answer: "32355f282f0e3065b22395ebad09abeb3bac4e80f5e19816f4030b4d1c6f0c29"
+      options: "342b1af783acc589b7e009b4f3a97a49ea68a8eb16e3bf2302c00f96f1d978f2"
+      rivals: "59ced2213ee0ceb65b0294b3a68c7da225bb34ef0f81e40be92d68b0e67d3ada"
+      words: "5e069faf3202108fca9f8c26bc90ee240314ad632934c345969661a5cc950af6"
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -645,3 +652,13 @@ fact under `commons.systems/disposition-graph/graph-topology`'s recommended
 answer and the author's grant of 2026-09-08. Nothing else in the sentence moves:
 the count is still four, and the reader is still the single home of the list, so
 this node still says where to look rather than keeping a second copy.
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+The third reserved fact is named `topology` in the schema and "Existence" wherever a reader meets it. `dialogue`'s `defines` list carries "- term: topology" whose gloss reads "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding.", two entries above "Keep is the choice on the topology fact that the node stays in the record with its question and its answer." — so one gloss list names the same fact both ways. `how-a-fact-is-headed`'s answer reads "The three reserved facts are headed \"Authority\", \"Existence\" and \"Persistence\"." `unanswered`'s sentence, quoted on `which-facts-are-listed`, reads "the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape".
+
+Also named: commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/how-a-fact-is-headed, commons.systems/disposition-graph/unanswered.
+
+Proposed: The survivor is `topology`, the name the schema, the frontier and this reading's own output all use. `dialogue`'s gloss for the term `topology` is rewritten to open with the term it glosses; `how-a-fact-is-headed`'s answer heads the fact "Topology", which is a change to what the author reads on the alignment page and so is put as its own answer text rather than as an implementation note; and `unanswered`'s sentence names the topology fact. `which-facts-are-listed` is named because it quotes `unanswered`'s sentence and its own option about the asymmetry moves with the wording; its answer needs no other change.

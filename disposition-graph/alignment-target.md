@@ -8,15 +8,116 @@ review:
   of: 1c5395eea68a14452e88040c5894830533188fdf
   against: "Taking the highest-ranked unanswered node is right if rank is the author's attention, and it is not: every boost in the record is the AI's and unratified, as attention's own answer now says, and the one order the author did state covers six nodes out of sixty-two. So 'rank answers it without the session's judgment entering' describes a queue the AI itself ordered and presents an AI choice to the author as the record's own. The session's reply — that the page shows the author the whole queue at every visit — is a real answer and is now true of the built page, which weakens but does not dissolve the objection."
   survey:
-    date: 2026-09-07
-    of: 7d6e8569bbe3275ad2c5728cbbe921834b7ad3a0
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: 70f99190034a5a1cd6d1a676ead8080640ded99f
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "4d5ccbde44217aa1c1bc48dca64a34e5c23393212c0168184b0e7a88fa876655"
-      answer: "ee7644da4157472aaea27d2fa02696066661622cb10972efc5e7b652568ae942"
-      options: "2187452cb8ce015fb3d26bc698281dde1ea7d033ed2bddf0c76cee7e853edf7b"
-      rivals: "a7d22be954412b06d9292fe95ad14da769b46e89137f7e9966086d6c0c41ac36"
-      words: "f36b59ba0dbc228801479a8069036226f38d672453820a5749f49d80a8f71508"
+      answer: "8628a5488a8d27bd11962ad6c16f35941daa871efefdc56a84a499efa8bf73a9"
+      options: "be4b855abafdcb8db2019795013d7af60ef45f54f4b3a0ab0e6640cb2ebad8f7"
+      rivals: "ed8036a309c08bef12b0adb8f3aec4a4cfc8291d996ec84ac11b097dc02a4109"
+      words: "447befcf21008c4c2e2e2c1bbc0290b04afd0f49a7e750dbd2fde86b40edb9a7"
+    findings: []
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-order"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/attention"
+        keys:
+          - "term:boost (defines: commons.systems/disposition-graph/attention)"
+          - "term:onboarding path (defines: commons.systems/disposition-graph/attention)"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/checkpoint"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "cites"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/expert-identity"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/expert-instructions"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/fidelity"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/movements"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/plato-elenchus"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/plato-maieutics"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/plato-periagoge"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/probe-or-node"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/probe-response-treatment"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/purpose"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+          - "cites"
+      - with: "commons.systems/disposition-graph/round-termination"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/session-state"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/standard-report"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/turn-form"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+          - "cites"
+      - with: "commons.systems/disposition-graph/unreached-traditions"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/what-an-option-row-carries"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/public/agency"
+        keys:
+          - "cites"
 facts:
   - name: answer
     options:
@@ -396,3 +497,14 @@ re-evaluates the sequencing may re-order work the sitting has already done, whic
 the obligation `words/2026-09-08/22` puts on a sitting under a grant, so this node's
 answer and that refinement are two halves of one rule and a reader of either should see
 the other.
+
+### Frontier survey, 2026-09-09, of 70f99190
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (weak): Nothing has read what this node now recommends. Its header records "draft review: forward (moderate, 2026-09-03, of 1c5395eea68a14452e88040c5894830533188fdf) — STALE" and "survey: surveyed 2026-09-07, of 7d6e8569bbe3275ad2c5728cbbe921834b7ad3a0 — STALE", so both readings answer a recommendation the node no longer carries, and the answer that would decide what a sitting takes up when given nothing has never been checked in the form it now stands. The frontier's argument is against ruling it before either reading is re-run, not against its content.
+
+The session's reply: Kept, and it is a finding about the record's own bookkeeping rather than about the answer. Both readings on this node are stale against a recommendation it no longer carries, so nothing has read what it now says. The frontier's argument is against ruling it before either reading is re-run, and this sitting takes that: the node is not brought to the author until a reading answers the text that stands.

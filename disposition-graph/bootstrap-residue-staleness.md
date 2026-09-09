@@ -1,6 +1,16 @@
 ---
 question: What keeps a sitting's record of reconciliation residue from being acted on after the disposition it rests on has changed?
 stage: periagogic
+review:
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "d6cb274fcd0b69e96b297eec20669680007b78c82630cecb610bff8689592939"
+      answer: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      options: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      rivals: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 form: rule
 under:
   - commons.systems/disposition-graph/what-acts-during-bootstrap

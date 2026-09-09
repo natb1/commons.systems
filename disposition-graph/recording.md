@@ -9,434 +9,230 @@ review:
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "All nine of the last reading's findings have textual fixes matching their suggested edits, but two spots stay short of a clean repair. First, the ledger disclosure added to 'The recording of a confirmation' states a process ('written by the migration under the author's grant of 2026-09-07') without naming it a shim or citing the record's own unmaterialized-instrument vocabulary the way the sibling `unconfirmed-accumulation` text the last reading quoted does, so a reader could still take it as a working mechanism rather than a disclosed gap. Second, in fixing the delta-option sentence the amendment also dropped the 'stands' mechanism from the surrounding text and replaced it with an unverified claim about how `dialogue` encodes an answer's resolution, which is new ground the last reading never reviewed and this delta reading cannot check against `dialogue`'s own text."
   survey:
-    date: 2026-09-07
-    of: ab7802cb6bca0d8b101fd3ce8d79669dd9339286
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: c736d7e8a811f3220c1b1d6b64f2ae7e412966af
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "4f247ec819cb4467053ecb74976ac9328384ecd0b5272c4841bf81cbc02bfca8"
-      answer: "b4d678991455129db646b6ebb8fc15b903cb0b1f5c3cca090e6473b9569ea41e"
-      options: "ecc4a2f4a55155987f7e6bd496d197cf39be796fa3b513075e0e1a39fc610361"
-      rivals: "e4f2a2c5bb17fb5611087ee4daf516a6ef3d2e50cf3dbf168666b4ae0639fe1f"
-      words: "d46f0c775218acf7b8329ba2c56987cf2f57eaa77d2dbc20e9000d23cb1cfefb"
-    findings: []
+      answer: "e7d312a70ce142ea802b68940bbcb97c333083452be4fdc8e7706aaab640d068"
+      options: "8856cf86ea3ae2d279f831a08c655b82d768cc4703e6bb62210d2b8c751a1eb0"
+      rivals: "ccabec7409796892a4e9b2b475fb955a29d21e7c0646646f3bc52fcc65d301b4"
+      words: "f0a4b085c0e4b129c9a8684210f642e71a8a655feaee005fccafb634cb150205"
+    findings:
+      - finding: "The cap on open probes is struck by one node's recommendation and enforced by the instrument another node constitutes. `author-questions` recommends `a-probe-carries-a-target-and-a-type`, whose text reads \"The admission test is what bounds the list, and no number is.\" and \"A cap binds the movement and is checked by the readings and never by the graph's reader, which checks the shape of a probe as it checks the shape of a shim, so a movement that would exceed one does not fail; it writes what it found somewhere the count does not reach, and on 2026-09-08 that somewhere was prose.\" The survey brief that carries this reading instructs \"**The cap is three open probes on one node**\" and prints on every judged node \"The cap binds the movement and is checked by this reading, never by the parser.\" `recording`'s answer-fact `against` reasons from the cap — \"where the cap has been reached the rule bends rather than binds, so the author's last sight of the text is one no reader saw\" — and its answer fact carries the option `readiness-when-the-cap-is-reached`. The contradiction binds today, not in principle: `quotes` shows \"3 open of a cap of three, and 0 discharged.\""
+        kind: "contradiction"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/quotes"
+      - finding: "A probe stands open on `round-termination` while the author's answer to it is recorded and cited by three options. The node lists \"`where-does-reframing-the-question-fall` — open, on its `answer` fact, raised 2026-09-08 by ai: The answer types persuasion. Reframing a question until the disagreement no longer applies is not persuasion. Where does that move fall?\" Its own option `no-terminator-the-author-confirms`, `recording`'s `probes-survive-the-recording` and `author-questions`' `no-cap-and-probes-do-not-block` each carry the same reference: \"The author, 2026-09-08, answering the probe `where-does-reframing-the-question-fall` on `round-termination`, which asked whether the answer's typing of persuasion types modes of persuading or modes of ending a round.\" The node's block reads \"2 open of a cap of three, and 2 discharged.\""
+        kind: "contradiction"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/round-termination"
+          - "commons.systems/disposition-graph/author-questions"
+      - finding: "The kickback rule is stated on `recording` — \"**What a kickback leaves standing.** A response given on one fact moves the whole node, because a node has one stage and one next movement owed on it\", and \"a kickback from either reading moves the nodes it names and no others.\" — and is restated or relied on across the frontier: within this brief's sections the word appears in `when-the-kickback-feedback-shows` (6 times), `review-cost` (9), `clean-context-review` (8), `frontier-consistency` (8) and `author-questions` (4). The option that would strike it, `no-kickback-from-the-confirmation`, stands on `recording`'s answer fact alone and names none of them; it is in the legacy encoding, so \"the option carries no content of its own, and what it would answer is its sentence above\". A ruling for it would leave five other nodes stating a rule the record no longer has."
+        kind: "coverage"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/author-questions"
+      - finding: "No node answers how an author's choice short of a confirmation is written, and three depend on there being one. The reading `festo-surrendered-subject-matter` states it: \"The node's own text records that the record cannot presently encode the first of them at all, `recording`'s ruling responses being `confirm` and `edit`, neither of which writes a choice made and not confirmed. So on the recommendation as it stands there is a mark with no producer and no retraction, on a row the machinery reads.\" `what-an-option-row-carries` recommends `five-marks-and-the-two-the-author-added` and `viable-options` recommends `an-option-carries-a-selection-per-party`, both of which put the mark on a row; `what-acts-during-bootstrap`'s rule text makes the unconfirmed choice the first term of the convergence reconciliation acts on and concedes that the clause \"states a rule whose encoding is owed\". None of the twenty-eight options on `recording`'s answer fact adds a response that writes one."
+        kind: "coverage"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/what-an-option-row-carries"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
+      - finding: "Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: \"- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)\" (`growth`); \"- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)\" (`recording`); \"- Defines: `clean-context review` (no gloss yet)\"; \"- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)\" (`viable-options`); \"`doctrine` (no gloss yet); `proposal` (no gloss yet)\" (`authority`); \"- Defines: `neighbourhood` (no gloss yet)\" (`review-cost`); \"- Defines: `probe` (no gloss yet)\" (`author-questions`, at the ruling stage); \"- Defines: `frontier survey` (no gloss yet)\"; \"- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)\" (`readings`); \"- Defines: `seam` (no gloss yet)\" (`decomposition`); \"- Defines: `session context` (no gloss yet); `rules` (no gloss yet)\" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — \"Doctrine is the ratified answers taken together.\" and \"A proposal is technical vocabulary and is not overloaded\" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: \"`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant.\" The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term \"with no path to it over 'under', 'depends' or 'cites'\", which presupposes a definer and never asks whether the definer said anything."
+        kind: "vocabulary"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/growth"
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/authority"
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/readings"
+          - "commons.systems/disposition-graph/decomposition"
+          - "commons.systems/disposition-graph/session-context"
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
     pairs:
       - with: "commons.systems/disposition-graph/alignment-order"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
           - "term:steelman (defines: commons.systems/disposition-graph/recording)"
       - with: "commons.systems/disposition-graph/alignment-page"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
           - "depends"
-          - "cites"
       - with: "commons.systems/disposition-graph/alignment-target"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
           - "parent:commons.systems/disposition-graph/growth"
           - "cites"
-      - with: "commons.systems/disposition-graph/aristotle-hexis"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/attention"
-        keys:
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
       - with: "commons.systems/disposition-graph/author-questions"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
-          - "cites"
+          - "words:words/2026-09-08/32"
+          - "words:words/2026-09-08/34"
       - with: "commons.systems/disposition-graph/authority"
         keys:
-          - "term:authority (defines: commons.systems/disposition-graph/authority)"
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
-          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
-          - "term:doctrine (defines: commons.systems/disposition-graph/authority)"
-          - "term:proposal (defines: commons.systems/disposition-graph/authority)"
-          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/authors-words-on-the-page"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/blocking-and-canopies"
-        keys:
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/bootstrap-exit-conditions"
-        keys:
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/checkpoint"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/chenery-reasoned-decision"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/class-recommendation"
-        keys:
-          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
           - "cites"
       - with: "commons.systems/disposition-graph/clean-context-review"
         keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
           - "words:words/2026-09-04/23"
+          - "words:words/2026-09-08/37"
           - "cites"
           - "depends"
-      - with: "commons.systems/disposition-graph/codd-update-anomaly"
-        keys:
-          - "cites"
       - with: "commons.systems/disposition-graph/decomposition"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
           - "words:words/2026-09-04/23"
-          - "cites"
       - with: "commons.systems/disposition-graph/delegation"
         keys:
-          - "term:main thread (defines: commons.systems/disposition-graph/delegation)"
-          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
-          - "term:unit (defines: commons.systems/disposition-graph/delegation)"
           - "parent:commons.systems/disposition-graph/growth"
-          - "cites"
       - with: "commons.systems/disposition-graph/dialogue"
         keys:
-          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:topology (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:persistence (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:prune (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
+          - "words:words/2026-09-08/32"
+          - "words:words/2026-09-08/37"
           - "depends"
       - with: "commons.systems/disposition-graph/evaluation"
         keys:
           - "term:adversarial review (defines: commons.systems/disposition-graph/evaluation)"
-          - "term:greenfield (defines: commons.systems/disposition-graph/evaluation)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
           - "parent:commons.systems/disposition-graph/growth"
-          - "cites"
       - with: "commons.systems/disposition-graph/fidelity"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
           - "parent:commons.systems/disposition-graph/growth"
       - with: "commons.systems/disposition-graph/frontier-consistency"
         keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
           - "words:words/2026-09-04/23"
-          - "cites"
       - with: "commons.systems/disposition-graph/graph-topology"
         keys:
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
           - "depends"
-          - "cites"
       - with: "commons.systems/disposition-graph/growth"
         keys:
-          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
-          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
-          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/hexis"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/how-a-fact-is-headed"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/instruments"
-        keys:
-          - "term:check (defines: commons.systems/disposition-graph/instruments)"
-          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
-          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/legacy"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/lockfile"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/madr-decision-records"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
+          - "words:words/2026-09-08/37"
       - with: "commons.systems/disposition-graph/materialization"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/model"
-        keys:
-          - "term:disposition (defines: commons.systems/disposition-graph/model)"
-          - "term:node (defines: commons.systems/disposition-graph/model)"
-      - with: "commons.systems/disposition-graph/node"
-        keys:
-          - "term:answer (defines: commons.systems/disposition-graph/node)"
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:form (defines: commons.systems/disposition-graph/node)"
-          - "term:question (defines: commons.systems/disposition-graph/node)"
-          - "term:rationale (defines: commons.systems/disposition-graph/node)"
           - "cites"
-      - with: "commons.systems/disposition-graph/non-liquet"
+      - with: "commons.systems/disposition-graph/movements"
         keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/notarial-minute"
-        keys:
-          - "cites"
+          - "parent:commons.systems/disposition-graph/growth"
       - with: "commons.systems/disposition-graph/peirce-paper-doubt"
         keys:
           - "term:steelman (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/persistence"
+      - with: "commons.systems/disposition-graph/plato-elenchus"
         keys:
-          - "cites"
+          - "parent:commons.systems/disposition-graph/growth"
       - with: "commons.systems/disposition-graph/plato-maieutics"
         keys:
           - "parent:commons.systems/disposition-graph/growth"
       - with: "commons.systems/disposition-graph/plato-periagoge"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
           - "parent:commons.systems/disposition-graph/growth"
       - with: "commons.systems/disposition-graph/probe-or-node"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/progressive-disclosure"
-        keys:
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/projection"
-        keys:
-          - "term:projection (defines: commons.systems/disposition-graph/projection)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/promotor-fidei"
-        keys:
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/prose-and-structure"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/purpose"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/quotes"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
+          - "words:words/2026-09-08/37"
           - "cites"
       - with: "commons.systems/disposition-graph/readings"
         keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
-          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
-      - with: "commons.systems/disposition-graph/rejected"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/review"
-        keys:
-          - "term:review (defines: commons.systems/disposition-graph/review)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/review-approval-pinned-to-a-revision"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/review-cost"
-        keys:
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
-          - "cites"
+          - "words:words/2026-09-08/37"
       - with: "commons.systems/disposition-graph/review-model"
         keys:
           - "term:steelman (defines: commons.systems/disposition-graph/recording)"
           - "cites"
-      - with: "commons.systems/disposition-graph/review-skills"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
       - with: "commons.systems/disposition-graph/rfc-pep-status-field"
         keys:
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
           - "term:steelman (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/scholarly-peer-review"
+      - with: "commons.systems/disposition-graph/round-termination"
         keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/scope"
-        keys:
-          - "term:order (defines: commons.systems/disposition-graph/scope)"
-          - "term:section (defines: commons.systems/disposition-graph/scope)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/second-stop"
-        keys:
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/segregation-of-duties"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/session-context"
-        keys:
-          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
-      - with: "commons.systems/disposition-graph/single-subject-rule"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/software-factories"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/spec-driven-development"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/special-verdict-form"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/srs-introduction"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/stub-traditions"
-        keys:
-          - "cites"
+          - "words:words/2026-09-08/34"
       - with: "commons.systems/disposition-graph/survey-selection"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/tier"
-        keys:
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/tolerated-inconsistency"
-        keys:
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/transience"
-        keys:
-          - "term:persistence (defines: commons.systems/disposition-graph/transience)"
-          - "term:shim (defines: commons.systems/disposition-graph/transience)"
-          - "term:standing (defines: commons.systems/disposition-graph/transience)"
+          - "term:mechanical tier (defines: commons.systems/disposition-graph/survey-selection)"
           - "cites"
       - with: "commons.systems/disposition-graph/turn-form"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
           - "parent:commons.systems/disposition-graph/growth"
           - "cites"
       - with: "commons.systems/disposition-graph/unanswered"
         keys:
-          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
           - "term:confirmation with edits (defines: commons.systems/disposition-graph/unanswered)"
           - "term:denial with feedback (defines: commons.systems/disposition-graph/unanswered)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-          - "term:unanswered (defines: commons.systems/disposition-graph/unanswered)"
           - "parent:commons.systems/disposition-graph/growth"
           - "cites"
       - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
         keys:
           - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
           - "term:manifest line (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
           - "depends"
           - "cites"
       - with: "commons.systems/disposition-graph/under"
         keys:
           - "term:ceiling (defines: commons.systems/disposition-graph/under)"
-          - "term:context (defines: commons.systems/disposition-graph/under)"
-          - "term:under (defines: commons.systems/disposition-graph/under)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/unit-skills"
-        keys:
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/validation-order"
-        keys:
           - "cites"
       - with: "commons.systems/disposition-graph/viable-options"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
           - "depends"
-          - "cites"
-      - with: "commons.systems/disposition-graph/vocabulary-option-summary"
-        keys:
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/web-routing"
-        keys:
-          - "cites"
-      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
-        keys:
-          - "term:bootstrap (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
       - with: "commons.systems/disposition-graph/what-an-option-row-carries"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
           - "cites"
       - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
+          - "words:words/2026-09-08/37"
           - "cites"
       - with: "commons.systems/disposition-graph/where-a-change-request-goes"
         keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
+          - "words:words/2026-09-08/37"
           - "words:words/2026-09-04/36"
           - "cites"
-      - with: "commons.systems/disposition-graph/where-the-unconfirmed-indication-goes"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/which-facts-are-listed"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/disposition-graph/work-loop"
-        keys:
-          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
-          - "term:reconcile (defines: commons.systems/disposition-graph/work-loop)"
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
-          - "cites"
-      - with: "commons.systems/public/agency"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/public/aristotle-arche-of-action"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
-      - with: "commons.systems/public/pettit-non-domination"
-        keys:
-          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
-          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
 facts:
   - name: answer
     options:
@@ -559,6 +355,12 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/37
+      - name: the-kickback-rule-names-what-falls-with-it
+        source: review
+        ref: "2026-09-09"
+      - name: a-response-that-records-a-choice-short-of-confirmation
+        source: review
+        ref: "2026-09-09"
     recommends: probes-survive-the-recording
     boldness: moderate
     against: "Both readings must pin the recommendation as it stands before the author may answer a single row, so every ruling waits on two readings of the AI's own drafting, and where the cap has been reached the rule bends rather than binds, so the author's last sight of the text is one no reader saw; while the one judgment no instrument can check, whether a denial is about the options or about the ground, is made by the party the denial was aimed at. And the answer now folds what another node's instrument left, so what the confirmation removes moves whenever `unconfirmed-accumulation` moves, on an instrument that does not exist."
@@ -1755,6 +1557,13 @@ AI performs, which is a transfer in the direction this record usually guards aga
 What the author does on the page to reject a recommendation, now that the kick-back
 control is struck, is not answered here and is a probe.
 
+#### the-kickback-rule-names-what-falls-with-it
+
+The kickback rule is stated once, here, and every node that applies it cites this node rather than restating it; and the option that would strike the kickback names, in its own text, the nodes whose sentences fall with it. It is on the table because `no-kickback-from-the-confirmation` stands in the legacy encoding with no content of its own, while the rule it would remove is written into five other nodes' answers, so the author cannot see from the option what a ruling for it would cost. What it would answer is not whether the kickback survives but where the rule lives, so that whichever way that question is ruled, one text moves.
+
+#### a-response-that-records-a-choice-short-of-confirmation
+
+A third ruling response beside `confirm` and `edit`, which records that the author has chosen an option without ratifying it, and which can be lifted by the author the same way it is given. It writes the author's words and the date on the option as the other responses do, confers nothing, and is what the unconfirmed mark on a row reads from. It is on the table because the record presently shows a mark on an option row that no response writes and no response removes, and because `what-acts-during-bootstrap` makes that mark one of the two terms whose convergence licenses reconciliation during bootstrap: as things stand, the licence turns on a state the record cannot enter.
 
 ### authority
 
@@ -1918,3 +1727,73 @@ of the ref, most densely on this node, on `when-the-kickback-feedback-shows`, on
 term here, the subject of a whole node's question, the name of seven options one of
 which is recommended, and one of the three responses the alignment page offers the
 author. Striking it is not a wording change and this sitting does not treat it as one.
+
+### Frontier survey, 2026-09-09, of c736d7e8
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The recommended answer and one of its options rest on a probe cap that `author-questions`' recommended answer strikes. `recording`'s answer-fact `against` reads "where the cap has been reached the rule bends rather than binds, so the author's last sight of the text is one no reader saw", and its answer fact carries the option `readiness-when-the-cap-is-reached`; `author-questions` recommends `a-probe-carries-a-target-and-a-type`, whose text reads "The admission test is what bounds the list, and no number is." The cap the one node reasons from is the number the other removes.
+- The kickback rule is stated in this node's binding answer — "**What a kickback leaves standing.** A response given on one fact moves the whole node, because a node has one stage and one next movement owed on it", and "a kickback from either reading moves the nodes it names and no others." — and the option that would strike it, `no-kickback-from-the-confirmation`, stands on this node alone while the word is used across the frontier: within this brief's own sections the count is `recording` itself, `when-the-kickback-feedback-shows` (6), `review-cost` (9), `clean-context-review` (8), `frontier-consistency` (8) and `author-questions` (4). Ruling that option would falsify text on nodes it does not name.
+- The record has no ruling response that writes an unconfirmed choice, and this node's answer fact carries no option that would add one. The reading `festo-surrendered-subject-matter` records it: "`recording`'s ruling responses being `confirm` and `edit`, neither of which writes a choice made and not confirmed. So on the recommendation as it stands there is a mark with no producer and no retraction, on a row the machinery reads." The twenty-eight options listed on this node's answer fact include none that adds a third response.
+
+Strongest counter-argument (strong): Two of this node's clauses rest on machinery the record does not have and one on a number the record has removed. The confirmation is recommended with a cap-bending clause in its own `against` while `author-questions` recommends that "The admission test is what bounds the list, and no number is"; and the ruling responses it fixes, `confirm` and `edit`, cannot write the unconfirmed mark that `what-an-option-row-carries` puts on a row and that `what-acts-during-bootstrap` makes the first term of the convergence reconciliation acts on. So the node that owns how a disposition is recorded is the node that cannot record the one thing bootstrap reconciliation is said to act on.
+
+The session's reply: All three findings kept, and this node is where two of the record's largest owed encodings now sit. The cap half of this finding is answered in the implementation and not by an amendment here: the author struck the cap at `words/2026-09-08/32`, and this sitting struck it from all fourteen sites in eleven files at `9db16ed9` on `greenfield`, before this reading returned and independently of it. The brief this reading was given was generated before that commit, so where it reports the brief still instructing a count against a ceiling it is reporting a state the implementation has since left; the convergence is evidence for the finding and not against it, since two readings in clean context reached the same strike from the same words. What survives the strike on this node is the record half the commit could not reach: the answer fact's `against` still bends the confirmation at a cap the record no longer keeps, and the option `readiness-when-the-cap-is-reached` is still on the table conditioned on a bound that is gone. On the kickback, the finding is kept and `the-kickback-rule-names-what-falls-with-it` is recorded: an option in the legacy encoding that would strike a rule written into five other nodes' answers is one the author cannot price by reading it. On the third response, the finding is kept and `a-response-that-records-a-choice-short-of-confirmation` is recorded. That one is not a new discovery but a gap the record already knew it had and had put on no fact: `what-acts-during-bootstrap`'s own rule text concedes that the clause 'states a rule whose encoding is owed', and this is the first time the owed encoding stands as an option on the node that owns the ruling responses.
+
+### Frontier finding, 2026-09-09
+
+Kind: contradiction.
+
+The cap on open probes is struck by one node's recommendation and enforced by the instrument another node constitutes. `author-questions` recommends `a-probe-carries-a-target-and-a-type`, whose text reads "The admission test is what bounds the list, and no number is." and "A cap binds the movement and is checked by the readings and never by the graph's reader, which checks the shape of a probe as it checks the shape of a shim, so a movement that would exceed one does not fail; it writes what it found somewhere the count does not reach, and on 2026-09-08 that somewhere was prose." The survey brief that carries this reading instructs "**The cap is three open probes on one node**" and prints on every judged node "The cap binds the movement and is checked by this reading, never by the parser." `recording`'s answer-fact `against` reasons from the cap — "where the cap has been reached the rule bends rather than binds, so the author's last sight of the text is one no reader saw" — and its answer fact carries the option `readiness-when-the-cap-is-reached`. The contradiction binds today, not in principle: `quotes` shows "3 open of a cap of three, and 0 discharged."
+
+Also named: commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/quotes.
+
+Proposed: The survivor is `author-questions`' admission test. `clean-context-review`'s answer says what the reading checks — the three admission limbs, the `discharges` order, and the withdrawal of probes the record has since answered — and no number; the per-node "N open of a cap of three" line and the "The cap is three open probes on one node" instruction go from the brief with it. `recording`'s confirmation rule loses its cap-bending clause and the option `readiness-when-the-cap-is-reached` is passed with the reason that the bound it is conditioned on has been struck. `author-questions` and `quotes` need no change of text.
+
+Recorded as an option on commons.systems/disposition-graph/clean-context-review's answer fact: `the-reading-checks-admission-not-a-number` (source review, 2026-09-09).
+
+### Frontier finding, 2026-09-09
+
+Kind: contradiction.
+
+A probe stands open on `round-termination` while the author's answer to it is recorded and cited by three options. The node lists "`where-does-reframing-the-question-fall` — open, on its `answer` fact, raised 2026-09-08 by ai: The answer types persuasion. Reframing a question until the disagreement no longer applies is not persuasion. Where does that move fall?" Its own option `no-terminator-the-author-confirms`, `recording`'s `probes-survive-the-recording` and `author-questions`' `no-cap-and-probes-do-not-block` each carry the same reference: "The author, 2026-09-08, answering the probe `where-does-reframing-the-question-fall` on `round-termination`, which asked whether the answer's typing of persuasion types modes of persuading or modes of ending a round." The node's block reads "2 open of a cap of three, and 2 discharged."
+
+Also named: commons.systems/disposition-graph/round-termination, commons.systems/disposition-graph/author-questions.
+
+Proposed: The survivor is the discharge. `where-does-reframing-the-question-fall` is marked discharged on `round-termination` with `words/2026-09-08/34` as its reason and the same headnote the three options already carry, and the block's count drops to one open. Nothing else moves: the three options keep their references, and the node's stage is unchanged, a discharge being the ordinary way a list comes down rather than a movement backward.
+
+### Frontier finding, 2026-09-09
+
+Kind: coverage.
+
+The kickback rule is stated on `recording` — "**What a kickback leaves standing.** A response given on one fact moves the whole node, because a node has one stage and one next movement owed on it", and "a kickback from either reading moves the nodes it names and no others." — and is restated or relied on across the frontier: within this brief's sections the word appears in `when-the-kickback-feedback-shows` (6 times), `review-cost` (9), `clean-context-review` (8), `frontier-consistency` (8) and `author-questions` (4). The option that would strike it, `no-kickback-from-the-confirmation`, stands on `recording`'s answer fact alone and names none of them; it is in the legacy encoding, so "the option carries no content of its own, and what it would answer is its sentence above". A ruling for it would leave five other nodes stating a rule the record no longer has.
+
+Also named: commons.systems/disposition-graph/when-the-kickback-feedback-shows, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/author-questions.
+
+Proposed: The survivor is `recording`, which owns how a disposition is confirmed and recorded. The strike option is re-encoded so that it names what falls with it, and the other nodes cite `recording` for the rule instead of restating it, so that a ruling on one fact changes one text. `when-the-kickback-feedback-shows` already carries the author-sourced option `the-question-has-no-subject-and-the-node-is-a-prune-proposal` and is named here as the largest restatement rather than for a change of its own.
+
+Recorded as an option on this node's answer fact: `the-kickback-rule-names-what-falls-with-it` (source review, 2026-09-09).
+
+### Frontier finding, 2026-09-09
+
+Kind: coverage.
+
+No node answers how an author's choice short of a confirmation is written, and three depend on there being one. The reading `festo-surrendered-subject-matter` states it: "The node's own text records that the record cannot presently encode the first of them at all, `recording`'s ruling responses being `confirm` and `edit`, neither of which writes a choice made and not confirmed. So on the recommendation as it stands there is a mark with no producer and no retraction, on a row the machinery reads." `what-an-option-row-carries` recommends `five-marks-and-the-two-the-author-added` and `viable-options` recommends `an-option-carries-a-selection-per-party`, both of which put the mark on a row; `what-acts-during-bootstrap`'s rule text makes the unconfirmed choice the first term of the convergence reconciliation acts on and concedes that the clause "states a rule whose encoding is owed". None of the twenty-eight options on `recording`'s answer fact adds a response that writes one.
+
+Also named: commons.systems/disposition-graph/what-an-option-row-carries, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: The survivor is `recording`, which owns the ruling responses, and the gap is closed there rather than on the three nodes that read the mark. The option below puts a third response on the table so that the author can mark a choice without confirming it and can lift the mark, and the two display nodes and `what-acts-during-bootstrap` then cite it instead of describing a state nothing produces. If the author does not want such a response, the same ruling settles it, and the three nodes lose the mark rather than keeping a row the machinery reads and no act can enter.
+
+Recorded as an option on this node's answer fact: `a-response-that-records-a-choice-short-of-confirmation` (source review, 2026-09-09).
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: "- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)" (`growth`); "- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)" (`recording`); "- Defines: `clean-context review` (no gloss yet)"; "- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)" (`viable-options`); "`doctrine` (no gloss yet); `proposal` (no gloss yet)" (`authority`); "- Defines: `neighbourhood` (no gloss yet)" (`review-cost`); "- Defines: `probe` (no gloss yet)" (`author-questions`, at the ruling stage); "- Defines: `frontier survey` (no gloss yet)"; "- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)" (`readings`); "- Defines: `seam` (no gloss yet)" (`decomposition`); "- Defines: `session context` (no gloss yet); `rules` (no gloss yet)" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — "Doctrine is the ratified answers taken together." and "A proposal is technical vocabulary and is not overloaded" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant." The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term "with no path to it over 'under', 'depends' or 'cites'", which presupposes a definer and never asks whether the definer said anything.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: Each node fills the glosses it claims, which is a fill and not a redraft, so no stage is owed for it and none is named here except where the answer itself is implicated. The two exceptions: `authority`'s glosses are copied from its own answer, which is bookkeeping; and `viable-options` and `what-acts-during-bootstrap` settle between them who defines the grant, since one claims the term with nothing behind it and the other defines the thing under the name `bootstrap authority` — the survivor is `what-acts-during-bootstrap`, which has the author's own term and a gloss, and `viable-options` drops the claim or points at it. A node that cannot gloss a term it claims is claiming a term it does not own, and dropping the entry is the other way to close it.

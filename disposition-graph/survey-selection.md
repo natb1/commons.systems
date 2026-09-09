@@ -152,14 +152,14 @@ review:
   commit: 32a615df336afeec4917bc5d9f05a0ac73742582
   against: "The last reading's own weak counter-argument -- that this node's AI-reported measurements are unverifiable from a delta reading's scope, since it has no independent access to the term concordance, the validator's run, or the brief generator's output at the commits cited -- is not merely uncured here but is borne out: the amendment's own account now attributes the identical 1,348,406-byte figure to two different graph commits (31e257b9 in one place, f57877f9 in another), which is exactly the kind of undetectable misattribution that scope limit predicted. A reader confined to this node's file cannot tell which commit, if either, actually produced the number, which undercuts the account's own chain of measurements that the backfill-versus-recurring-whole redesign rests on."
   survey:
-    date: 2026-09-07
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "a80b681c9f728354760581edb345003e848c871e96216a1c0d2d0d674853309f"
-      answer: "748cfe68d789be1e63b8b58d356c52b9a158fccc1fadbc8e408a9b03f93a4ae1"
-      options: "dc17e4b4a74002375bcde2c7746c0e3da60e9ebffc96d9f6730253103f4b4701"
-      rivals: "41e84aa57e9a9e4bb374dfd29fa851c61a6fb54bc5e379b168dc16797f96c5ed"
-      words: "d9b807036d4ba7b996e3eada905d853ad248b50e3a08b428787826b971f1141f"
+      answer: "239578071eeecc59318db0fa9fad8f73b0a4aef7bee51c65cb73f5378f91d8cb"
+      options: "13d684a58170231b780ae82e7c8d9d2d4b68a087dfd966093e068f2caa5898d0"
+      rivals: "3dd40270df31cc42e0373cad3145d8615e8680d5332a0e7d004622067a531ff1"
+      words: "18a42ff2190f8d132eb671a51c0e8521392701961bc24cde9eadf8e278a0a1e7"
 under:
   - commons.systems/disposition-graph/review-cost
 defines:

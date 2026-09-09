@@ -53,8 +53,15 @@ review:
   of: 7ac1298c20cf16687fa1f2be4a3109ed4116500d
   commit: f146f8f44b295c64e47a13bff338748035183d87
   survey:
-    date: 2026-09-07
+    date: 2026-09-09
     of: 7ac1298c20cf16687fa1f2be4a3109ed4116500d
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "a8b1bad45ca6e50a193dbd7bf9c4dbf755dcb3cff96d5d40c7668ffc9bd711aa"
+      answer: "78c4b81e46dd3eec9dc7a233029d642ac2a26f11786bf5fae0fd22023093e628"
+      options: "9bf90747c262407697508835337e4ac38a4b41a2d9885eac8ce7348391092d37"
+      rivals: "f87ab5bc48a47d69dfb12b8fd16b3cd49b2da7e5f590737ed8a8c0e920238eb5"
+      words: "e6f2050cb05d09d22e3b822a15eff24a87b3da0dea550dc319a61e10d93eecf0"
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:

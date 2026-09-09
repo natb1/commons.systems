@@ -19,6 +19,16 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: low
+review:
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "72c6698886c0bf346982f1a794691d2d566cb1b28c34eaef42049c426566279d"
+      answer: "a892dc14a3603b8d395d689a037491726b619543f842466ee64177ce8fe07fbb"
+      options: "549016d0c81d3993496a71de1d5a047c997ae18e48138db007553cf57c39e2d8"
+      rivals: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      words: "82da1b4cc80b620f9e25b0ef16232fd0bbe5c7bbcc0ed6376a50ccd09cb82511"
 form: rule
 under:
   - commons.systems/disposition-graph/author-questions

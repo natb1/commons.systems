@@ -28,6 +28,16 @@ facts:
     recommends: ratified
     boldness: low
     against: "`commons.systems/disposition-graph/graph-topology`'s authority fact recommends `delegated`, and a ruling of `ratified` here stops that delegation from reaching this node, which costs the author a ruling on a question they raised as a request for a recommendation rather than as one they wanted to keep. If the criterion is read as part of the shape the delegation already covers, this recommendation is wrong and `delegated` follows the parent."
+review:
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "bdb78d4e0d5ad6e0d96f6a440c27f799c49183135b795b4fe0c20ca332bb1171"
+      answer: "b4eb6d6aa26581cd7f6caa9d2ad1301a20936e06f09b9a49dd9f46c821ccdab8"
+      options: "3867c4b27488d6431eeed2c1d7e36963ee97f7b2ab3951cb1815fc7aa3485cf2"
+      rivals: "22b6ea1121549352f24a7f0199e0d3e3f747d52a6dd921904c49abedeafab79d"
+      words: "9e681f438fa22480fb0ce09dc31f6cb16f9d4d51a2e3609803aa5c0a0a226817"
 under:
   - commons.systems/disposition-graph/graph-topology
 ---

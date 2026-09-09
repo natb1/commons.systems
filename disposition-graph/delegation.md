@@ -9,15 +9,88 @@ review:
   commit: dfded1295e4312c3cdfb1ee03b07e1aad87311eb
   against: "The draft asks the author to ratify a global-tier rule two of whose operative sentences are not in the record. The model a reconciliation session's main thread runs on is delegated to a shim skill's text, and that skill grounds its own choice by citing this node, so ratification would pin a pointer whose target is scheduled for liquidation by a clause that itself reads 'every rule this project runs under is a node or a declared shim'. Beside that, the one ruling on the authority fact covers both the capture-shaped bounds, where ratified is plainly right, and the sizing of units, models and effort, which the author's own quoted words hand to the AI twice ('\"appropriate\" is open question'; right-sized models and effort 'when it would result in token efficiency'), so the author cannot delegate the sizing without denying the bounds. And the oldest objection still stands unmet: the contract, the report and the main thread's read of the conclusion are a fixed cost per unit, the lookup exemption is the only floor, and 'anything larger is a unit' still catches every three-line investigation. What answers all of this is that each defect is an amendment away — state the model here, split the class question into a node beneath, and the rule is the one the author's words already describe."
   survey:
-    date: 2026-09-07
-    of: ac931d62b97b6083eda7543ad7fe86901695da4a
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: 3238f14e625daab581c87e4f73bbf743ac88816d
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "3cdeb14abd20825fe37ef02e186f1e5a06e9adf2dce980a065fb393517ce60a5"
-      answer: "fd62075c11ffccc55d8957cb0bcb1e1832db8a504d8e5112634c3dfaba249cb7"
-      options: "1e2ebcc061832e46583a404e807eb00775610bfe5cdc4cb3a87d84f24343824a"
-      rivals: "57170a995dea300d41cb4aa74fb69fb1951d658f7261fa1e3d0cd0ba973cc57e"
+      answer: "11919d0d6241d6c7f9451d504a20a802a4eee6de7df26e2198a34e263f56dded"
+      options: "917de118cb7effa41ba09ea0fd60d44953e010b22ec73f5b79800b06ad14d21a"
+      rivals: "81dd8efacb3826847fee46da99fe6bb6ebc5c18edfb1861d351101e1ea917af4"
       words: "a0001a7a1407cbfee0ad84cfb65d43a26ccbdcda88e34e033bfb55897d258d80"
+    findings:
+      - finding: "The one brief the record generates for itself does not name the model or the effort, which `delegation`'s recommended answer requires of every brief. `delegation` recommends `the-model-is-named-in-every-brief`, whose text reads \"the model: a subagent is never launched on the harness's default, since a default is not a sizing and a brief that leaves the model unnamed has not sized the work.\" and \"the model as it names the effort, and no subagent runs on whatever model the harness would pick.\" This survey brief's third line reads \"The model and the effort you are running on are fixed by the `review-model` node for both readings of the clean-context review, and stated to you at the launch. Neither the model nor the effort is yours to re-decide, and no part of this brief argues either.\" The options `fixed-model-for-every-review` and `lock-at-launch` already on `clean-context-review`'s answer fact fix which model runs; neither puts it in the brief."
+        kind: "contradiction"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/delegation"
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/review-model"
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-target"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/delegation-bounds-and-sizing"
+        keys:
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/expert-identity"
+        keys:
+          - "depends"
+      - with: "commons.systems/disposition-graph/fidelity"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/movements"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/plato-elenchus"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/plato-maieutics"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/plato-periagoge"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/review-model"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/turn-form"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+          - "cites"
+      - with: "commons.systems/disposition-graph/unit-skills"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "words:words/2026-09-04/26"
+          - "depends"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "words:words/2026-09-03/36"
+          - "words:words/2026-09-04/25"
+          - "depends"
 facts:
   - name: answer
     options:
@@ -541,3 +614,27 @@ deliberately adversarial pairing, which is a technique with a tradition behind i
 and what actually went wrong may have been the undisclosed assignment and the tilted
 return order rather than the assignment itself. `turn-form` carries the consequence
 of the same finding where the work is presented rather than divided.
+
+### Frontier survey, 2026-09-09, of 3238f14e
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The record's own reading instrument does not meet this answer's clause. The recommended answer reads "the model: a subagent is never launched on the harness's default, since a default is not a sizing and a brief that leaves the model unnamed has not sized the work." and "the model as it names the effort, and no subagent runs on whatever model the harness would pick." This survey brief names neither: "The model and the effort you are running on are fixed by the `review-model` node for both readings of the clean-context review, and stated to you at the launch. Neither the model nor the effort is yours to re-decide, and no part of this brief argues either."
+
+Strongest counter-argument (moderate): The clause requiring the brief to name the model is unmet by the one brief the record generates itself, which points at `review-model` and at the launch instead. Either the rule is right and the instrument is in breach, or the rule means something looser — that the launch, not the brief file, is where the sizing is stated — in which case the sentence as written overstates it, since a reader holding only the brief cannot tell what it was sized for. The record cannot be both, and nothing on this node says which.
+
+The session's reply: Kept. The clause is unmet by the one brief the record generates for itself, and the counter-argument puts the fork correctly: either the instrument is in breach or the sentence overstates the rule. This sitting takes the first reading and records the repair as an option on `clean-context-review`, `the-brief-prints-the-model-and-effort-it-was-launched-on`, because the reason the clause gives is a reason about the brief and not about the launch — a reader holding only the brief cannot tell what the reading was sized for, and neither can a later session checking that it was sized at all. If the author rules the other way, it is this node's sentence that is redrawn, and the same ruling settles both.
+
+### Frontier finding, 2026-09-09
+
+Kind: contradiction.
+
+The one brief the record generates for itself does not name the model or the effort, which `delegation`'s recommended answer requires of every brief. `delegation` recommends `the-model-is-named-in-every-brief`, whose text reads "the model: a subagent is never launched on the harness's default, since a default is not a sizing and a brief that leaves the model unnamed has not sized the work." and "the model as it names the effort, and no subagent runs on whatever model the harness would pick." This survey brief's third line reads "The model and the effort you are running on are fixed by the `review-model` node for both readings of the clean-context review, and stated to you at the launch. Neither the model nor the effort is yours to re-decide, and no part of this brief argues either." The options `fixed-model-for-every-review` and `lock-at-launch` already on `clean-context-review`'s answer fact fix which model runs; neither puts it in the brief.
+
+Also named: commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/review-model.
+
+Proposed: The survivor is `delegation`'s clause. `clean-context-review`'s answer has the brief print the model and the effort it was generated for, taken from `review-model`, in the same place it already names the graph commit — one line, no argument, so that a reader holding only the brief can tell what the reading was sized for and a later session can check that it was. `review-model` is named because it fixes the values and needs no change. The alternative reading, that the launch and not the brief file is where the sizing is stated, is settled by the same ruling, and then it is `delegation`'s sentence that is redrawn.
+
+Recorded as an option on commons.systems/disposition-graph/clean-context-review's answer fact: `the-brief-prints-the-model-and-effort-it-was-launched-on` (source review, 2026-09-09).

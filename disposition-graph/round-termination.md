@@ -1,6 +1,6 @@
 ---
 question: What ends a round, and what may a party do to end it?
-stage: review
+stage: maieutic
 probes:
   - id: who-judges-that-the-ground-is-held
     asks: >-
@@ -192,6 +192,146 @@ facts:
             still a deferral, so the grant is bounded by the record alone.
     recommends: ratified
     boldness: low
+review:
+  survey:
+    date: 2026-09-09
+    of: eb1a4118f23b22c5848521ef69822ef6f4e55f84
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "9439f24f03242f9111818fe77b248f4320f69a995ec523d238b10a7f0affd412"
+      answer: "a5ba094fdc07155e77df89f7d0e11de8e8910a4d4b6e4baea53e9bada09533e7"
+      options: "6aaac275af211cf12f4d014c104bb065971aa1e1d7efc1fc941adc9f8e779b7f"
+      rivals: "2e15856f8ecae8ede3eeb91669039250f1a7584a8e0247b687a10868e3571048"
+      words: "30154bc9af89882c5b31babae62253367579963d8d4bcb3d3adc8bce3353fe6e"
+    findings:
+      - finding: "A probe stands open on `round-termination` while the author's answer to it is recorded and cited by three options. The node lists \"`where-does-reframing-the-question-fall` — open, on its `answer` fact, raised 2026-09-08 by ai: The answer types persuasion. Reframing a question until the disagreement no longer applies is not persuasion. Where does that move fall?\" Its own option `no-terminator-the-author-confirms`, `recording`'s `probes-survive-the-recording` and `author-questions`' `no-cap-and-probes-do-not-block` each carry the same reference: \"The author, 2026-09-08, answering the probe `where-does-reframing-the-question-fall` on `round-termination`, which asked whether the answer's typing of persuasion types modes of persuading or modes of ending a round.\" The node's block reads \"2 open of a cap of three, and 2 discharged.\""
+        kind: "contradiction"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/round-termination"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/author-questions"
+      - finding: "`dialogue`'s standing answer states a census the record has since falsified: \"and not one node carries a single ruling, so nothing anywhere in this record is confirmed today and every projection that shows a text in the confirmed place is showing the AI's draft.\" This brief shows four nodes ruled — `round-termination`, `movements` and `expert-instructions` each at \"status answered | class: deferred (ruled here)\", and `expert-identity` at \"class: deferred (conferred by commons.systems/disposition-graph/movements)\". The falsification also reaches the reason behind a pending option: `authority`'s `no-census-anywhere-in-a-node` argues \"since the forty-six false census sentences this survey found are all in `### authority` prose and none in a `## Answer`, so the narrower rule\" — and this locus is in a `## Answer`."
+        kind: "supersession"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/round-termination"
+          - "commons.systems/disposition-graph/dialogue"
+          - "commons.systems/disposition-graph/authority"
+          - "commons.systems/disposition-graph/movements"
+          - "commons.systems/disposition-graph/expert-instructions"
+          - "commons.systems/disposition-graph/expert-identity"
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-order"
+        keys:
+          - "term:recorded divergence (defines: commons.systems/disposition-graph/round-termination)"
+      - with: "commons.systems/disposition-graph/alignment-target"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/34"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:recorded divergence (defines: commons.systems/disposition-graph/round-termination)"
+      - with: "commons.systems/disposition-graph/deferring-on-a-probe"
+        keys:
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "term:recorded divergence (defines: commons.systems/disposition-graph/round-termination)"
+      - with: "commons.systems/disposition-graph/expert-identity"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "parent:commons.systems/disposition-graph/movements"
+      - with: "commons.systems/disposition-graph/expert-instructions"
+        keys:
+          - "term:shared grounding (defines: commons.systems/disposition-graph/round-termination)"
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+          - "parent:commons.systems/disposition-graph/movements"
+      - with: "commons.systems/disposition-graph/madr-decision-records"
+        keys:
+          - "term:recorded divergence (defines: commons.systems/disposition-graph/round-termination)"
+      - with: "commons.systems/disposition-graph/movements"
+        keys:
+          - "term:recorded divergence (defines: commons.systems/disposition-graph/round-termination)"
+          - "term:shared grounding (defines: commons.systems/disposition-graph/round-termination)"
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+          - "cites"
+      - with: "commons.systems/disposition-graph/probe-or-node"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/probe-response-treatment"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/progressive-disclosure"
+        keys:
+          - "term:recorded divergence (defines: commons.systems/disposition-graph/round-termination)"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "words:words/2026-09-08/34"
+      - with: "commons.systems/disposition-graph/session-state"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/software-factories"
+        keys:
+          - "term:recorded divergence (defines: commons.systems/disposition-graph/round-termination)"
+      - with: "commons.systems/disposition-graph/spec-driven-development"
+        keys:
+          - "term:recorded divergence (defines: commons.systems/disposition-graph/round-termination)"
+      - with: "commons.systems/disposition-graph/standard-report"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/unreached-traditions"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "depends"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "term:shared grounding (defines: commons.systems/disposition-graph/round-termination)"
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/what-an-option-row-carries"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
 form: rule
 under:
   - commons.systems/disposition-graph/movements
@@ -1135,3 +1275,36 @@ The recommendation on the authority fact stays at `ratified` for the reason give
 `movements`: under the author's own words of the same turn, deferred is the class for
 a node whose ratification is desired and not currently practical, so the two are
 consistent rather than opposed, and the node stays on the alignment frontier.
+
+### Frontier survey, 2026-09-09, of eb1a4118
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- A probe on this node is listed open and has been answered by words three options already cite. The node lists "`where-does-reframing-the-question-fall` — open, on its `answer` fact, raised 2026-09-08 by ai: The answer types persuasion. Reframing a question until the disagreement no longer applies is not persuasion. Where does that move fall?", and its own option `no-terminator-the-author-confirms` carries "The author, 2026-09-08, answering the probe `where-does-reframing-the-question-fall` on `round-termination`, which asked whether the answer's typing of persuasion types modes of persuading or modes of ending a round." — as do `probes-survive-the-recording` on `recording` and `no-cap-and-probes-do-not-block` on `author-questions`. The block reads "2 open of a cap of three, and 2 discharged.", so the count against the cap is one too high on the node's own record.
+- This node is one of the four the brief shows as ruled — "- Stage: review | rank 0.0005 | settles 1 | status answered | class: deferred (ruled here)" — against the brief's own statement at the head of the reading that "No fact in the record carries a ruling today, so every node is unanswered." and `dialogue`'s standing answer that "not one node carries a single ruling".
+
+Strongest counter-argument (moderate): The node is at the review stage with a ruling recorded on it and an open probe whose answer three options across the record already quote, so the state the frontier reads here does not match the state the record has. A ruled node carrying a probe the author has answered keeps a question in front of them that they have closed, and the same words are simultaneously doing work as the ground of options on two other nodes; whichever way the answer is confirmed, it will be confirmed against a probe list the record itself contradicts.
+
+The session's reply: Finding[0] rejected, finding[1] kept with a correction. Finding[0] is falsified by this node's own account. The words the three options cite, `words/2026-09-08/34`, answered one limb of a compound probe: the account records that the author's reply removed the category the first limb asked about, so 'the typing is by mode of persuasion by elimination', and that 'the remaining limb, whether a reframing that dissolves a disagreement is admissible, survives whole and is narrowed to it'. The answer text says the same in terms — 'where a reframing that dissolves a disagreement falls is open still, since the typing covers persuasion alone' — and the account's later section states that two probes stay open and unanswered, naming this one. The probe is open correctly and is not discharged. Two further corrections: the sentence the finding puts in quotation marks as carried by the three options occurs nowhere in the record, being the brief's rendering of a `supports` reference; and the count against a cap is moot, the cap having been struck by the author at `words/2026-09-08/32` and by this sitting from the implementation at `9db16ed9`. Finding[1] is kept: this node is ruled and the brief's own statement that no fact carries a ruling is false. The correction is to the number — three nodes carry rulings, not four, `expert-identity`'s class being conferred by `movements` rather than ruled on itself — and it does not touch the finding. One note against a misreading this node invites: the stage moves from review to maieutic in the same act that rejects finding[0], and the move is not the finding's. It is `author-questions`' standing rule applied by the instrument — a node carrying an open probe returns from the review or the ruling stage to the maieutic — and the two probes that trigger it are the ones the rejected finding says should not be open. The node was sitting at review with them open, which is the state the rule exists to correct.
+
+### Frontier finding, 2026-09-09
+
+Kind: contradiction.
+
+A probe stands open on `round-termination` while the author's answer to it is recorded and cited by three options. The node lists "`where-does-reframing-the-question-fall` — open, on its `answer` fact, raised 2026-09-08 by ai: The answer types persuasion. Reframing a question until the disagreement no longer applies is not persuasion. Where does that move fall?" Its own option `no-terminator-the-author-confirms`, `recording`'s `probes-survive-the-recording` and `author-questions`' `no-cap-and-probes-do-not-block` each carry the same reference: "The author, 2026-09-08, answering the probe `where-does-reframing-the-question-fall` on `round-termination`, which asked whether the answer's typing of persuasion types modes of persuading or modes of ending a round." The node's block reads "2 open of a cap of three, and 2 discharged."
+
+Also named: commons.systems/disposition-graph/recording, commons.systems/disposition-graph/author-questions.
+
+Proposed: The survivor is the discharge. `where-does-reframing-the-question-fall` is marked discharged on `round-termination` with `words/2026-09-08/34` as its reason and the same headnote the three options already carry, and the block's count drops to one open. Nothing else moves: the three options keep their references, and the node's stage is unchanged, a discharge being the ordinary way a list comes down rather than a movement backward.
+
+### Frontier finding, 2026-09-09
+
+Kind: supersession.
+
+`dialogue`'s standing answer states a census the record has since falsified: "and not one node carries a single ruling, so nothing anywhere in this record is confirmed today and every projection that shows a text in the confirmed place is showing the AI's draft." This brief shows four nodes ruled — `round-termination`, `movements` and `expert-instructions` each at "status answered | class: deferred (ruled here)", and `expert-identity` at "class: deferred (conferred by commons.systems/disposition-graph/movements)". The falsification also reaches the reason behind a pending option: `authority`'s `no-census-anywhere-in-a-node` argues "since the forty-six false census sentences this survey found are all in `### authority` prose and none in a `## Answer`, so the narrower rule" — and this locus is in a `## Answer`.
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/movements, commons.systems/disposition-graph/expert-instructions, commons.systems/disposition-graph/expert-identity.
+
+Proposed: The survivor is `authority`'s wider rule, which now has a reason it did not have: a census sentence in a standing answer is exactly the case the narrower option `no-census-in-a-standing-answer` was drawn for and the wider option's measurement said did not exist. `dialogue`'s answer strikes the census clause rather than restating it with a new count, since a number in a standing answer is what both options exist to stop; `authority`'s option text is corrected so that the reason it gives is the reason that holds. The three expert nodes and `round-termination` are named as the evidence and need no change.

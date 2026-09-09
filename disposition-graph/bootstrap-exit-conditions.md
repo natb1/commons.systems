@@ -45,6 +45,15 @@ review:
   of: 3da73aef94a1688b1fcd1e7cd3713417a59653a8
   commit: e44599b546f90dc6a30049b5ae229f18238f5bef
   against: "The strongest argument against is still that this node stores a derived view as prose, and the fourth reading is the first to see the mechanism fail in the way that argument predicts. The pins are the answer's own guarantee that the copy cannot drift -- \"the `cites` field carries the pins that make that promise checkable\" -- and five of the seven were stale within two commits of the redraw landing, both of them made by the same thread that wrote the pins, neither touching any quoted field. So the mechanism does not fail by a quotation going bad; it fails by producing an alarm that means nothing, since a stale pin here signals only that the cited node was edited somewhere. A reader who follows five pins, finds five mismatches, and finds every quotation intact learns to stop following pins, and that is exactly when the second home goes unchecked -- the harm the node exists to prevent, arrived at through the instrument meant to prevent it. This reading's other findings are the same shape at smaller scale: an ordinal inverted against its field, a field misattributed in one text and corrected in the other, a count contradicted eighteen lines below itself. None is hard to fix; that they recur across four readings, each fix landing where the reading pointed and the next reading finding the same class of slip elsewhere, is the evidence that the copy is the problem and not the copyist -- which is `conditions-derived-not-restated`'s case, and it is stronger now than when that option was raised."
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "dd776953d2c0a24e477f6731f477dd8a9d809a4e413c680ec7d0e7e4761060e8"
+      answer: "f5f9203b933db03d646442bcab53e7d17ad2fbdfd598eb245d8a144def1b91d4"
+      options: "0bbc36ecc26c9ab793346e94cb8a0aed35b8b53ea4d62d6a25100a5d1dab6b1f"
+      rivals: "5f302fa0be31500fa45c99cbe0b65702975191f4759b6b8829e47206700f1389"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 form: rule
 cites:
   - id: commons.systems/disposition-graph/work-loop

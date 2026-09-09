@@ -32,6 +32,16 @@ facts:
         ref: "2026-09-08"
     recommends: keep
     boldness: low
+review:
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "1bd7d04f07767f14a74bd3dd81baf13f85e5da1cdcac06f5258668b09dc9066a"
+      answer: "72c9415210bfa5de721061f4cab6bceff46f76254edeccff678cc533794ac857"
+      options: "12394bd5c1c225dca4e906989fe05693b2e638b1f6095717450ed5b27c68a153"
+      rivals: "dce9b12a9f6b2f043a752792a98162fa3ad2d3472149816dd23e130139848180"
+      words: "a7e04735baaa564bfbe54e4ad7025cc6910212a7057ae10a935af56f94e2fb67"
 form: reading
 under:
   - commons.systems/disposition-graph/growth

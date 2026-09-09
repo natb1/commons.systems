@@ -47,6 +47,15 @@ review:
   date: 2026-09-03
   of: b33788c35f071c2873d8b1bb6d951a3f0c89bbed
   against: "The author's question was whether cross-cutting concerns reduce to topology or citations. The recommendation answers 'citations' with a citation mechanism the record has never defined, and its own reasoning concedes that neither topology nor citations suffices alone. Meanwhile option 2, keeping tier as a stored flag, is what the record runs on and what the projector implements today. The author's objection is real, that a typing convention should not bind purpose, but no such convention has ever been recorded here: all five global-tier nodes genuinely do bind every session. The intention needs drawing out again: is the author asking for a mechanism that can express a rule with a narrower-than-global scope, in which case what would such a rule be, or asking why tier is a flag rather than derived, in which case the cheaper answer is to record what makes a rule global and keep the flag as its projection."
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "915e71a11b9c4fb910a0b5bd35ba1d24c78775a09d51559dc285039d847efaae"
+      answer: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      options: "11a1cc06cdf54eabead9c4047ad2e5ac7564ba03cd668b0d6b82bade3a2a6526"
+      rivals: "577f46183c238e79ca68ca82b4f8f20642c4eef0847b0011008009af2d4158a1"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 facts:
   - name: answer
     options:

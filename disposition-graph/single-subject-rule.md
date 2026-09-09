@@ -16,6 +16,16 @@ facts:
       - name: deferred
     recommends: delegated
     boldness: moderate
+review:
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "e38f2f3199ea64169c75c51d06eeff88fc379180a8ad37666fea44747837a50b"
+      answer: "6d5fc35d8d7ec9f0dc18b69bd6db69dab98a6188f606e94155962ad6a3e76954"
+      options: "64750ee01837a96fa129adbeb712123656498f320bf7e4b1533e8936052661f1"
+      rivals: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 form: reading
 under:
   - commons.systems/disposition-graph/dialogue

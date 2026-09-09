@@ -93,35 +93,20 @@ review:
   of: fa625a04fa815496426a4c627edc1681d163da4c
   commit: 1c0b5372d26e0340f42179fe949bc8bbd389c677
   survey:
-    date: 2026-09-07
-    of: fa625a04fa815496426a4c627edc1681d163da4c
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: df96f0525d7130c4268787a33dcfbfdc82c6a7d8
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "ddb1baebe2f7cda3481951e6e65da50f2a13c41c266478acb2793ec00ad9c685"
-      answer: "a34fa142bfadb4320184594aa8977dd399e3a0414c200fc6c451cf7c0b949214"
-      options: "bbee324c779119c5d1572a468e0798cff1694aecb5df40191fd4050792dad820"
-      rivals: "443196964ab56f6176d1d29e6159b5a45f3fd92dccd9f0040d5d81186fcad18d"
-      words: "5f5f0f6a043a3815faca5fa6163922b2b36d3b73ae1967c16cd34478aa79dad6"
+      answer: "ff2f9a1bc9fbd3453f21721b45d46300d644093412051b0672dd2e24cc4b8844"
+      options: "9cf6563b2c2761f7dccee606e3f2296f471ffcd1de3a3d54f2260a851590cb97"
+      rivals: "c01542a05fd3d01991f743bff46322a7c1131efc1d344d8dde2c7e85f4bddb58"
+      words: "9c3106e41be838531daf1d7a8a7e2d8919ae2d1450f6c2dc307d1d7d247ce0ba"
     findings:
-      - finding: "Independence, the sixteenth validation. `hexis` asks \"In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?\" — a question whose only possible answer is a reading of `purpose`'s answer, whose facts repeat `purpose`'s, and which would be pruned the moment `purpose`'s recommendation moved; `purpose` already carries the answer as the option `knowledge-store-first` sourced from `commons.systems/disposition-graph/hexis`, and `hexis` itself carries the review option `sub-ruling-of-purpose`. The record has also recommended it away: `graph-topology`'s option `a-third-bound-for-open-business` \"cites `hexis`, whose topology fact has recommended `prune` since 2026-09-04\". The brief carries no `under` field for neighbourhood nodes, so the parent relation is read from the question's own wording and from the cross-sourced option rather than from a field."
-        kind: "decomposition"
-        status: "new"
-        since: "2026-09-07"
-        supports:
-          - "question"
-          - "answer"
-          - "options"
-          - "rivals"
-          - "words"
-        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
-        nodes:
-          - "commons.systems/disposition-graph/graph-topology"
-          - "commons.systems/disposition-graph/hexis"
-          - "commons.systems/disposition-graph/purpose"
-      - finding: "Four live options on `frontier-consistency`'s answer fact carry a validation list that ends at fifteen, while the node's account records the sixteenth as adopted into one of them: \"Adopted into `split-survey-from-per-draft` on 2026-09-05: the survey's list names the sixteenth\". The content fences of `split-survey-from-per-draft`, `the-survey-is-given-what-its-validations-read`, `one-line-only-where-a-survey-has-read-it` and `one-line-only-where-the-text-a-survey-read-still-stands` each end at \"15. Merge. The opportunities to merge unanswered nodes as alternate answers to the same question\", with no independence validation after it, and each is written in the struck term — \"the node as it stands or the alternative it names\" and \"it adopts a listed alternative or the node as it stands\". Ruling for any of the four would strike the independence validation and restore the word the recommended answer replaced, without saying it was doing either."
+      - finding: "Two nodes quote `what-acts-during-bootstrap`'s definition of a grant in a form it no longer carries. That node defines \"`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant.\" `probe-or-node` quotes it inside quotation marks as \"a grant is the author's word, given for one named reconciliation of one unanswered node\" and restates it as \"which reaches one named reconciliation and no class\"; `graph-topology`'s binding answer reads \"the grant the `commons.systems/disposition-graph/what-acts-during-bootstrap` node defines reaches one named reconciliation and no class\". Both interims — `interim-follows-the-authors-word` and `topology-is-a-field-until-it-is-contested` — argue from the narrower reach, and both nodes carry `commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right` in `depends`."
         kind: "cross-reference"
         status: "new"
-        since: "2026-09-07"
+        since: "2026-09-09"
         supports:
           - "question"
           - "answer"
@@ -131,131 +116,68 @@ review:
         discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
         nodes:
           - "commons.systems/disposition-graph/graph-topology"
-          - "commons.systems/disposition-graph/frontier-consistency"
           - "commons.systems/disposition-graph/probe-or-node"
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
+      - finding: "The third reserved fact is named `topology` in the schema and \"Existence\" wherever a reader meets it. `dialogue`'s `defines` list carries \"- term: topology\" whose gloss reads \"Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding.\", two entries above \"Keep is the choice on the topology fact that the node stays in the record with its question and its answer.\" — so one gloss list names the same fact both ways. `how-a-fact-is-headed`'s answer reads \"The three reserved facts are headed \\\"Authority\\\", \\\"Existence\\\" and \\\"Persistence\\\".\" `unanswered`'s sentence, quoted on `which-facts-are-listed`, reads \"the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape\"."
+        kind: "vocabulary"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/graph-topology"
+          - "commons.systems/disposition-graph/dialogue"
+          - "commons.systems/disposition-graph/how-a-fact-is-headed"
+          - "commons.systems/disposition-graph/unanswered"
+          - "commons.systems/disposition-graph/which-facts-are-listed"
     pairs:
-      - with: "commons.systems/disposition-graph/author-questions"
-        keys:
-          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/authority"
-        keys:
-          - "term:authority (defines: commons.systems/disposition-graph/authority)"
-          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
-          - "term:doctrine (defines: commons.systems/disposition-graph/authority)"
-          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
-          - "cites"
       - with: "commons.systems/disposition-graph/class-recommendation"
         keys:
-          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
-          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
           - "parent:commons.systems/disposition-graph/authority"
-          - "cites"
-      - with: "commons.systems/disposition-graph/clean-context-review"
-        keys:
-          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
-      - with: "commons.systems/disposition-graph/delegation"
-        keys:
-          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
-      - with: "commons.systems/disposition-graph/dialogue"
-        keys:
-          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:topology (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:prune (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
-          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/frontier-consistency"
-        keys:
-          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
-          - "cites"
-      - with: "commons.systems/disposition-graph/growth"
-        keys:
-          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
       - with: "commons.systems/disposition-graph/hexis"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/instruments"
+      - with: "commons.systems/disposition-graph/movements"
         keys:
-          - "term:check (defines: commons.systems/disposition-graph/instruments)"
-          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
-      - with: "commons.systems/disposition-graph/model"
-        keys:
-          - "term:disposition (defines: commons.systems/disposition-graph/model)"
-          - "term:node (defines: commons.systems/disposition-graph/model)"
-      - with: "commons.systems/disposition-graph/node"
-        keys:
-          - "term:answer (defines: commons.systems/disposition-graph/node)"
-          - "term:form (defines: commons.systems/disposition-graph/node)"
-          - "term:question (defines: commons.systems/disposition-graph/node)"
-          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+          - "cites"
       - with: "commons.systems/disposition-graph/probe-or-node"
         keys:
           - "words:words/2026-09-06/6"
           - "words:words/2026-09-07/17"
-          - "cites"
           - "depends"
-      - with: "commons.systems/disposition-graph/projection"
-        keys:
-          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+          - "cites"
       - with: "commons.systems/disposition-graph/quotes"
         keys:
-          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
           - "parent:commons.systems/disposition-graph/authority"
-      - with: "commons.systems/disposition-graph/readings"
-        keys:
-          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
-          - "term:reading (defines: commons.systems/disposition-graph/readings)"
       - with: "commons.systems/disposition-graph/recording"
         keys:
-          - "term:substance (defines: commons.systems/disposition-graph/recording)"
           - "depends"
+      - with: "commons.systems/disposition-graph/topology-criteria"
+        keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/review"
-        keys:
-          - "term:review (defines: commons.systems/disposition-graph/review)"
-      - with: "commons.systems/disposition-graph/session-context"
-        keys:
-          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
-      - with: "commons.systems/disposition-graph/transience"
-        keys:
-          - "term:standing (defines: commons.systems/disposition-graph/transience)"
       - with: "commons.systems/disposition-graph/turn-form"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/unanswered"
-        keys:
-          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
-      - with: "commons.systems/disposition-graph/under"
-        keys:
-          - "term:context (defines: commons.systems/disposition-graph/under)"
-          - "term:under (defines: commons.systems/disposition-graph/under)"
       - with: "commons.systems/disposition-graph/viable-options"
         keys:
-          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
-          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
           - "parent:commons.systems/disposition-graph/authority"
       - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
         keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
           - "parent:commons.systems/disposition-graph/authority"
           - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
+        keys:
           - "cites"
       - with: "commons.systems/disposition-graph/which-facts-are-listed"
         keys:
           - "cites"
-      - with: "commons.systems/disposition-graph/work-loop"
-        keys:
-          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
-      - with: "commons.systems/public/agency"
-        keys:
-          - "term:capture (defines: commons.systems/public/agency)"
 depends:
   - commons.systems/disposition-graph/recording#prune-of-an-unruled-node-needs-no-ruling
   - commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right
@@ -1012,3 +934,42 @@ delegation. That stands and is now better founded: under the refinement the gran
 given to the sitting and reaches every alignment in it, so the topology work, the
 dialogue work and the grant work of 2026-09-08 all stand on one grant rather than on a
 grant read as stretching to cover them.
+
+### Frontier survey, 2026-09-09, of df96f052
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The binding answer quotes a definition the defining node no longer carries: "the grant the `commons.systems/disposition-graph/what-acts-during-bootstrap` node defines reaches one named reconciliation and no class", while that node now defines "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it". The interim this answer applies, and the weight it puts on the option `a-standing-direction-acts-by-right`, are both drawn against the superseded reach.
+- The fact this node owns is named `topology` in the schema and "Existence" in three places a reader meets it: `dialogue` glosses the term `topology` with "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding." while its neighbouring glosses read "Keep is the choice on the topology fact..."; `how-a-fact-is-headed` reads "The three reserved facts are headed \"Authority\", \"Existence\" and \"Persistence\"."; and `unanswered` reads "the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape".
+
+Strongest counter-argument (moderate): The answer's interim rests on a quotation of the grant that the defining node has since widened, and the fact it governs is called by two names in the places the author actually reads it. The first means the delegation's holding pattern was drawn against a narrower licence than the record now grants, and the second means the author ruling on a topology fact is ruling on a row headed "Existence". Neither is a disagreement about what the recorder may do; both are the drift that makes a ruling here mean something different to the party who gives it and the party who applies it.
+
+The session's reply: Both findings kept. Finding[0] is confirmed against the record: this node's answer carries 'reaches one named reconciliation and no class' while the defining node now defines the grant as reaching a whole alignment sitting. The interim is therefore argued against a licence narrower than the one the record grants, and the argument must be re-made against the wider reach or withdrawn — under the wider reach it may be stronger, but it has not been made. Finding[1] is kept and is one half of the frontier's vocabulary finding; the consequence the counter-argument names is the one that matters, that an author ruling on a `topology` fact is ruling on a row headed 'Existence'.
+
+### Frontier finding, 2026-09-09
+
+Kind: cross-reference.
+
+Two nodes quote `what-acts-during-bootstrap`'s definition of a grant in a form it no longer carries. That node defines "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant." `probe-or-node` quotes it inside quotation marks as "a grant is the author's word, given for one named reconciliation of one unanswered node" and restates it as "which reaches one named reconciliation and no class"; `graph-topology`'s binding answer reads "the grant the `commons.systems/disposition-graph/what-acts-during-bootstrap` node defines reaches one named reconciliation and no class". Both interims — `interim-follows-the-authors-word` and `topology-is-a-field-until-it-is-contested` — argue from the narrower reach, and both nodes carry `commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right` in `depends`.
+
+Also named: commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: The survivor is `what-acts-during-bootstrap`'s current definition. `probe-or-node` and `graph-topology` re-quote it as it now stands and re-make the argument against the wider reach: a grant that reaches a whole alignment sitting may or may not carry a standing direction about a class of act, and the case each node makes for its interim must be written against "one alignment sitting and reaching every alignment in it" rather than "one named reconciliation of one unanswered node". Where the wider reach makes the argument unnecessary, the interim is withdrawn rather than re-quoted. `what-acts-during-bootstrap` needs no change.
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+The third reserved fact is named `topology` in the schema and "Existence" wherever a reader meets it. `dialogue`'s `defines` list carries "- term: topology" whose gloss reads "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding.", two entries above "Keep is the choice on the topology fact that the node stays in the record with its question and its answer." — so one gloss list names the same fact both ways. `how-a-fact-is-headed`'s answer reads "The three reserved facts are headed \"Authority\", \"Existence\" and \"Persistence\"." `unanswered`'s sentence, quoted on `which-facts-are-listed`, reads "the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape".
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/how-a-fact-is-headed, commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/which-facts-are-listed.
+
+Proposed: The survivor is `topology`, the name the schema, the frontier and this reading's own output all use. `dialogue`'s gloss for the term `topology` is rewritten to open with the term it glosses; `how-a-fact-is-headed`'s answer heads the fact "Topology", which is a change to what the author reads on the alignment page and so is put as its own answer text rather than as an implementation note; and `unanswered`'s sentence names the topology fact. `which-facts-are-listed` is named because it quotes `unanswered`'s sentence and its own option about the asymmetry moves with the wording; its answer needs no other change.
+
+### Subtree divergence, 2026-09-09
+
+Two unruled nodes rest their interims on one option pending on `what-acts-during-bootstrap`, which recommends another. `graph-topology`'s header reads "- Depends: commons.systems/disposition-graph/recording#prune-of-an-unruled-node-needs-no-ruling, commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right", and `probe-or-node`'s reads "- Depends: commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right". Both answers make the dependence explicit: `graph-topology` says "a direction about a class acts by right only if that node's option `a-standing-direction-acts-by-right` is ruled, on which this interim rests", and `probe-or-node` says "the interim rests on the author's words and on nothing that node confers until the option is ruled". The ancestor recommends `reconciliation-acts-on-a-convergence`, not that option, so a ruling for the recommendation discards the ground both interims stand on — and both interims are what acts today, one of them a prune.
+
+Stands under commons.systems/disposition-graph/what-acts-during-bootstrap, option `a-standing-direction-acts-by-right`.

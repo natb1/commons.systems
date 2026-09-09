@@ -220,6 +220,16 @@ facts:
       - name: deferred
     recommends: delegated
     boldness: low
+review:
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "ac4476e037245848de881a6b68eeecf30179339aa999a78509f2b08c785b1a38"
+      answer: "fb8a7dfa09596868d3f743464648548a4424af6787fdfc696a5bf3a1c91e6fef"
+      options: "300908b55c0a8a94f6c4ef6fdeb4989215934c0229d6a5a198c56e62dd4491cf"
+      rivals: "d8fce682ababcc3149d4277fbfe24c4efdb790e6d72ef18aa5070fc930b8f530"
+      words: "9d4b69be9613c3992ae11e593617070f5908b4a20800faa983068fd2df3203ec"
 form: rule
 under:
   - commons.systems/disposition-graph/transience

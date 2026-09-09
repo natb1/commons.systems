@@ -8,13 +8,13 @@ review:
   of: b5717e656b723368acf1ad6f3609c7ab85c6a1a3
   against: "Reclassifying every deferred answer as unanswered loses nothing formally and changes what the record is while the record is in use: sixty-eight nodes now sit in one queue with no distinction between an answer written that morning from the author's quoted words and one written two days earlier from the AI's own knowledge, and the author must rule on all of them through a dialogue whose own rules are in the queue. The session's reply — that the stage says what each is owed where the deferred stamp did not — is a real gain and is now visible in the frontier and the page. What is unanswered is the volume: forty-three nodes stand at review or ruling in one sitting, and the record offers a ruling order only as a review's recommendation that nothing consumes."
   survey:
-    date: 2026-09-07
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "09cba62ef34db9cf68e59d3ef4c190943c328168a291998879f34d2b20ec9539"
       answer: "09a972922fa40a2da4f32486321197559dd974cd2ee2c492f9c688d02ce5ace1"
-      options: "dadb414546ad7f6352e98b5122f4bbb957ecb03c8885a80d317a7086723ee52d"
-      rivals: "de45963f873a391ceab9d85d32258d9d9f4c2a78fad5533af666516482b6e639"
+      options: "91ecd8a25959270cc84d1541fcda67c9f9474c580762cf9eb34ab4eed83098c4"
+      rivals: "d8e4b46ea88e494668ed692f619ff90b5deb7cb3f2a76ac0c7be56f4feacad26"
       words: "c8ec8788a610f28277df55afbfe88e12c771c0abf85d47cbcda224e5a76981df"
 facts:
   - name: answer
@@ -838,3 +838,13 @@ Recorded as an option on this node's answer fact: `topology-conditioned-as-persi
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/unanswered stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `unanswered-is-no-ruling`; the `## Rationale` its `**AI support.**`; 7 `## Disposition` entries became the ledger entries words/2026-09-03/80, words/2026-09-03/81, words/2026-09-03/82, words/2026-09-03/42, words/2026-09-03/83, words/2026-09-03/29, words/2026-09-03/84, referenced by 7 options the entry's own date names; and `stands` left the answer fact. The content of `responses-on-decisions-and-children (at db23d5b1)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `answered-by-stamp`, `page-in-ruling-order`, `child-ruling-held-until-the-parent`, `confirmation-before-the-ruling-stage-is-invalid`, `browser-hides-every-unanswered-node`, `fourth-class-or-field-for-unanswered`, `mark-answered-node-unanswered`, `deferred-answers-without-a-stage`, `review-item-nodes`, `a-curriculum`, `response-on-a-fact`, `edit-ruled-then-reviewed`, `stage-keeps-a-node-on-the-frontier`, `two-responses-where-the-page-offers-them`, `topology-conditioned-as-persistence-is`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `b5717e656b723368acf1ad6f3609c7ab85c6a1a3` was already past the recommendation and is left as it stood.
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+The third reserved fact is named `topology` in the schema and "Existence" wherever a reader meets it. `dialogue`'s `defines` list carries "- term: topology" whose gloss reads "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding.", two entries above "Keep is the choice on the topology fact that the node stays in the record with its question and its answer." — so one gloss list names the same fact both ways. `how-a-fact-is-headed`'s answer reads "The three reserved facts are headed \"Authority\", \"Existence\" and \"Persistence\"." `unanswered`'s sentence, quoted on `which-facts-are-listed`, reads "the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape".
+
+Also named: commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/how-a-fact-is-headed, commons.systems/disposition-graph/which-facts-are-listed.
+
+Proposed: The survivor is `topology`, the name the schema, the frontier and this reading's own output all use. `dialogue`'s gloss for the term `topology` is rewritten to open with the term it glosses; `how-a-fact-is-headed`'s answer heads the fact "Topology", which is a change to what the author reads on the alignment page and so is put as its own answer text rather than as an implementation note; and `unanswered`'s sentence names the topology fact. `which-facts-are-listed` is named because it quotes `unanswered`'s sentence and its own option about the asymmetry moves with the wording; its answer needs no other change.

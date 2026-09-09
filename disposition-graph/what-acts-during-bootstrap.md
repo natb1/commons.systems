@@ -71,15 +71,210 @@ review:
   commit: 7663ad04b910a3cbef62c4bd2bbbceba3daa8cfb
   against: "The recommendation's own defining clause rests on a term the schema cannot presently exhibit: `reconciliation-acts-on-a-convergence`'s AI divergence says so directly -- 'a rule that governs every reconciliation this record does today is stated in terms of a mark no node carries, and a reader who tries to check a past reconciliation against it finds nothing to check it with' -- and the account repeats the same admission twice more, once on the fact and once in the dated section recording the author's words. A recommendation whose central mechanism is, by its own text, unauditable is a real reason to hesitate before sending it to the author for ratification. It does not defeat forwarding here: the term is the author's own words at `words/2026-09-08/39` transcribed rather than an AI-invented test, the gap is disclosed at every locus a reader would meet the clause rather than smoothed over anywhere, and the fix is already named and handed to the node that owns the encoding, `what-an-option-row-carries`, rather than assumed or quietly deferred. That is the disclosure the evaluation node's rule against an AI answering a case against itself calls for, not a defect of this text."
   survey:
-    date: 2026-09-07
-    of: 8aace539d14bae32f54338575af53f8391a222fa
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: f363726edf001ec1401aa91313271cd69c638c65
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "7b3273b9d0e6cc1605116534c3e680a3cef87c1d138c7d21b25a159f82cd89f4"
-      answer: "b27803608d823d9c3de08b539cfaed70d087b657b66a0576e3f891f8f8878040"
-      options: "2e717fedce37032eaf88bc1f27927e0b81f38a2505c621c0c62e427572b75c27"
-      rivals: "1c8af4153fdade13a633b4e4898c16d60b575c2368b87d59855dd8f007664010"
-      words: "373cf7ac62f9bb1adfa14f15e06f6d27a59971cafa6567018af492ae4d0883ee"
+      answer: "8e8d2432e596c5d383b4a8bea009646f334eb421fa8efcaf95b81037383f9e34"
+      options: "03c362abc067f5e536877308768c995a54cd60331a270a4c6663b3342e89275e"
+      rivals: "506b000e82005155115bff0f739cc73802f8cc925ac53a4c1419e9b23a351369"
+      words: "016c59462acc0c083ec63108fc135c7b6257bc06e1395604244c6c77500fb3d8"
+    findings:
+      - finding: "Two nodes quote `what-acts-during-bootstrap`'s definition of a grant in a form it no longer carries. That node defines \"`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant.\" `probe-or-node` quotes it inside quotation marks as \"a grant is the author's word, given for one named reconciliation of one unanswered node\" and restates it as \"which reaches one named reconciliation and no class\"; `graph-topology`'s binding answer reads \"the grant the `commons.systems/disposition-graph/what-acts-during-bootstrap` node defines reaches one named reconciliation and no class\". Both interims — `interim-follows-the-authors-word` and `topology-is-a-field-until-it-is-contested` — argue from the narrower reach, and both nodes carry `commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right` in `depends`."
+        kind: "cross-reference"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
+          - "commons.systems/disposition-graph/probe-or-node"
+          - "commons.systems/disposition-graph/graph-topology"
+      - finding: "No node answers how an author's choice short of a confirmation is written, and three depend on there being one. The reading `festo-surrendered-subject-matter` states it: \"The node's own text records that the record cannot presently encode the first of them at all, `recording`'s ruling responses being `confirm` and `edit`, neither of which writes a choice made and not confirmed. So on the recommendation as it stands there is a mark with no producer and no retraction, on a row the machinery reads.\" `what-an-option-row-carries` recommends `five-marks-and-the-two-the-author-added` and `viable-options` recommends `an-option-carries-a-selection-per-party`, both of which put the mark on a row; `what-acts-during-bootstrap`'s rule text makes the unconfirmed choice the first term of the convergence reconciliation acts on and concedes that the clause \"states a rule whose encoding is owed\". None of the twenty-eight options on `recording`'s answer fact adds a response that writes one."
+        kind: "coverage"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
+          - "commons.systems/disposition-graph/what-an-option-row-carries"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/recording"
+      - finding: "Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: \"- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)\" (`growth`); \"- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)\" (`recording`); \"- Defines: `clean-context review` (no gloss yet)\"; \"- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)\" (`viable-options`); \"`doctrine` (no gloss yet); `proposal` (no gloss yet)\" (`authority`); \"- Defines: `neighbourhood` (no gloss yet)\" (`review-cost`); \"- Defines: `probe` (no gloss yet)\" (`author-questions`, at the ruling stage); \"- Defines: `frontier survey` (no gloss yet)\"; \"- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)\" (`readings`); \"- Defines: `seam` (no gloss yet)\" (`decomposition`); \"- Defines: `session context` (no gloss yet); `rules` (no gloss yet)\" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — \"Doctrine is the ratified answers taken together.\" and \"A proposal is technical vocabulary and is not overloaded\" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: \"`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant.\" The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term \"with no path to it over 'under', 'depends' or 'cites'\", which presupposes a definer and never asks whether the definer said anything."
+        kind: "vocabulary"
+        status: "new"
+        since: "2026-09-09"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/what-acts-during-bootstrap"
+          - "commons.systems/disposition-graph/growth"
+          - "commons.systems/disposition-graph/recording"
+          - "commons.systems/disposition-graph/clean-context-review"
+          - "commons.systems/disposition-graph/viable-options"
+          - "commons.systems/disposition-graph/authority"
+          - "commons.systems/disposition-graph/review-cost"
+          - "commons.systems/disposition-graph/author-questions"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/readings"
+          - "commons.systems/disposition-graph/decomposition"
+          - "commons.systems/disposition-graph/session-context"
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-order"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/alignment-target"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "term:bootstrap exit (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "words:words/2026-09-08/39"
+          - "words:words/2026-09-08/22"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/bootstrap-exit-conditions"
+        keys:
+          - "term:bootstrap exit (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "words:words/2026-09-08/39"
+          - "parent:commons.systems/disposition-graph/authority"
+      - with: "commons.systems/disposition-graph/coverage"
+        keys:
+          - "term:bootstrap exit (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/deferring-on-a-probe"
+        keys:
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/delegation-bounds-and-sizing"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "cites"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/expert-identity"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/expert-instructions"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/graph-topology"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "parent:commons.systems/disposition-graph/authority"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/lockfile"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/materialization"
+        keys:
+          - "term:bootstrap exit (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/movements"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/probe-or-node"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/probe-response-treatment"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/prose-and-structure"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "parent:commons.systems/disposition-graph/authority"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:bootstrap exit (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/review-model"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/review-skills"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/round-termination"
+        keys:
+          - "term:shared grounding (defines: commons.systems/disposition-graph/round-termination)"
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/session-context"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/session-state"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/standard-report"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/un-aligned-children"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "term:bootstrap exit (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/unreached-traditions"
+        keys:
+          - "words:words/2026-09-08/36"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+          - "parent:commons.systems/disposition-graph/authority"
+      - with: "commons.systems/disposition-graph/vocabulary-view"
+        keys:
+          - "term:bootstrap exit (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/what-an-option-row-carries"
+        keys:
+          - "words:words/2026-09-08/36"
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:bootstrap exit (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "cites"
 form: rule
 under:
   - commons.systems/disposition-graph/authority
@@ -1292,3 +1487,54 @@ On the viability of the options: The diff adds five options and removes none, so
 Strongest counter-argument (moderate): The recommendation's own defining clause rests on a term the schema cannot presently exhibit: `reconciliation-acts-on-a-convergence`'s AI divergence says so directly -- 'a rule that governs every reconciliation this record does today is stated in terms of a mark no node carries, and a reader who tries to check a past reconciliation against it finds nothing to check it with' -- and the account repeats the same admission twice more, once on the fact and once in the dated section recording the author's words. A recommendation whose central mechanism is, by its own text, unauditable is a real reason to hesitate before sending it to the author for ratification. It does not defeat forwarding here: the term is the author's own words at `words/2026-09-08/39` transcribed rather than an AI-invented test, the gap is disclosed at every locus a reader would meet the clause rather than smoothed over anywhere, and the fix is already named and handed to the node that owns the encoding, `what-an-option-row-carries`, rather than assumed or quietly deferred. That is the disclosure the evaluation node's rule against an AI answering a case against itself calls for, not a defect of this text.
 
 The session's reply: Forward taken, and the finding is right and larger than it stated. The measurement of the one-paragraph fence hazard sat on `interim-doctrine-binds-as-last-seen`'s divergence, the option the expert minted, while `projected-doctrine-acts`'s own divergence still read 'The record wrote no case against this option; its divergence is owed', so an author ruling for it met no warning at the place they would rule. The sitting re-measured rather than transcribing. The hazard covers six options and not five: `deferred-as-the-resting-state`, `projected-doctrine-acts`, `grant-expires-at-exit`, `nothing-acts`, `a-bootstrap-class` and `a-standing-direction-acts-by-right` all resolve to a whole fence with a one-paragraph answer, the sixth being the survey's own remedy option, which the finding explicitly said it did not touch. The warning now stands on each of the six in its own `**AI divergence.**`. The recorded measurement had also gone stale inside two days: it named sixty-nine lines for a recommendation that has since moved to `reconciliation-acts-on-a-convergence`, and gave the one-paragraph rivals as four where they are five, so its tallies are struck and the structure stated instead. The re-encoding itself is put to the author rather than performed, since re-encoding an existing option changes what the author would be ruling on. The finding does not touch the recommended option and does not hold the node back from the ruling, as the reading said.
+
+### Frontier survey, 2026-09-09, of f363726e
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Two nodes quote this node's definition of a grant in a form it no longer carries. This node defines "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it", while `probe-or-node` quotes it as "a grant is the author's word, given for one named reconciliation of one unanswered node" and `graph-topology`'s binding answer reads "the grant the `commons.systems/disposition-graph/what-acts-during-bootstrap` node defines reaches one named reconciliation and no class". The interim both nodes recommend rests on the narrower reading.
+- The first term of the convergence this node's recommendation acts on is one the record cannot write. Its rule text says so — the clause "states a rule whose encoding is owed" — and `festo-surrendered-subject-matter` measures it: "`recording`'s ruling responses being `confirm` and `edit`, neither of which writes a choice made and not confirmed. So on the recommendation as it stands there is a mark with no producer and no retraction, on a row the machinery reads." No option on `recording`'s answer fact supplies the missing response.
+
+Strongest counter-argument (strong): The recommendation makes reconciliation act on the convergence of the author's choice with the AI's recommendation, and the record can exhibit neither term reliably: the choice is a mark no ruling response writes, and the recommendation is the AI's own, so where the choice is absent the convergence is assembled by the party holding the other term. Meanwhile two nodes have built their interims on the earlier and narrower definition of the grant this node has since widened to a whole sitting, so the licence has grown while the things resting on it were drawn against its old reach.
+
+The session's reply: Both findings kept. On the grant's reach, this node is the survivor and needs no change: the two nodes quoting the narrower form are `probe-or-node` and `graph-topology`, and the repair is theirs. Confirmed against the record — both carry 'reaches one named reconciliation and no class' while this node defines the grant as reaching 'one alignment sitting and reaching every alignment in it'. The widening is this sitting's own, made under the author's refinement at `words/2026-09-08/22`, so the drift was introduced here and is this sitting's to clear rather than an inheritance. On the convergence, the finding restates what this node's rule text already concedes, and the concession now has a repair standing against it: `a-response-that-records-a-choice-short-of-confirmation` is recorded on `recording`, which is the node that owns the responses and the only place the owed encoding can be made.
+
+### Frontier finding, 2026-09-09
+
+Kind: cross-reference.
+
+Two nodes quote `what-acts-during-bootstrap`'s definition of a grant in a form it no longer carries. That node defines "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant." `probe-or-node` quotes it inside quotation marks as "a grant is the author's word, given for one named reconciliation of one unanswered node" and restates it as "which reaches one named reconciliation and no class"; `graph-topology`'s binding answer reads "the grant the `commons.systems/disposition-graph/what-acts-during-bootstrap` node defines reaches one named reconciliation and no class". Both interims — `interim-follows-the-authors-word` and `topology-is-a-field-until-it-is-contested` — argue from the narrower reach, and both nodes carry `commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right` in `depends`.
+
+Also named: commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/graph-topology.
+
+Proposed: The survivor is `what-acts-during-bootstrap`'s current definition. `probe-or-node` and `graph-topology` re-quote it as it now stands and re-make the argument against the wider reach: a grant that reaches a whole alignment sitting may or may not carry a standing direction about a class of act, and the case each node makes for its interim must be written against "one alignment sitting and reaching every alignment in it" rather than "one named reconciliation of one unanswered node". Where the wider reach makes the argument unnecessary, the interim is withdrawn rather than re-quoted. `what-acts-during-bootstrap` needs no change.
+
+### Frontier finding, 2026-09-09
+
+Kind: coverage.
+
+No node answers how an author's choice short of a confirmation is written, and three depend on there being one. The reading `festo-surrendered-subject-matter` states it: "The node's own text records that the record cannot presently encode the first of them at all, `recording`'s ruling responses being `confirm` and `edit`, neither of which writes a choice made and not confirmed. So on the recommendation as it stands there is a mark with no producer and no retraction, on a row the machinery reads." `what-an-option-row-carries` recommends `five-marks-and-the-two-the-author-added` and `viable-options` recommends `an-option-carries-a-selection-per-party`, both of which put the mark on a row; `what-acts-during-bootstrap`'s rule text makes the unconfirmed choice the first term of the convergence reconciliation acts on and concedes that the clause "states a rule whose encoding is owed". None of the twenty-eight options on `recording`'s answer fact adds a response that writes one.
+
+Also named: commons.systems/disposition-graph/what-an-option-row-carries, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/recording.
+
+Proposed: The survivor is `recording`, which owns the ruling responses, and the gap is closed there rather than on the three nodes that read the mark. The option below puts a third response on the table so that the author can mark a choice without confirming it and can lift the mark, and the two display nodes and `what-acts-during-bootstrap` then cite it instead of describing a state nothing produces. If the author does not want such a response, the same ruling settles it, and the three nodes lose the mark rather than keeping a row the machinery reads and no act can enter.
+
+Recorded as an option on commons.systems/disposition-graph/recording's answer fact: `a-response-that-records-a-choice-short-of-confirmation` (source review, 2026-09-09).
+
+### Frontier finding, 2026-09-09
+
+Kind: vocabulary.
+
+Eleven of the twenty-one judged nodes claim terms in `defines` and gloss none of them, including two at the ruling stage. The header lines read, verbatim: "- Defines: `propose` (no gloss yet); `project` (no gloss yet); `ratify` (no gloss yet); `steer` (no gloss yet); `periagogic` (no gloss yet); `maieutic` (no gloss yet); `boldness` (no gloss yet)" (`growth`); "- Defines: `confirmation` (no gloss yet); `kickback` (no gloss yet); `steelman` (no gloss yet); `substance` (no gloss yet)" (`recording`); "- Defines: `clean-context review` (no gloss yet)"; "- Defines: `option` (no gloss yet); `viable` (no gloss yet); `grant` (no gloss yet)" (`viable-options`); "`doctrine` (no gloss yet); `proposal` (no gloss yet)" (`authority`); "- Defines: `neighbourhood` (no gloss yet)" (`review-cost`); "- Defines: `probe` (no gloss yet)" (`author-questions`, at the ruling stage); "- Defines: `frontier survey` (no gloss yet)"; "- Defines: `reading` (no gloss yet); `tradition` (no gloss yet); `adopted` (no gloss yet); `diverged` (no gloss yet); `chosen over` (no gloss yet)" (`readings`); "- Defines: `seam` (no gloss yet)" (`decomposition`); "- Defines: `session context` (no gloss yet); `rules` (no gloss yet)" (`session-context`, at the ruling stage). Two of them are worse than empty. `authority` glosses both its terms in its own answer — "Doctrine is the ratified answers taken together." and "A proposal is technical vocabulary and is not overloaded" — so the definition exists everywhere but the entry the term index reads. And `viable-options` claims `grant` while `what-acts-during-bootstrap` defines the same thing under another name: "`bootstrap authority` — The author's grant, given explicitly in their words for one alignment sitting and reaching every alignment in it; the term is the author's, and the grant is the thing this node calls a grant." The mechanical tier does not reach any of this: `term-without-a-path` reports only a used term "with no path to it over 'under', 'depends' or 'cites'", which presupposes a definer and never asks whether the definer said anything.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/author-questions, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/session-context.
+
+Proposed: Each node fills the glosses it claims, which is a fill and not a redraft, so no stage is owed for it and none is named here except where the answer itself is implicated. The two exceptions: `authority`'s glosses are copied from its own answer, which is bookkeeping; and `viable-options` and `what-acts-during-bootstrap` settle between them who defines the grant, since one claims the term with nothing behind it and the other defines the thing under the name `bootstrap authority` — the survivor is `what-acts-during-bootstrap`, which has the author's own term and a gloss, and `viable-options` drops the claim or points at it. A node that cannot gloss a term it claims is claiming a term it does not own, and dropping the entry is the other way to close it.
+
+### Subtree divergence, 2026-09-09
+
+Two unruled nodes rest their interims on one option pending on `what-acts-during-bootstrap`, which recommends another. `graph-topology`'s header reads "- Depends: commons.systems/disposition-graph/recording#prune-of-an-unruled-node-needs-no-ruling, commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right", and `probe-or-node`'s reads "- Depends: commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right". Both answers make the dependence explicit: `graph-topology` says "a direction about a class acts by right only if that node's option `a-standing-direction-acts-by-right` is ruled, on which this interim rests", and `probe-or-node` says "the interim rests on the author's words and on nothing that node confers until the option is ruled". The ancestor recommends `reconciliation-acts-on-a-convergence`, not that option, so a ruling for the recommendation discards the ground both interims stand on — and both interims are what acts today, one of them a prune.
+
+- `a-standing-direction-acts-by-right` keeps commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/probe-or-node; discards nothing else named here.

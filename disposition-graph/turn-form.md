@@ -53,15 +53,85 @@ review:
   commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
   against: "The rule is still drawn from a single turn the author disliked, and their own words call the four forms what a prompt is 'expected to take' rather than a bound; the impediment turn only covers the sitting that cannot continue, so a session that finds something true and interesting but not of the four forms (or the impediment) still has no way to say so and must trust the record's projections to carry it to the author in time."
   survey:
-    date: 2026-09-07
+    date: 2026-09-09
     of: df26462f56913b23fc14607921b8c6ee447395d0
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "c500b5af90fd56770f41daad8a08790aaf45fae669d1386338005eee8f27931e"
       answer: "92b08f4cff50dfa8357f724b85371dcef78724a294dc88f927c84ca59caf0daa"
-      options: "c56cc4083bc1224d482ba7f95234688f1549270842ea36c55dc3ca2bb3172f69"
-      rivals: "99da5b75e808c84c20938a05f4d00f24dd231fdbbf566d8621a651b0329abd70"
+      options: "6169eefd5897fead3b6881291fd3175b8e734a3cedd7b152a1bdcebca2ed7035"
+      rivals: "1649be2c6b5c82e05770c72e11487c94f23778a63de50a2fc9bb6c5eecf55880"
       words: "fec759bafc64a9dc49f71b5bda297b63604d10462ae81a040f766a8a29e63279"
+    findings: []
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-page"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/alignment-target"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "words:words/2026-09-06/5"
+          - "cites"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+          - "cites"
+      - with: "commons.systems/disposition-graph/fidelity"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/graph-topology"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "words:words/2026-09-06/5"
+          - "words:words/2026-09-07/18"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/movements"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/plato-elenchus"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/plato-maieutics"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+          - "cites"
+      - with: "commons.systems/disposition-graph/plato-periagoge"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+          - "cites"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+          - "cites"
+      - with: "commons.systems/disposition-graph/standard-report"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "cites"
 under:
   - commons.systems/disposition-graph/growth
 ---
@@ -713,3 +783,14 @@ before the author, and a defect with two homes is recorded in both or found in
 neither. The option's divergence carries the case against, that a clause readable off
 nothing is a different kind of clause from four that are readable off the turn, and
 that stating it may buy the appearance of a guard where there is none.
+
+### Frontier survey, 2026-09-09, of df26462f
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The fifth form this node adds, the turn that reports an impediment, overlaps the probe without the record saying which carries what. `author-questions` holds that a probe is what the AI puts to the author when it cannot ground a recommendation, and this node's own `against` concedes that "a session that has found something the author would want to know, and that is neither probe nor direction nor acknowledgement, is still told to write it to the record and let the projections carry it". The record therefore gains a second channel to the author with no rule dividing it from the first, at the same moment `author-questions` recommends removing the one number that bounded the first.
+
+The session's reply: The counter-argument is kept and is the right objection. The fifth form and the probe are two channels to the author with no rule dividing them, and this node's own `against` already concedes the overlap. The sharper half is the timing the reading notices: the second channel is added in the same sitting in which `author-questions` removes the one number that bounded the first. That is not an argument against either change on its own and is an argument for settling the division before both land.

@@ -42,15 +42,76 @@ review:
   commit: a85f29250ccfcc8a10192dc507a0f1a17de6c2c3
   against: "Three of the previous reading's five findings were findings about `.claude/rules/class-recommendation.md`, the text every session loads, and the amendment answers all three in the node while leaving the projection exactly as that reading found it: the file still says \"escalates toward ratified\", still carries the citation loop, and still states as the ground of a sentence in doctrine the general census rule that `authority` deliberately holds unruled as `no-census-in-a-standing-answer`. So on the day the author is asked to rule, the defect the amendment's own account calls \"the one that changes what a session does\" is still in front of every session, and the amendment's claim that those clauses now sit outside \"a text projected verbatim into `.claude/rules/`\" is true of the node and false of the file. Against that: the fix is a regeneration and not a redrawing. The answer as amended is the right text on all five findings, the two things the amendment adds of its own -- the rationale paragraph and the fifth option -- check out against the record, and what is owed is publication, which is why this is a finding and not a kickback."
   survey:
-    date: 2026-09-07
-    of: 56bc6c93ed9bd703aa915c3fbc15d8a9aac0ec79
-    commit: edc5af91d942319c12174309e388a244de61fa52
+    date: 2026-09-09
+    of: 88fc510463ce7523d6ee4e3fe6e9254dc616654b
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
     text:
       question: "e36cfa0d84631a191ee50cf0c06cd6a5111dea516d3a97508d8108201faa6bd8"
-      answer: "8ee015e5c4a42af1e80dd7d68249295042e4a597f50ec1922372a0dd2360172b"
-      options: "2dfe63c9f5793bec86dcc479a14c14cc9be00b96d0ac69b092f95152a353ebbe"
-      rivals: "8b4f0f46cdf26d32fac778fdf8398d01e7d3cfad3cf71a8ad9f8d938a70b8ddb"
-      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      answer: "8f133218ed163415e74fe08aae2cae5e0812e4b41e46f58300bb14db437f100d"
+      options: "4454caed64d3d896a74cf695e2eafcd476ab69b4466b9ae87bea406ee14a3d83"
+      rivals: "23fdc8007614df8a6f2ccdb30535189b1e281b3ad8076bfde290ae150624ede9"
+      words: "da05df424eb3da2d5d01216f469fd5c910d0c0485c14ae1dcd2eadd383b59c07"
+    findings: []
+    pairs:
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "words:words/2026-09-08/39"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/deferring-on-a-probe"
+        keys:
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/delegation-bounds-and-sizing"
+        keys:
+          - "depends"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/expert-instructions"
+        keys:
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/graph-topology"
+        keys:
+          - "parent:commons.systems/disposition-graph/authority"
+      - with: "commons.systems/disposition-graph/materialization"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+      - with: "commons.systems/disposition-graph/movements"
+        keys:
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/probe-or-node"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "parent:commons.systems/disposition-graph/authority"
+      - with: "commons.systems/disposition-graph/round-termination"
+        keys:
+          - "words:words/2026-09-08/39"
+      - with: "commons.systems/disposition-graph/session-state"
+        keys:
+          - "words:words/2026-09-08/39"
+          - "cites"
+      - with: "commons.systems/disposition-graph/topology-criteria"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/turn-form"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "words:words/2026-09-08/39"
+          - "parent:commons.systems/disposition-graph/authority"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "words:words/2026-09-08/39"
+          - "parent:commons.systems/disposition-graph/authority"
+      - with: "commons.systems/disposition-graph/what-an-option-row-carries"
+        keys:
+          - "words:words/2026-09-08/39"
 form: rule
 tier: global
 under:
@@ -601,3 +662,14 @@ item on this node and is not done here.
 This node is `tier: global`, so its rule projection under
 `.claude/rules/class-recommendation.md` is stale from this amendment. The projection
 lands on the implementation ref and is named in this sitting's report.
+
+### Frontier survey, 2026-09-09, of 88fc5104
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The answer makes the `### authority` subsection the sole home of the reading that applies the test — its own `against` says the reading rests "with no instrument behind it and no record of the reading anywhere but the node's authority-fact prose" — and `authority`'s option `no-census-anywhere-in-a-node` reports that "the forty-six false census sentences this survey found are all in `### authority` prose and none in a `## Answer`". So the record has measured that this exact location is where its false statements accumulate, and the answer puts the check on the AI's own escalation there and nowhere else. That is the capture limb of its own test applied to the test.
+
+The session's reply: The counter-argument is kept and is the strongest thing said about this node today. The answer puts the reading that applies its own escalation test in the `### authority` prose and nowhere else, and the record has now measured that this exact location is where its false statements collect. That is the capture limb of the node's own test turned on the test, and this node has no answer to it that does not come from somewhere else in the record.

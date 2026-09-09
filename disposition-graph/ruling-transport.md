@@ -41,6 +41,16 @@ facts:
       - name: deferred
     recommends: delegated
     boldness: moderate
+review:
+  survey:
+    date: 2026-09-09
+    commit: 7eb63405f8cb47eeeb97bf86f5a5a87948c0efbb
+    text:
+      question: "4faa4c21dec3f4c172ab2ffe7c7a81f1afb35ed3396d64bab830c59c4b3af995"
+      answer: "d24695fa6d8b4c7fd21ea932b412d01a3bd9776560d54f90d2e13b64b4267e91"
+      options: "e2efd0d9e498e873266049f33bc55fdd76628b3d40fc22a6b29270aa1337ee75"
+      rivals: "376001ec7aeba74a0e77ff7ec16b9fb27ad3f495df009731e71e8d16cf35dc6e"
+      words: "e2eb20721b18212dc78cc3e264ea56ea85b689b44a83a10771e5d77f90755a0d"
 shims:
   - artifact: "the session launch control on the alignment page and on every stage chip, `https://claude.ai/code?prompt=<the instruction>&repositories=natb1/commons.systems`, stubbed in the user interface and in the implementation: it is rendered and it is marked a stub, and no part of the flow depends on it"
     for: the launch half of this node's answer, the copy half being the route the author uses
