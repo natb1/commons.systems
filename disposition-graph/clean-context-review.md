@@ -551,6 +551,9 @@ facts:
       - name: the-independent-reading-is-constituted-and-sequenced-after-the-experts
         source: ai
         ref: "2026-09-08"
+      - name: independence-by-model-diversity-and-one-whole-object-per-reader
+        source: ai
+        ref: "2026-09-08"
     recommends: a-surveys-selection-and-its-state-are-the-selection-nodes
     boldness: high
     against: "The wave buys bytes and spends attention, and attention is the quantity this subtree has already said is the scarce one. `review-cost` now recommends that \"Token efficiency and context management are bounds on what a reading is given; attention is what the reading does with it, and it is not the same quantity\", and a wave halves the bytes while quartering what any one object gets of the reader: the brief is fifty-six percent smaller, but each of the four drafts is now judged by a reader holding three other drafts, three other neighbourhoods of options, and three other verdicts it must also write. Deriving the wave's membership and bounding its brief settle who is in it and how large it may be, and neither touches that: on the record's own accounting a wave is a rise in cost per unit of attention and not a fall, and it is invisible to the measurement the case is built on, which counts only bytes. The deeper objection is that the saving and the loss fall on different parties: the bytes are the record's, the independence is the author's, and the author is the one the review exists to protect. And the loss is hedged only by the survey, which this node's own rationale still records as one \"no sitting has yet generated\" and which runs for the first time in the sitting that recommends the wave."
@@ -1275,6 +1278,62 @@ The independent reading is kept and constituted rather than struck: its brief fi
 **AI divergence.** It requires a party the record does not have. "Convened by something other than the party under test" names no one: there is the author, the main thread, and what the main thread launches, and the first is the party the instrument exists to protect. So the clause is a requirement without an implementation, and it is `movements`' open probe and not this node's to settle. It also adds a phase to a shape the author has just described as iterative rather than sequenced, which is a real tension with the same entry's P3 and not a detail.
 
 
+#### independence-by-model-diversity-and-one-whole-object-per-reader
+
+The expert's choice, minted by it. The independent reading is kept and every reading
+takes exactly one whole draft and no wave; its independence is bought by drawing the
+reader from a different model family than the one that drafted and, where the record can
+arrange it, by putting the draft before it unattributed; its brief assigns no adversarial
+role and supplies no candidate finding; and context freshness is kept as a cheap
+necessary condition rather than treated as the mechanism that buys independence. Within
+the options already on the fact the expert chooses
+`identical-prefix-across-a-waves-briefs`.
+
+**Expert choice.** `llm-systems-evidence`, convened on this answer fact on 2026-09-08,
+grounding the measured behaviour of language-model systems. Its case rests on
+measurements with loci, of which the load-bearing ones are these. On the closest
+published analogue to this record's actual use -- a pre-registered experiment in which
+the authors of forty-four meta-analyses ranked AI reports on their own paper by
+usefulness -- a single-pass frontier model beat two purpose-built multi-agent debate
+systems by 0.66 and 0.57 rank points, ninety-five per cent intervals excluding zero, with
+the losing system at roughly thirty times the tokens (arXiv 2607.14713). On subjective
+rubric scoring across six judge models a single judge had the strongest human alignment
+and consensus multi-agent debate degraded it, while an assigned strict-judge role
+introduced a systematic downward bias consensus did not correct (2608.30373, EMNLP 2026
+Findings). Assigned personas do not improve accuracy across 162 roles, four model
+families and 2,410 questions (2311.10054). A panel of diverse smaller judges beats a
+single large judge at a seventh of the cost with reduced intra-model bias (2404.18796),
+and ensembling mitigates self-preference where a single judge does not (2604.06996).
+Under blind evaluation self-preference vanishes on three of four rubric dimensions and
+reverses on the fourth, the bias being driven by attribution rather than content
+(2608.18091). So independence is bought by diversity and blinding, both measured;
+freshness is cheap and necessary and is not the mechanism the record has been crediting.
+
+**Expert divergence, its own, three breaks it names against itself.** Model diversity may
+be unavailable: this harness runs one vendor's models, and a different checkpoint of the
+same family is not what the panel result measured, so the clause may be a requirement
+with no implementation -- the same defect the expert charges against the sequencing
+option. Blinding may be impossible here, since the record's drafts carry the record's
+voice and the reader is given the ancestry, while the blind condition it cites was
+constructed on material chosen for lacking model-specific stylistic markers, which this
+record's prose is not. And the whole-object clause and the diversity clause pull apart on
+cost: a whole-object reading on a second family is a second full-price reading, and
+nothing the expert found prices that against the record's actual criterion, which is the
+author's attention and not tokens.
+
+**AI support.** The option is the only one on this fact that separates the three
+mechanisms the record has been treating as one. The record's own texts justify the fresh
+context sometimes by framing and sometimes by authorship, and the expert's evidence says
+those have different cures -- a small brief in a separate context for the first, a
+different family and an unattributed object for the second -- so a design that names
+which it is buying is better than one that does not, whatever the author decides to buy.
+
+**AI divergence.** The option is silent on what this fact's recommendation is mostly
+about, which is the survey's selection and its state, and on the survey half generally;
+the expert's grounding reaches the reading and not the selection, and it says so. Taken
+alone the option would leave the fact answering less than it answers today.
+
+
 ### authority
 
 Ratified, at low boldness. The author's words set this node's shape twice on 2026-09-03 and once more on 2026-09-04 through the decomposition node, and being wrong here is capture-shaped: the review is the guard against the blind spots of the session that drafts, and a delegation would let the reviewed party set the terms of its own review. The parent and the decomposition node recommend the same class at the same boldness.
@@ -1506,3 +1565,91 @@ The expert declared the bias and asked that its agreement with that framing be
 discounted and its disagreements weighted more. That is recorded on
 `expert-instructions` as an instance and is noted here because it conditions everything
 above: the supports in this account were written by a reader that was pointed at them.
+
+### The third expert, on this fact, 2026-09-08
+
+`llm-systems-evidence` was convened on this answer fact under the author's grant, its
+grounding the measured behaviour of language-model systems, and its return is recorded
+above. It returned a support and a divergence for each of twenty-four options and left
+the strings empty where its grounding had nothing to say, which is the first exercise in
+this record of the nullable pair the author's words of 2026-09-08 fix on the
+tradition-to-option edge; the expert states the empty string as a finding about the scope
+of the evidence rather than an omission, which is the reading this record should keep.
+
+The recommendation does not move. What the expert returns bears on the reading and not on
+the survey's selection, which is most of what the standing recommendation answers, so
+integrating it would replace an answer to a wider question with an answer to a narrower
+one.
+
+**The finding this sitting most needs on the ref, and it is against the sitting.** The
+expert reports that it read the first expert's tradition divergence on the strike option
+before forming its own view, because that paragraph is in the file the brief told it to
+read first, and that its divergence from the strike is therefore not independent of the
+first expert's. In its words: "The record must not count my agreement as corroboration.
+Two readers who read each other are one reader, and that is the exact failure the fact I
+am scoped to is about, occurring inside this sitting." It adds that the shape in which an
+option accumulates each expert's support and divergence makes a second independent
+opinion structurally impossible, since every later expert reads the earlier ones. That is
+a defect in the accumulation the author's words of 2026-09-08 fix, it is reported by the
+party it convicts, and it is recorded on `dialogue`, which owns the accumulation, as well
+as here.
+
+What the expert adds that the first did not have is two measured results on the strike --
+2607.14713 and 2608.30373 -- and it says so and says the rest of its case restates the
+first expert's argument in a different vocabulary. So the record now holds two divergences
+from the author's current choice and one and a bit reasons for them.
+
+The expert also declines a claim it was not asked for and could be read into its answer.
+It did not run a symmetric search for successes of the system the strike would adopt, and
+says so: "The finding is: strong, recent, directly on-task qualifications exist and the
+record does not hold them. It is not: the balance of the literature is negative." The
+distinction is kept here because the strike is the author's own choice and the record
+should not overstate what stands against it.
+
+### What is lost in the strike, both experts, 2026-09-08
+
+The author's standing instruction to this sitting was to establish grounding on whether
+anything is lost in adopting the expert approach over the adversarial review approach.
+Two experts have now answered it from unrelated groundings, and they converge on a
+division rather than on a verdict.
+
+`dialectical-conduct` divides the review's work into a dialectical function and an
+inspection function. The dialectical function is subsumed: the expert system supplies far
+more argument than one reviewer ever did, and on quality of argument the experts plainly
+dominate. The inspection function is not subsumed, and the expert states why in a form
+the record can check: an expert convened on a fact argues about the fact, while a reader
+in clean context is the only party whose object is what the record actually says rather
+than what the parties meant it to say. Its worked example is on `growth`, whose review of
+2026-09-07 recorded as its `against` that an option's frontmatter said `passed` while its
+account prose still read "Adopted into the recommendation" -- a disagreement between two
+parts of a document, which is not an argument about anything and which no expert convened
+on the answer fact had reason to look for. `plato-elenchus` names the same residue: the
+function no party can discharge on itself, whose authority comes from the reviewer not
+being the drafter and not from what it finds.
+
+`llm-systems-evidence` reaches the same division from measurements. It grants the
+strike's diagnosis on one point: the incumbent's independence is partly asserted, since
+an assigned adversarial role does not improve accuracy and an assigned strict-judge role
+introduces a systematic downward bias. It denies the substitution, on the ground that the
+closest measurements run against it, and it names the mechanism that cuts specifically at
+this expert system -- that a panel whose members are all scoped has no member who reads
+the object whole, while the record's own positive citation for debate claims that a model
+confident in its position cannot escape it by reflection, which argues for a party with
+no prior recorded position, and every expert acquires one the moment its support and
+divergence are written on the option. Its ninth probe is that it found no measurement, in
+any medium, that an ensemble of scoped readers recovers defects of composition that no
+member could see, and that this is the load-bearing empirical claim under the strike.
+
+There is a second loss both experts name and neither counts as an argument against the
+strike. The clean-context review was the one gate in this record that fired without the
+author spending attention. Strike it and the cost does not vanish; it lands on the
+author, in a record whose own words name the author's attention as the resource to
+conserve. `dialectical-conduct` records this as a transfer and asks that it be counted as
+one rather than as a saving.
+
+The cheap repair both leave open, and which no option on this fact yet states: keep the
+inspection alone -- one pass by a party who reads the node as written and argues nothing,
+a smaller instrument than the review being struck. It is not minted here because minting
+it would be the main thread choosing among the experts on a fact where two of them have
+just told it that its briefs are steering them, and because the author's choice to strike
+is on the fact and unconfirmed. It is put to the author as a probe.

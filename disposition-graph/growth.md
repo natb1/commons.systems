@@ -900,6 +900,9 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/37
+      - name: growth-answers-the-acts-and-cites-its-children
+        source: ai
+        ref: "2026-09-08"
     recommends: turn-form-to-a-child-and-terms-aligned
     boldness: moderate
   - name: authority
@@ -2346,6 +2349,72 @@ coherent account of the node it misread. Whether iteration preserves it is a que
 an expert and not for the AI whose reading is the thing at risk.
 
 
+#### growth-answers-the-acts-and-cites-its-children
+
+The expert's choice, minted by it. `growth`'s answer keeps only what holds however
+the dialogue is orchestrated -- that the graph changes by acts on nodes, facts and
+options; that the AI drafts and recommends with no authority of its own; that the record
+is projected for the author to read; and that nothing becomes doctrine until the author
+confirms it -- and every clause that specifies conduct, the movements and their order,
+the entry points and usages, what a presentation must state, what a turn may be, moves to
+the children that already exist to hold it, carrying the boldness reversal and the three
+vocabulary alignments of the current recommendation. Where the author prefers a smaller
+move, the expert's second choice is `split-presentation-and-movements` amended to carry
+those alignments, which is the same move stopping two children short.
+
+**Expert choice.** `dialectical-conduct`, convened on this answer fact on 2026-09-08,
+grounding the conduct of structured inquiry. Its argument in its own terms: what `growth`
+states today is a phase model of an inquiry, and the central finding of the tradition
+this record already cites for its structure, Rittel's, in the second-generation design
+methods and in IBIS, is that the phase model is a fiction and the argumentative structure
+is the durable thing. The record furnished its own proof. Its issue layer -- node, fact,
+option, ruling, authority, class -- has not moved in six days; its procedure layer has
+been rewritten twice in six days and is mid-rewrite now. A text welding the two together
+must be re-ratified whenever the procedure moves, so either it is never ratified or the
+author ratifies stale procedure under cover of stable structure. Walton and Krabbe's
+typology says the same from the other side: this answer runs an information-seeking
+dialogue, a persuasion dialogue and an inquiry as one ordered procedure with one goal,
+and each type has its own goal, burden and standard of relevance, which one procedure
+cannot mark the shift between. The record has spent two days spontaneously minting a
+child for each -- `movements` for the three conducts, `expert-identity` and
+`expert-instructions` for the inquiry's participants, `round-termination` for its
+stopping rule -- which the expert reads as the typology reasserting itself against a text
+that denied it. And the scholastic rule the record has already applied twice under its
+own name: the unit of determination is the article and the article is one question, which
+`delegation-bounds-and-sizing` states in the record's own words for `delegation`.
+`growth` is in `delegation`'s position, one question further up.
+
+**Expert divergence, its own, against itself.** It gives up the self-contained text, and
+the expert reports its grounding as genuinely split rather than merely cautious: the
+*ordinatio* was one document for a reason, since a reader assembling a determination out
+of a subtree of unanswered children can be told anything by whoever assembles, and the
+assembler here is the AI. The record's declared mitigation, that the skill is projected
+from the ratified subtree, is `growth`'s own shim liquidation and is a promise rather
+than a mechanism that exists today. So the option is right about where the clauses belong
+and owes an account of what a session reads in the interval. Its second divergence is
+against itself: "minting an option is what a party does when it dislikes the ones on the
+table, and I am that party, convened by a brief that told me the split was already made.
+Weigh it accordingly."
+
+**AI support.** The measurement behind the argument is checkable and was checked. The
+expert's claim that `growth` carries no reference to the author's words of 2026-09-08 was
+true when it read the file: `growth.md` carried no `supports` or `diverges` reference to
+`words/2026-09-08/36` or `/37` on any option, while seventeen other node files carried
+36. Seventeen still stands. The reference to 37 no longer does, because this sitting
+landed one at `57adb63b` after the expert had read; the reference to 36 is still absent,
+which is the half of the finding that survives.
+
+**AI divergence.** The main thread does not integrate this into a moved recommendation
+and says why rather than leaving the hold to look like caution. The expert reports, in
+its own first section, that the brief handed it as settled topology the proposition its
+scope was to decide, and that a reviewer should treat its choice as the option a steered
+expert would have produced anyway. That report is correct and was verified against the
+record: `movements.md` says in terms "Nothing moved out of `growth`", and the brief said
+`movements` owns the movements. An expert's choice contaminated by the brief in the
+direction of its own conclusion is evidence about the brief before it is evidence about
+the fact.
+
+
 ### authority
 
 Ratified, on the capture-shaped limb of `commons.systems/disposition-graph/class-recommendation`'s test. This node defines the vocabulary the author rules with — propose, project, ratify, steer, periagogic, maieutic, boldness — and states the conduct of the interview in which the author checks the AI; the party that would set that conduct is the party the conduct exists to check, which is the limb. The other two are not met on this recommendation's own object: the move of a rule to a child node and the alignment of three terms cost a landing to undo and undo cleanly. Boldness low on the class: it follows the stated test, and the author's ruling of 2026-09-03 on this node's rule shows they mean to be asked.
@@ -2525,3 +2594,40 @@ parser hard-codes the sequence as well, `read.mjs` fixing the four stages and th
 option sources, with 238 options presently carrying `source: review`; that is
 implementation and lands on the other ref, and it is named here so the cost of the
 change is visible where the change is proposed.
+
+### The second expert, on this fact, 2026-09-08
+
+`dialectical-conduct` was convened on this answer fact under the author's grant, its
+grounding the conduct of structured inquiry, and its return is recorded above as the
+option `growth-answers-the-acts-and-cites-its-children` with its choice among the
+existing options, `split-presentation-and-movements` amended. It read the nine live
+options of the twenty-seven then on the fact and returned a support and a divergence for
+each, treating the nineteen passed options as closed to it; it reports that the brief did
+not say whether a passed option is open to an expert, and that every expert on this fact
+will therefore have resolved the question differently.
+
+The recommendation does not move, and the reason is recorded rather than assumed. The
+expert reports its own choice as steered: the brief told it that `movements` "owns the
+movements themselves", which is false on the record -- `movements.md` says "Nothing moved
+out of `growth`. Its answer still states the movements and still defines `periagogic` and
+`maieutic`" -- and the false sentence was placed third in the reading order, which is
+where a brief puts what it wants held in mind during judgment. The expert says a reviewer
+should treat its §2 as the option a steered expert would have produced anyway, and offers
+one piece of counter-evidence, that it reached the same place from a check the brief
+could not have planted, namely that `growth` and `movements` now carry two different
+answers to one question. The main thread takes the report at its word: the option stands
+and the mark does not move on it.
+
+What survives the contamination and bears on the standing recommendation is a
+measurement rather than an argument. The expert found that `growth` carried no reference
+to `words/2026-09-08/36` or `/37` on any option while seventeen other node files carried
+36, and that the recommended option's own content still states the sitting moves in order
+through six named movements including the clean-context review, and that the recording is
+kicked back to the movement it calls for -- three clauses entries 36 and 37 strike. Half
+the measurement has since been repaired by this sitting at `57adb63b`; the absence of
+entry 36 from this node remains, and is the reason the recommendation should not be put
+to the author in its present state.
+
+Two of the expert's findings are recorded elsewhere because they belong elsewhere: its
+account of what the clean-context review buys that an expert system does not is on
+`clean-context-review`, and the brief-bias instance is on `expert-instructions`.
