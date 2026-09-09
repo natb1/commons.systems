@@ -86,3 +86,64 @@ Nothing is proposed. The node stays at the periagogic stage with its object unre
 and this section widens the problem statement rather than answering it. Recorded in
 the alignment sitting of 2026-09-08 under the grant at `words/2026-09-08/2` as
 refined at `words/2026-09-08/22`.
+
+### Three measured instances, 2026-09-09
+
+The node was queued on a hazard argued from two clauses. On 2026-09-09 the
+sitting met the hazard three times in one day, in a narrower form than the node
+states and by a different route, and the instances are recorded here because a
+node asking what keeps stale residue from being acted on is better answered
+against measurements than against an argument.
+
+The narrower form is this. The node's own case is about a residual written
+against disposition that then moves under it inside one sitting. What the
+sitting actually found is the same failure with the clock run slower and the
+subject changed: a count written in prose against a structure that then grows.
+The residual there is not a plan to reconcile something, it is a sentence
+asserting a fact about the record, and it decays exactly as the node predicts,
+silently, with nothing between the writing and the reading that re-measures it.
+
+The first. `what-an-option-row-carries` held that a rival option would print
+its lead on three rows of each of the 134 nodes carrying the authority fact.
+The claim about `vocabulary-option-summary` verified; the number did not. Dated
+against the graph: 133 nodes carried the authority fact at the end of
+2026-09-06, 150 in the middle of 2026-09-07, 164 when the clean-context reading
+raised it. So the number was right when written and went stale in three days.
+It is struck rather than corrected, because correcting it would restart the same
+clock, and the sentence now states the rule.
+
+The second. `authority`'s account said the browser's `excludeUnaligned` would
+otherwise drop all 169 nodes. The graph held 176 when that was re-read, four
+days later. Struck for the same reason, in the same pass, without waiting for a
+reader to catch it.
+
+The third is the one worth the entry, because it was found by re-measuring
+rather than by a reader noticing. `what-acts-during-bootstrap` carried a
+measurement of its own options' encodings: sixty-nine lines for the
+recommendation against six rivals, four of them said to be one-paragraph
+fences. Re-measured, the recommendation had moved to another option and grown
+by half, and the one-paragraph rivals numbered five and not four, which changed
+what the finding covered — six options carry the hazard, not five, the sixth
+being the survey's own remedy option. Nothing had gone wrong; the record had
+grown under a sentence that could not grow with it. That is two days of drift
+in a measurement written to be authoritative, and the reading that surfaced the
+neighbourhood of it did not catch the number, so the only thing that caught it
+was measuring again.
+
+What the three suggest, and it is a suggestion and not a fact this node has:
+the guard the node is looking for may not be a freshness check at all. Two of
+these three were repaired by striking the number and stating the rule the
+number stood for, which is a repair that cannot go stale because it asserts
+nothing the record can outgrow. If a residual can be written so that it names
+the rule and derives the count, the hazard does not arise for it; where it
+cannot, an instrument has to re-derive the count at read time, which is what
+`--rules --check` already does for the rule projections and what nothing does
+for prose. Whether the node's answer is a check, a form of words, or an
+instrument is open, and the sitting records the evidence without foreclosing it.
+
+The related precedent, already in the record, is the frontier survey of
+2026-09-05, which found a census sentence carried verbatim by forty-six reading
+nodes had gone false. That was a fourth instance of the same thing and it is
+what the seven readings minted on 2026-09-09 avoided by writing the class rule
+in their `### authority` subsections rather than the census sentence. So the
+record now has one worked example of the preventive form, and it costs nothing.
