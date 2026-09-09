@@ -3596,3 +3596,27 @@ record has no `source` value for an expert and no reader key for an expert's pos
 the positions whose independence is in question are also not separable from the AI's own
 by any query. Recorded here so that whoever answers this node's encoding question sees
 that both are open.
+
+### Two terms this node claims that another node claims too, 2026-09-08
+
+The projector's contract check reports two terms declared by two nodes each, and
+this node is a party to both: `answer`, claimed here and by `node`, and
+`persistence`, claimed here and by `transience`. Measured on 2026-09-08 and
+recorded here because the conflict is only visible from the pair.
+
+Neither is obviously wrong, which is why nothing is moved. This node asks what an
+unanswered node carries, so it has business in `answer` as a piece of dialogue
+state and in `persistence` as one of the four facts. `node` asks what a node is,
+so it has business in `answer` as a part of the thing; `transience` owns
+`persistence` as a property of an artifact. The two senses may be the same term
+used in two registers, in which case one node should hold it and the other cite,
+or they may be two terms sharing a spelling, in which case the record needs
+different words rather than a different owner.
+
+This node also carries 11 of the 96 terms the same check reports as declared
+without a gloss, the most of any node, `dialogue`, `dialogue state`, `stage`,
+`alternative`, `standing answer` and `draft` among them. Whether that is a
+backlog or a false positive is `self-documentation`'s probe
+`does-a-declared-term-owe-a-sentence`, and the conflicts above wait on it: two
+nodes claiming a term is a different matter if a claim carries no sentence than
+if it must.

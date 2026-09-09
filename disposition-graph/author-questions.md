@@ -1369,3 +1369,21 @@ author wants, one list with a target or two lists. The probe
 `where-does-a-probe-addressed-to-an-expert-live` asks that, and the option is owed the
 moment it is answered. The disposition is recorded here so that it is on the record from
 the day it was said and does not wait on the drafting.
+
+### Why `discharge` is the rule and not the exception, 2026-09-08
+
+The probe `what-should-the-record-call-a-probe-that-is-answered` was raised here
+on the ground that the record uses `discharge` 330 times and defines it nowhere.
+A measurement taken the same day on `self-documentation` puts that in its place:
+the projector's contract check reports 96 declared terms carrying no gloss,
+across 33 of the graph's 165 nodes, and `probe` on this node is one of them.
+
+That cuts both ways and the record should carry both. It weakens any reading of
+the `discharge` probe as an isolated slip, since the record is undefined about
+much of its own vocabulary and has an instrument saying so on every run. It
+strengthens the probe as a question worth the author's time, because
+`discharge`'s case is the worse of the two: a term no node claims produces no
+finding at all, so the instrument that would have caught it is structurally
+blind to it, and it took the author asking. The glossary question is
+`self-documentation`'s and is not re-asked here; what is recorded here is that
+this node's probe was not raised against a background of a well-glossed record.

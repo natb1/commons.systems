@@ -2,6 +2,33 @@
 question: How does this repository document itself?
 stage: maieutic
 probes:
+  - id: does-a-declared-term-owe-a-sentence
+    asks: >-
+      A node's `defines` block does two jobs: it claims a term, so the projector
+      can report when two nodes claim the same one, and it may carry the
+      sentence a projection shows for that term. Ninety-six of the hundred and
+      twenty-four terms this graph declares do the first job only. Is a bare
+      claim a legitimate use of the field, or does the record owe those
+      ninety-six sentences?
+    fact: answer
+    why: >-
+      The record has an instrument reporting this and no disposition saying what
+      the report means. `project.mjs` warns `term "X" has no gloss` once per
+      bare entry, ninety-six times across thirty-three of the graph's
+      hundred and sixty-five nodes, on every projection run; the warnings are
+      the loudest thing the projector says and nothing acts on them. Read for an
+      answer: `read.mjs`'s `DEFINES_KEYS`, which admits `term` and `gloss` and
+      makes neither required; `derive.mjs`'s `glossary`, which builds the map
+      from glossed entries alone and skips bare ones by design, so a bare claim
+      is not a broken entry to that reader; and `project.mjs` at the conflict
+      check and the gloss warning, which are two tests over one field.
+    discharges: >-
+      Whether the ninety-six findings are a backlog the record owes or a false
+      positive the check owes, and therefore whether `defines` stays one field
+      with an optional sentence or divides into the claim and the gloss. It does
+      not move what this node says about the browser or the overview.
+    source: ai
+    raised: 2026-09-08
   - id: what-equal-means-in-the-order
     asks: >-
       What does the author mean by self-documentation and scope standing equal
@@ -120,3 +147,39 @@ The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/auth
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/self-documentation stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). 1 `## Disposition` entry became the ledger entry words/2026-09-03/74, referenced by 1 option the entry's own date names. No content is recorded for `section-of-its-own`, `overview-as-blog-shaped-content`: the record never wrote one and the migration invents none.
+
+### What the projector already says about this record's vocabulary, 2026-09-08
+
+This node asks how the repository documents itself, and the repository has an
+answer to part of that which no node had yet read. The projector's contract
+check runs on every projection and reports, in this measurement of 2026-09-08:
+the graph holds 165 nodes; 40 of them declare terms; 124 terms are declared;
+28 carry a gloss and 96 do not; the 96 fall across 33 nodes. `dialogue` carries
+11 of them, `growth` 7, `transience`, `readings` and `instruments` 5 each. Among
+the bare terms are `dialogue` on `dialogue`, `probe` on `author-questions`,
+`doctrine` and `proposal` on `authority`, and `clean-context review` on
+`clean-context-review`: in each case the node that owns the term claims it and
+says nothing about it in the field built to hold the saying.
+
+The finding is not that the record is undocumented. The glossary convention is
+live and used 28 times, and `derive.mjs` reads it to gloss an option by its
+name. The finding is narrower and is why this is a probe: one field is carrying
+two jobs. `defines` claims a term, which is what the conflict check reads, and
+it may also carry a sentence, which is what `glossary` reads; `glossary` skips a
+bare entry deliberately, so to that reader a bare claim is well-formed, while
+`project.mjs` warns on it. Two readers of one field disagree about whether it is
+complete, and the record has never said which is right.
+
+Two terms are claimed twice, which the same check reports separately: `answer`
+by both `dialogue` and `node`, and `persistence` by both `dialogue` and
+`transience`. Those are recorded on `dialogue`, which is a party to both.
+
+What makes this worth a node's attention rather than a cleanup task is the
+blind spot on the other side. The check can only see terms some node has
+claimed. `discharge` is used 330 times across 73 of the 165 node files, is the
+one status the probe schema admits, and is claimed by no node at all, so it
+produces no finding; the author asked what it means on 2026-09-08 and the record
+could not answer from its own text. So the instrument reports the claimed and
+unglossed and is silent about the unclaimed and load-bearing, and the second set
+is where the damage was actually found. Whatever this node answers about the
+glossary should say which of the two problems it is solving.
