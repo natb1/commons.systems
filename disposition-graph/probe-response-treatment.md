@@ -225,3 +225,24 @@ option is right, which the node's own account did not have: with the treatment c
 step 1 is one clause instead of two, and every step after it is written once. A rule
 that divided them would have had to be carried through steps 2, 3 and 7 as a branch
 each time.
+
+### The enumeration above is dated, and the date is the point, 2026-09-08
+
+The section "The sitting's own alignment inputs, sequenced" enumerates eight entries of
+2026-09-08 and finds four of them sequenced, "exactly half". The ledger of that day now
+holds thirty-seven entries. The enumeration is a measurement of a population that was
+still growing when it was taken, made by a sitting that described itself as ending and
+then ran on for another twenty-nine entries under the same grant.
+
+The arithmetic is not corrected here, because correcting it would produce another
+measurement with the same defect: the sitting is still running and the author is still
+writing into it. What is corrected is the claim's scope. "Exactly half" describes the
+population as it stood at the eighth entry, and the re-measurement over the full day is
+owed to whichever sitting can take it after the day closes.
+
+That this node's own account carries a stale count of the thing it exists to count is the
+sharpest evidence it has for its own rule. The rule asks that a response's sequencing be
+visible; what the sitting found is that visibility taken once decays, because the
+population is open for as long as the sitting is. Any instrument this node's answer calls
+for has to be re-runnable rather than transcribed, and the account above is what
+transcription looks like a day later.

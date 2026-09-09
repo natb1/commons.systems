@@ -1480,3 +1480,68 @@ inside, which is cheaper than getting every brief right and is not a substitute 
 Whether that clause belongs in the standard skill is a question this account raises and
 does not answer, since it is the node's own answer fact and the sitting has not put it
 to the author.
+
+### Three more briefs that named the finding they hoped for, 2026-09-08
+
+The section above keeps one instance because of how it came back. The same sitting
+produced three more, and they are kept together because the pattern across four is more
+informative than any one of them, and because two of the three were written after the
+first was already recorded on this node.
+
+The brief for the expert convened on `growth` told it that `movements` "owns the
+movements themselves". `movements.md:396` says the opposite, verbatim: "Nothing moved out
+of `growth`. Its answer still states the movements and still defines `periagogic` and
+`maieutic`". The brief handed the expert as settled topology the proposition its scope
+was to decide, and stated it as a fact about the record rather than as the launching
+session's view. The expert caught it, checked the file, and reported the brief false.
+This is the worst of the four: the others pre-framed a judgment, this one asserted
+something untrue about the record's own text.
+
+The brief for the expert convened on `clean-context-review` gave it a floor list composed
+only of failure modes. Every item named something that could go wrong with the review;
+none named what the review had been measured to catch. The finding this node already
+records is that briefs name the finding they hope for inside the list itself, and a list
+of failure modes is that finding in list form. It recurred one day after the measurement
+was written here.
+
+The brief for the expert convened on `what-acts-during-bootstrap` described its grounding
+as, among other things, "the design of authority that is meant to shrink". The node's own
+recommended answer ends its first sentence "and what acts by right shrinks with every
+ruling". The brief described the expert's expertise in the incumbent answer's words, so
+the expert was constituted as a specialist in the thing it was to evaluate. It declared
+this itself, asked that any finding of its amounting to "a shrinking, event-driven
+ratchet is good design" be read as the brief talking, and kept exactly one such finding,
+flagged.
+
+Three of the four experts declared the bias without being asked to. That is evidence for
+the clause the section above raises and does not answer, that an expert told to declare
+the brief's bias can partly repair a biased brief from inside, and it is stronger
+evidence than that section had, because these three were not told to and did it anyway.
+It is still not a substitute for a correct brief, and the `growth` instance is why: a
+declaration can discount a framing, and it cannot restore a fact the brief got wrong,
+because the expert has no reason to check a proposition the brief states as settled. The
+`growth` expert checked only because the proposition bore directly on its scope.
+
+### Two things a brief must carry that no option here yet names, 2026-09-08
+
+The first is the resource position. All four of the sitting's experts exhausted the
+session's web-search budget at 200 of 200, and every one of them discovered it by hitting
+the wall. A unit told at launch how much of a shared, sitting-wide budget remains can
+choose which of its traditions to spend it on; a unit not told spends breadth-first until
+it stops. The traditions this cost the sitting are enumerated on `unreached-traditions`.
+The requirement is small and belongs in the standard text rather than in each launching
+session's composition, because it is exactly the kind of clause a session composing
+freshly forgets under load.
+
+The second is the graph commit the brief was written against. An expert measures the
+record and reports counts; the record moves under it while it reads, because this
+sitting's own landings go to the same ref. One expert reported seven node files carrying
+a reference to `words/2026-09-08/37`, and by the time the main thread checked it was
+fourteen, the difference being the main thread's own commits. Neither number is wrong and
+the report cannot say so, because nothing in it pins what it read. A brief that names the
+commit makes every count in the return checkable and makes a stale count visible as
+staleness rather than as error.
+
+Both are recorded as requirements and neither is written into an option, because this
+node's answer fact is at the periagogic stage and what its options say is the author's to
+settle.

@@ -476,3 +476,38 @@ the move: this node is unanswered, and on an unanswered node a moved recommendat
 dialogue and not an act, as `evaluation` says.
 
 One clause of the incumbent is not carried and the record should not lose it by silence: `named-on-the-ref-and-resumed` says the entry "stays there to be resumed in a later round of probing and dialogue with the experts", and the moved-to option says where the entry goes without saying that it is resumed. That is a gap in the moved-to option and is recorded here as one.
+
+### Every expert of the sitting hit the same wall, 2026-09-08
+
+Four experts were convened on 2026-09-08, on `growth`, on `clean-context-review`, on
+`what-acts-during-bootstrap`, and the tradition expert recorded above, and each reported
+the session's web-search budget exhausted at 200 of 200 before its grounding was
+complete. That is a different failure from the ones this node has tracked. The earlier
+entries record traditions unreached because a search returned nothing usable or because
+the source was not online; these are traditions unreached because the sitting ran out of
+a resource that is shared across every unit it launches, and the later a unit is launched
+in a sitting the less of it there is.
+
+The consequence for this node's rule is that the locus is right and the trigger is
+incomplete. An unreached tradition is recorded on the answer fact of the node it was to
+be read against, which is what the moved-to option says and this changes nothing about.
+What it adds is that a sitting can now exhaust the budget for reasons that have nothing
+to do with any particular node, so an entry written under this rule should say which of
+the two it was, or the record will read a shared-resource exhaustion as a property of the
+tradition.
+
+The traditions named as unreached by the sitting's experts, kept here so a later round
+resumes rather than rediscovers: Talmudic dialectic, on the structure of recorded
+disagreement; Tibetan monastic debate, `rtsod pa`, on adversarial examination as a
+training instrument rather than a decision procedure; Du et al., arXiv 2305.14325, on
+multi-agent debate and whether independent reasoners converge or merely agree; the text
+of the South African Constitutional Court's First Certification judgment of 6 September
+1996, cited in this sitting from secondary description alone; the thirty-four
+Constitutional Principles of the 1993 interim constitution, cited the same way; and
+Tunisia's 2011 "Little Constitution", named as the case that most resembles this record's
+position and reached least.
+
+What the sitting should have done and did not: state the resource position in the brief.
+A unit that knows how much budget remains can choose which of its traditions to spend it
+on, and every one of these units learned the budget was gone by hitting the wall. That is
+recorded as a requirement on `expert-instructions`, which owns what a brief carries.

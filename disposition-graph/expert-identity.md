@@ -35,9 +35,10 @@ depends:
 The recommendation is `an-expert-is-an-identity-with-a-scope-and-a-grounding`, at low
 boldness. Low because the option is the author's own words of 2026-09-08 at
 `words/2026-09-08/36` and the AI adds nothing to them but the placement and the
-observation that the object they name has no definition in the record; the content the
-option would carry is owed, which is why this node stands at the periagogic stage with
-the option recorded and its content not.
+observation that the object they name has no definition in the record. The content the
+option would carry was owed when the option was first recorded and has since been
+written, so what keeps the node at the periagogic stage is the dialogue and not a
+missing fence; the sentence saying otherwise stood beside a full fence and is struck.
 
 The question exists because the record names an expert everywhere and defines one
 nowhere. `delegation` defines the only convened party the record has: "a subagent is a
@@ -171,3 +172,37 @@ not be closed: closing it would close both halves, and the half that remains is 
 that matters. It is recorded here rather than on `movements` alone because this node's
 `authority` fact rests on the same capture reading, and a later sitting that answers
 one should see the other.
+
+### The record has no way to say that an expert said it, 2026-09-08
+
+This node holds that the record "names an expert everywhere and defines one nowhere".
+Four experts were convened in the sitting of 2026-09-08 and their returns were recorded,
+which turns that claim from a reading into a measurement. Three counts, all re-runnable
+against the graph at `bc45da97`.
+
+The `source` field has no value for an expert. Across every option in both graphs the
+values are `ai` 443, `review` 231, `author` 101, and node ids, and there is no `expert`.
+So an option an expert minted is recorded as `source: ai`, indistinguishable from one the
+main thread wrote for itself. The one party the record convenes to check the AI is
+recorded as the AI.
+
+The reader has no key for an expert's position. The option carrying the first expert's
+mark parses to `name, source, ref, status, reason, ruling, supports, diverges, prose,
+sentence, aiSupport, aiDivergence, content, resolved, readings`. `read.mjs` recognizes
+the AI's two markers and no others, so everything before the first recognized marker
+falls into the option's own `sentence`. The record therefore states an expert's position
+by putting it inside the option's statement of itself, which is the one place a reader
+cannot tell the parties apart.
+
+The prose markers show the same asymmetry from the other side: 869 occurrences of
+`**AI support.**` against 4 of `**Expert choice.**` and 2 of `**Tradition support.**`.
+The four are this sitting's, written by hand into option prose because there was nowhere
+else to put them.
+
+What this does to the node is narrow and worth stating. It does not change the answer,
+which is about what an expert is and not how it is written down; where the identity is
+written stays `dialogue`'s question, as this node's own prose says. What it changes is
+the cost of leaving the question open: the record is now accumulating expert positions in
+a form that cannot be queried, counted or projected, so every sitting that convenes an
+expert before this node is answered adds to a backlog of returns that will have to be
+re-encoded by hand.

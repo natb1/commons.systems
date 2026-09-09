@@ -3565,3 +3565,34 @@ option's own divergence and put to the author with it.
 The second half of P2, that the main thread may record probes for both parties, is
 recorded on `author-questions`, where the probe's encoding lives, and reaches this node
 only through the term.
+
+### Two readers who read each other are one reader, 2026-09-08
+
+The sitting of 2026-09-08 convened four experts and recorded each one's support and
+divergence on the option it evaluated, accumulated in the option's prose in the order the
+experts returned. The second expert opened its return by refusing the corroboration that
+encoding invites. It had read the first expert's paragraph on the option before forming
+its own view, and its words are: "The record must not count my agreement as
+corroboration. Two readers who read each other are one reader, and that is the exact
+failure the fact I am scoped to is about, occurring inside this sitting."
+
+The finding is this node's because it is a property of the encoding and not of the
+experts. Accumulating positions in one place is what makes the fact legible, an author
+reading the option seeing every party's view of it without opening anything else, and it
+is the same property that destroys the independence of every position recorded after the
+first. The record cannot have both from one field. What it can have is the distinction
+recorded: a position formed before its author read the others is evidence of a different
+kind from one formed after, and nothing in the present encoding carries which it is.
+
+Two mechanisms would separate them and neither is recommended here, because the question
+is the author's and this account exists to put it rather than to settle it. The order of
+return could be recorded per position, which is cheap and only tells the reader who could
+have read whom. Or an expert's brief could withhold the option's accumulated prose and
+give it the option's own sentence alone, which buys real independence and spends the
+thing the accumulation was for.
+
+A related gap the same sitting measured is `expert-identity`'s, and the two compound: the
+record has no `source` value for an expert and no reader key for an expert's position, so
+the positions whose independence is in question are also not separable from the AI's own
+by any query. Recorded here so that whoever answers this node's encoding question sees
+that both are open.
