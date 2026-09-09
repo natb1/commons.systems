@@ -234,6 +234,7 @@ probes:
       answer discards most of what the author asked for.
     source: ai
     raised: 2026-09-08
+    rank: 1
   - id: one-expert-kind-or-a-family
     target: author
     type: maieutic
@@ -258,6 +259,7 @@ probes:
       under `movements`.
     source: ai
     raised: 2026-09-08
+    rank: 2
   - id: what-is-left-unstandardized-and-who-notices-drift
     target: author
     type: periagogic
@@ -286,6 +288,7 @@ probes:
       option does not name today.
     source: ai
     raised: 2026-09-08
+    rank: 3
   - id: may-an-expert-refuse-the-frame
     target: author
     type: maieutic
@@ -316,6 +319,7 @@ probes:
       a thin standard is the easiest.
     source: ai
     raised: 2026-09-08
+    rank: 4
   - id: how-many-experts-and-do-they-read-the-same-brief
     target: author
     type: periagogic

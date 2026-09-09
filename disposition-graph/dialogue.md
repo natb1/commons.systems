@@ -100,6 +100,7 @@ probes:
       whatever the node carries.
     source: author
     raised: 2026-09-04
+    rank: 2
   - id: what-the-account-records
     target: ai
     type: periagogic
@@ -118,6 +119,7 @@ probes:
       makes turn on what it is for.
     source: author
     raised: 2026-09-04
+    rank: 1
 review:
   verdict: forward
   strength: weak

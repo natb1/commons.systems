@@ -150,6 +150,7 @@ probes:
       way.
     source: ai
     raised: 2026-09-08
+    rank: 1
   - id: which-side-carries-the-reference
     target: author
     type: periagogic
@@ -174,6 +175,7 @@ probes:
       half of the question.
     source: ai
     raised: 2026-09-08
+    rank: 3
   - id: may-a-withdrawn-entry-be-deleted
     target: author
     type: periagogic
@@ -198,6 +200,7 @@ probes:
       The recommendation on the admission clause stands either way.
     source: ai
     raised: 2026-09-08
+    rank: 2
 facts:
   - name: answer
     options:

@@ -24,6 +24,7 @@ probes:
     raised: 2026-09-09
     target: author
     type: maieutic
+    rank: 2
   - id: does-re-sequencing-reach-a-disposition-already-landed
     asks: >-
       When input arrives mid-sitting and changes the order, does the re-ordering reach
@@ -46,6 +47,7 @@ probes:
     raised: 2026-09-09
     target: author
     type: periagogic
+    rank: 1
 facts:
   - name: answer
     options:

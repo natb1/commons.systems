@@ -26,6 +26,7 @@ probes:
       gains a fourth term or keeps its three.
     source: ai
     raised: 2026-09-08
+    rank: 1
   - id: what-does-a-dead-sitting-owe-the-next
     target: author
     type: periagogic
@@ -132,6 +133,7 @@ probes:
       and is held back by that node's declared shim.
     source: ai
     raised: 2026-09-08
+    rank: 3
   - id: what-shows-that-a-classification-happened
     target: author
     type: periagogic
@@ -157,6 +159,7 @@ probes:
       whether the standard report must list what the sitting did not enter.
     source: ai
     raised: 2026-09-08
+    rank: 4
   - id: may-the-store-direct-what-it-may-not-authorize
     target: author
     type: periagogic
@@ -181,6 +184,7 @@ probes:
       nodes this sitting touched and which probes are not yet on their nodes.
     source: ai
     raised: 2026-09-08
+    rank: 2
 facts:
   - name: answer
     options:

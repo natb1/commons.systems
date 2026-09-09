@@ -29,6 +29,7 @@ probes:
       says this node's answer forbids. The recommendation stands either way.
     source: ai
     raised: 2026-09-08
+    rank: 2
   - id: what-does-cost-name-here
     target: author
     type: periagogic
@@ -55,6 +56,7 @@ probes:
       of paradigm is being made for the reason the evidence supports.
     source: ai
     raised: 2026-09-08
+    rank: 1
 facts:
   - name: answer
     options:

@@ -31,6 +31,7 @@ probes:
       treat as settled.
     source: ai
     raised: 2026-09-08
+    rank: 3
   - id: may-a-deferral-lower-the-class-of-a-node-that-defines-authority
     target: author
     type: maieutic
@@ -60,6 +61,7 @@ probes:
       returns the question.
     source: ai
     raised: 2026-09-08
+    rank: 1
   - id: does-the-mechanism-reach-a-maieutic-probe
     target: author
     type: maieutic
@@ -98,6 +100,7 @@ probes:
       precondition of a valid deferral rather than a projection convenience.
     source: ai
     raised: 2026-09-08
+    rank: 2
 facts:
   - name: answer
     options:

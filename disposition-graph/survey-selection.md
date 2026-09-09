@@ -127,6 +127,7 @@ probes:
       recommended option's content; the recommendation stands either way.
     source: ai
     raised: 2026-09-07
+    rank: 2
   - id: pin-on-a-node-the-survey-did-not-judge
     target: author
     type: periagogic
@@ -148,6 +149,7 @@ probes:
       recommendation stands either way.
     source: ai
     raised: 2026-09-07
+    rank: 1
 review:
   verdict: kickback
   strength: moderate

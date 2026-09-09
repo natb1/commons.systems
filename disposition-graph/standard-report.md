@@ -27,6 +27,7 @@ probes:
     raised: 2026-09-09
     target: author
     type: periagogic
+    rank: 1
   - id: does-the-full-form-print-more-than-one-question
     asks: >-
       Your full form lists "disposition questions" and your short form lists "disposition
@@ -48,6 +49,7 @@ probes:
     raised: 2026-09-09
     target: author
     type: maieutic
+    rank: 2
 facts:
   - name: answer
     options:

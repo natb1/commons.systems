@@ -79,6 +79,7 @@ probes:
       typing alone.
     source: ai
     raised: 2026-09-08
+    rank: 2
   - id: what-would-show-the-ground-was-not-common
     target: author
     type: periagogic
@@ -149,6 +150,7 @@ probes:
       do afterwards with a divergence the record keeps.
     source: ai
     raised: 2026-09-08
+    rank: 1
 facts:
   - name: answer
     options:
