@@ -207,6 +207,19 @@ probes:
       `review-cost`'s lever is.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      Answered by the author at `words/2026-09-08/38`, which moved their mark on
+      `clean-context-review` from striking the review to
+      `the-independent-reading-is-constituted-and-sequenced-after-the-experts`.
+      That is the third of the three limbs this probe named: the review is neither
+      superseded nor narrowed to the encoding, it is kept whole with the dialogue
+      placed before it, which is the arrangement the traditions this probe cites
+      reached and the reason the author gave for moving. The lever the second half
+      names follows: `review-cost` bounds a reading that still runs, so its bound is
+      unrelieved by the paradigm and its two open probes stand. The answer rests on
+      an author choice and not a confirmation, so if the mark moves again this probe
+      is reopened rather than re-asked.
   - id: is-a-convened-position-a-reading-or-a-role
     asks: >-
       When the AI argues a position because a convened tradition requires it,
@@ -736,3 +749,24 @@ which is a change to this node's answer; which of the two is right depends on wh
 the elenctic movement asks the author anything at all, and that is a question about
 this node's own subject that the entry does not touch. The divergence names the
 conflict so that whichever node is worked next meets it.
+
+### The paradigms are sequenced, not alternatives, 2026-09-08
+
+The author's words at `words/2026-09-08/38` closed `is-the-dialogue-before-the-review-
+or-instead-of-it` by moving their mark on `clean-context-review` to
+`the-independent-reading-is-constituted-and-sequenced-after-the-experts`. The refinement
+of that morning had put the two paradigms in the alternative, expert dialogue or
+clean-context review; the probe's case was that every institution that faced the same
+choice reached sequence instead, and the author's stated reason for moving was the
+tradition. So the alternative framing this node's answer inherited is not the author's
+frame, and the answer's account of what the expert paradigm replaces is amended by what
+the ruling stage will make of it rather than by this entry.
+
+Four probes on this node are unaffected and stand. `who-convenes-the-experts` is
+strengthened rather than settled: the option the author chose carries, as its fourth
+clause, that the reading be convened by something other than the party under test, and
+the record has no such party, so that probe now gates the author's own answer and not
+only the panel's constitution. `who-writes-the-against-after-the-encoding` likewise:
+the guard the paradigm deleted is the one the author has just voted to keep, and where
+in the sequence it sits is what remains open. `is-a-convened-position-a-reading-or-a-role`
+and `is-the-stage-field-the-diagnosis` are untouched.
