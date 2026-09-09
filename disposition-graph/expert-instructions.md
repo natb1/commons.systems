@@ -18,6 +18,7 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/27
+          - words/2026-09-08/39
         diverges:
           - words/2026-09-08/30
           - words/2026-09-08/36
@@ -61,6 +62,27 @@ facts:
       - name: ratified
       - name: delegated
       - name: deferred
+        supports:
+          - words/2026-09-08/39
+        ruling:
+          response: confirm
+          date: "2026-09-08"
+          of: 7ef2a0b04b4ead901a3c10fc604155b8700bfa7f
+          reason: >-
+            The author, at words/2026-09-08/39, deferred on three of this node's probes,
+            `how-many-experts-and-do-they-read-the-same-brief`,
+            `retrieval-contract-or-source-of-variance` and
+            `against-what-is-an-experts-return-checked`, each with "I do not fully
+            understand - I defer" and each with context beside it. Under
+            `deferring-on-a-probe` that is a ruling of deferred on this fact, and the
+            context is the scope of the grant rather than a courtesy to it. The scope is
+            the whole of what those three responses say: the skill is thin and binds the
+            expert as little as possible; binding of harness, tooling and schema is
+            unavoidable and permitted; the brief is a reference to the disposition and an
+            expert id from which the expert retrieves its own scope; the return has a
+            simple schema; and the return is sanity checked by the author and the main
+            thread rather than mechanically validated. An instruction outside that is
+            outside the grant.
     recommends: ratified
     boldness: low
     against: "Ratified is the expensive class and the artifact is cheap to change: an expert's instructions are one file, a wrong version costs one sitting's returns and is rewritten in an edit, so on the ordinary reading of `class-recommendation` this is a node the author should not have to be asked about twice. If the capture limb is read as widely as it is read here, every node that governs how the AI is checked is ratified, and the class stops discriminating."
@@ -112,6 +134,21 @@ probes:
       instrument is judged against, which nothing in the record fixes today.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      The author, at words/2026-09-08/39: "I do not fuly understand - I defer. To the
+      above point, I agree that the expert skill must be thin to bind the expert as
+      little as possible, but some binding of harness/tooling/schema is unavoidable."
+      The words answer the probe's own question in substance while declining it in
+      form. The probe asked which half of the answer fact is live, a retrieval
+      contract wanting sameness or a second mind wanting variance; binding the expert
+      as little as possible is the second mind, and it is the reading that supports
+      `a-thin-skill-and-a-tested-return`, which this fact recommends. Under
+      `deferring-on-a-probe` these words are the scope of what the deferral hands
+      over, so they bind: an instruction that binds an expert more than the harness,
+      the tooling and the schema require is outside the grant, and where the phrase
+      admits two widths the narrower one governs. The outcome measure the probe said
+      nothing in the record fixes is still unfixed.
   - id: against-what-is-an-experts-return-checked
     asks: >-
       When an expert returns readings and probes, what tells you that return
@@ -140,6 +177,21 @@ probes:
       the convening AI, by the author, or by a party neither of them is.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      The author, at words/2026-09-08/39: "I do not fully understand - I defer.
+      Expert return has simple schema, it is santity checked by author and main
+      thread AI. Otherwise, I do not understand how the return would be mechanically
+      validated." This names the party the probe said was missing. The probe's force
+      was that a test nobody applies is a preamble, which would have made
+      `a-thin-skill-and-a-tested-return` no answer at all; the author supplies the
+      applier, the author and the main thread together, and declines the mechanical
+      validator the probe implied. So the test is a sanity check by two readers and
+      not a validator, the recommended option survives the probe, and what the option
+      means by a tested return is fixed by these words rather than by the AI's
+      reading of them. The probe's third limb, whether admissibility is adjudicated
+      by the convening AI, by the author, or by a third party, is answered against
+      the third: it is the author and the convening AI.
   - id: what-does-eg-mean
     asks: >-
       When you wrote that standard instructions include, for example,
@@ -267,6 +319,44 @@ probes:
       an accident.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      The author, at words/2026-09-08/39: "I do not fully understand - I defer. The
+      alignment input described initializing experts with 'scope' of grounding (some
+      combination of tradition, recorded graph consistency, AI judgement). Then the
+      brief is just a reference to the disposition and expert id where the expert can
+      retrieve its scope. Otherwise instructions are mechanical and recorded into the
+      expert skill (expected return values, etc.). I see no way around common
+      mechanical instructions like return values. Evaluate whether this addresses the
+      tension." The evaluation the author asked for, recorded here because it is the
+      probe's answer and not only a reply. The proposal dissolves the tension as the
+      probe posed it, because the probe posed a binary the proposal refuses: not one
+      brief or many, but one text and many scopes. What must be identical is the
+      mechanical part, the return's schema and the retrieval mechanics, and a shared
+      return format correlates formats and not judgments; the substantive part, the
+      scope, is not in the shared text at all but retrieved by the expert from what
+      the brief points at. So one standard text is the right artifact and carries no
+      instruction that could correlate the returns. That is better than either horn.
+
+      It does not dissolve the whole of the concern, and the remainder is named
+      rather than left. Independence of returns has three sources and the proposal
+      reaches one and a half. The instruction is the first and is answered. The
+      evidence is the second and is answered only in part: two experts scoped to
+      different tradition families read genuinely different material, but two scoped
+      to recorded graph consistency or to AI judgement read the same graph through
+      the same reader, so scope buys independence unevenly and buys least where the
+      scope is the record itself. The third is the model, and nothing in the proposal
+      touches it: experts convened as separate contexts of one model are samples from
+      one prior rather than separate minds, which is what `n-version-programming`
+      records, that independently written versions fail together because what the
+      authors share is not in any of the briefs.
+
+      There is also a relocation the author should see. Because the scope is
+      retrieved rather than given, the live question becomes who writes the scope and
+      who chooses which families are convened, which is `movements`'
+      `who-convenes-the-experts` — the probe deferred in the same turn. The proposal
+      moves the tension from the brief to the roster rather than removing it, and the
+      two deferrals are therefore coupled.
 depends:
   - commons.systems/disposition-graph/expert-identity
   - commons.systems/disposition-graph/movements#three-movements-selected-by-diagnosis
@@ -1545,3 +1635,43 @@ staleness rather than as error.
 Both are recorded as requirements and neither is written into an option, because this
 node's answer fact is at the periagogic stage and what its options say is the author's to
 settle.
+
+### Three probes deferred, and the tension the author asked about, 2026-09-08
+
+The author deferred on `how-many-experts-and-do-they-read-the-same-brief`,
+`retrieval-contract-or-source-of-variance` and
+`against-what-is-an-experts-return-checked` at `words/2026-09-08/39`, each time
+with context beside the deferral. Under `deferring-on-a-probe` the three discharge
+those probes and rule this node's authority fact deferred, and the recommendation
+on the answer fact, `a-thin-skill-and-a-tested-return`, becomes the author's
+unconfirmed choice. `words/2026-09-08/39` is added to that option's `supports`,
+because the second and third responses argue for it directly: binding the expert as
+little as possible is the thin skill, and a return sanity checked by the author and
+the main thread is the test.
+
+What the deferral hands over is bounded by what the author said beside it, and here
+that is a great deal. The grant's scope is: a thin skill binding the expert as
+little as possible; the unavoidable binding of harness, tooling and schema
+permitted; the brief a reference to the disposition and an expert id from which the
+expert retrieves its scope; a simple return schema; and sanity checking by the
+author and the main thread in place of mechanical validation. That is nearly an
+answer, and the AI's judgment under this deferral reaches only what it leaves open.
+
+The author asked for one thing directly, "Evaluate whether this addresses the
+tension", and the evaluation is recorded on the probe it answers rather than only
+in the sitting's reply. In short: it dissolves the tension as posed, because the
+probe offered a binary between one brief and many and the proposal takes neither,
+one text and many scopes, with the shared text carrying only what correlates
+formats rather than judgments. It leaves the correlation concern standing in the
+two places the brief cannot reach, the shared evidence where an expert's scope is
+the record itself, and the shared model, which is `n-version-programming`'s
+finding. And it relocates the rest onto `who-convenes-the-experts`, deferred in the
+same turn, since a retrieved scope makes the roster the live question.
+
+Four probes stay open on this node, all unanswered:
+`what-does-eg-mean`, `one-expert-kind-or-a-family`,
+`what-is-left-unstandardized-and-who-notices-drift`, and `may-an-expert-refuse-the-frame`.
+The node stands at the periagogic stage and the deferral does not advance it: what
+the author settled is the class, not the answer, and `probe-response-treatment`
+holds that a response takes the sequencing of alignment input arriving any other
+way.

@@ -110,6 +110,22 @@ probes:
       family the AI did not convene is itself recordable.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      The author, at words/2026-09-08/39: "I do not fully understand - I defer."
+      Under `deferring-on-a-probe`, minted the same day from the first paragraph of
+      that entry, the deferral discharges the probe and rules this node's authority
+      fact deferred; the recommendation on the answer fact stands as the author's
+      unconfirmed choice. What the probe asked is not thereby answered, and the
+      record should not read the discharge as one. The roster question stays live
+      and is now the AI's to settle from the record's own dispositions: the review's
+      sibling set is derived and not named by the party under review
+      (`clean-context-review`, `sibling-set-named-by-the-session` passed), and
+      `review-model` refused `conditional-by-boldness` on the same ground. Those two
+      are the dispositions a convening rule is read off, and an answer written under
+      this deferral says so. The probe's own reason for existing survives its
+      discharge and is sharpened by it, since the party that would convene the panel
+      is now also the party the deferral hands the answer to.
   - id: who-writes-the-against-after-the-encoding
     asks: >-
       After the grounding is common and the AI writes the recommendation onto
@@ -139,6 +155,16 @@ probes:
       AI's own case against is sufficient once the probes are answered.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      The author, at words/2026-09-08/39: "I defer." Under `deferring-on-a-probe`
+      the probe is discharged and this node's authority fact is ruled deferred. The
+      question of whether a non-drafting party writes the `against` on the option row
+      is left to the AI's reading of the record, where `clean-context-review` and
+      `evaluation` already hold that adversarial review of one's own output is part
+      of producing it and that a disposition is read once more in clean context
+      before the author rules. The deferral does not decide between keeping a small
+      instrument at the encoding and letting the AI's own case against suffice.
   - id: is-a-drained-probe-an-answered-probe
     asks: >-
       When a probe is not resolved, is it recorded on the node as an objection
@@ -244,6 +270,15 @@ probes:
       human confederate defeats the transfer.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      The author, at words/2026-09-08/39: "I defer." Under `deferring-on-a-probe`
+      the probe is discharged and this node's authority fact is ruled deferred.
+      Whether the record types a convened position at all is now read off `readings`,
+      which makes a tradition a node with a relation and a locus, and off `viable-options`,
+      which makes a position an option on a fact; neither has a category for a
+      position argued because a convened tradition requires it, and the deferral
+      leaves that gap where it was rather than closing it.
 facts:
   - name: answer
     options:
@@ -277,6 +312,20 @@ facts:
       - name: ratified
       - name: delegated
       - name: deferred
+        supports:
+          - words/2026-09-08/39
+        ruling:
+          response: confirm
+          date: "2026-09-08"
+          of: 71f9d2c80d448c6f71ed43fe508eaec12c448f60
+          reason: >-
+            The author, at words/2026-09-08/39, deferred on three of this node's probes,
+            `who-convenes-the-experts`, `who-writes-the-against-after-the-encoding` and
+            `is-a-convened-position-a-reading-or-a-role`, saying of the first "I do not
+            fully understand - I defer" and of the other two "I defer". Under
+            `deferring-on-a-probe` that is a ruling of deferred on this fact with the
+            probes as its reason. No further context was given, and a deferral carrying
+            none is still a deferral, so the grant here is bounded by the record alone.
     recommends: ratified
     boldness: low
 form: rule
@@ -770,3 +819,38 @@ only the panel's constitution. `who-writes-the-against-after-the-encoding` likew
 the guard the paradigm deleted is the one the author has just voted to keep, and where
 in the sequence it sits is what remains open. `is-a-convened-position-a-reading-or-a-role`
 and `is-the-stage-field-the-diagnosis` are untouched.
+
+### Three probes deferred, 2026-09-08
+
+The author deferred on `who-convenes-the-experts`,
+`who-writes-the-against-after-the-encoding` and
+`is-a-convened-position-a-reading-or-a-role` at `words/2026-09-08/39`, rather than
+answering them. Under `deferring-on-a-probe`, minted the same day from the first
+paragraph of that entry, the three deferrals discharge those probes and rule this
+node's authority fact deferred, and the recommendation on the answer fact,
+`three-movements-selected-by-diagnosis`, becomes the author's unconfirmed choice.
+
+The recommendation on the authority fact is left at `ratified` and that is not a
+disagreement with the ruling. In the same turn the author gave
+`class-recommendation` its residual rule and defined the deferred class positively:
+"Deferred authority is for when a ratification is desired, but not currently
+practical and must not block (non-bootstrapped) reconciliation." That describes this
+node exactly. The AI's reading that the answer should be ratified stands, the author
+agrees it is not ratifiable today, and `deferred` is the class the author's own words
+mint for that state. The node therefore stays on the alignment frontier, which is
+what `authority` says deferred means.
+
+The unconfirmed choice has no mark to carry it. `what-an-option-row-carries` names
+three option marks and the author's words of the same turn name five; the author's
+choice short of confirmation is one of the two the record lacks, and `recording`
+offers only `confirm` and `edit`. Until that is settled the choice is recorded here
+in prose and nowhere in the encoding, which is the whole of what a reader can rely
+on for it.
+
+One probe stays open on this node and is untouched by the deferral,
+`is-the-stage-field-the-diagnosis`, which asks whether the `stage` field is the
+diagnosis the answer's selection rule reads. The node's other four probes were
+discharged before this turn. The node stands at the maieutic stage and the deferral
+does not advance it: what the author settled is the class and not the answer, and
+`probe-response-treatment` gives a response the sequencing of alignment input
+arriving any other way.

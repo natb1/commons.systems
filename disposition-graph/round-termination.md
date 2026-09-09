@@ -104,6 +104,19 @@ probes:
       condition or describes a feeling.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      The author, at words/2026-09-08/39: "I defer." Under `deferring-on-a-probe`
+      the probe is discharged and this node's authority fact is ruled deferred, with
+      no context beside it, so the grant is bounded by the record alone. The probe
+      asked what the record would keep by which a round that ended from exhaustion
+      could later be told from one that ended on held ground, and its point was that
+      an answer keeping nothing states a feeling rather than a condition. That point
+      is not retired by the deferral: it is now the AI's to answer from the record's
+      own dispositions, where `session-state` holds that the sitting's store dies
+      with the sitting and `quotes` holds that what bears on a disposition fact is
+      entered in the ledger, which together say that anything to be told afterwards
+      must be on the ref before the round ends.
   - id: is-the-terminal-state-acquiescence
     asks: >-
       Is the terminal state this answer keeps acquiescence in Rescher's sense,
@@ -165,6 +178,18 @@ facts:
       - name: ratified
       - name: delegated
       - name: deferred
+        supports:
+          - words/2026-09-08/39
+        ruling:
+          response: confirm
+          date: "2026-09-08"
+          of: 178f249b226e8509004c6d45506ee96013cd2a61
+          reason: >-
+            The author, at words/2026-09-08/39, deferred on this node's probe
+            `what-would-show-the-ground-was-not-common` with "I defer". Under
+            `deferring-on-a-probe` that is a ruling of deferred on this fact with the probe
+            as its reason. No context was given beside it, and a deferral carrying none is
+            still a deferral, so the grant is bounded by the record alone.
     recommends: ratified
     boldness: low
 form: rule
@@ -1091,3 +1116,22 @@ rivals cannot be marked as the author's choice without dropping what the incumbe
 holds, and the record has no mark for an option the author currently chooses short of
 confirming it. `viable-options` carries the option that would mint one, and the mark
 moved to it in this sitting.
+
+### One probe deferred, 2026-09-08
+
+The author deferred on `what-would-show-the-ground-was-not-common` at
+`words/2026-09-08/39`. Under `deferring-on-a-probe` the deferral discharges the
+probe and rules this node's authority fact deferred, and the recommendation on the
+answer fact, `no-terminator-the-author-confirms`, becomes the author's unconfirmed
+choice.
+
+The deferral is narrow and the node is not thereby settled. Two probes stay open
+and unanswered, `where-does-reframing-the-question-fall` and
+`is-the-terminal-state-acquiescence`; the second is close enough to the deferred one
+that a reader may take them together, and the record does not, because the author
+deferred on one and not on the other.
+
+The recommendation on the authority fact stays at `ratified` for the reason given on
+`movements`: under the author's own words of the same turn, deferred is the class for
+a node whose ratification is desired and not currently practical, so the two are
+consistent rather than opposed, and the node stays on the alignment frontier.
