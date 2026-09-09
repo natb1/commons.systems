@@ -2684,6 +2684,57 @@ async function fixtureWithProbedContentNode(prefix) {
   return rootDir;
 }
 
+// Three probes pinning rank against the `#### Probes` block: two open,
+// declared with the higher rank first so declaration order and rank order
+// disagree, and one discharged carrying a stale rank of its own -- present
+// (author-questions: `probes-are-integrated-and-carry-a-rank`) but never
+// checked for density and never reordering the discharged list.
+const PROBE_YAML_RANKED = [
+  "probes:",
+  "  - id: rank-two-declared-first",
+  "    asks: This one is rank two, though the file lists it first.",
+  "    why: To prove declaration order is not render order.",
+  "    discharges: Which of two remedies the node recommends.",
+  "    source: clean-context review",
+  '    raised: "2026-09-07"',
+  "    target: author",
+  "    type: periagogic",
+  "    rank: 2",
+  "  - id: rank-one-declared-second",
+  "    asks: This one is rank one, though the file lists it second.",
+  "    why: To prove rank, not declaration order, sorts the open list.",
+  "    discharges: Which of two remedies the node recommends.",
+  "    source: clean-context review",
+  '    raised: "2026-09-07"',
+  "    target: author",
+  "    type: periagogic",
+  "    rank: 1",
+  "  - id: stale-rank-discharged",
+  "    asks: Already answered, but the rank it left with is kept.",
+  "    why: To prove a stale rank is shown but never reorders the discharged list.",
+  "    discharges: A remedy already settled.",
+  "    source: clean-context review",
+  '    raised: "2026-09-05"',
+  "    target: author",
+  "    type: periagogic",
+  "    rank: 5",
+  "    status: discharged",
+  "    reason: The author answered it in the sitting of 2026-09-06.",
+].join("\n");
+
+function contentEncodedNodeWithRankedProbes() {
+  const text = contentEncodedNode();
+  const marker = "review:\n  verdict: forward\n";
+  assert.ok(text.includes(marker), "fixture precondition: the review block is where the probes go above it");
+  return text.replace(marker, `${PROBE_YAML_RANKED}\n${marker}`);
+}
+
+async function fixtureWithRankedProbedContentNode(prefix) {
+  const rootDir = await freshFrontierFixture(prefix);
+  await writeFile(path.join(rootDir, "main", "content-node.md"), contentEncodedNodeWithRankedProbes());
+  return rootDir;
+}
+
 describe("renderWholeNode: the draft reading's node block, compacted the way the survey's is", () => {
   test("the recommended content stands once and every rival is a difference, the case for each option kept", async () => {
     const rootDir = await fixtureWithContentNode("whole-content-");
@@ -2755,6 +2806,34 @@ describe("renderWholeNode: the draft reading's node block, compacted the way the
     assert.match(judged, /#### Probes \(the questions this node stands open on for the author\)/);
     assert.match(judged, /1 open, and 1 discharged\./);
     assert.match(judged, /^- `what-a-whole-means` — open, on its `answer` fact/m);
+  });
+
+  test("the probes block: open probes render in rank order once every open probe carries one, and a "
+    + "discharged probe's stale rank is shown but never reorders it", async () => {
+    const rootDir = await fixtureWithRankedProbedContentNode("whole-probes-ranked-");
+    const graph = await readGraph(rootDir);
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    const node = graph.nodes.find((n) => n.id === CONTENT_NODE);
+    assert.equal(node.probes.length, 3, "fixture precondition: two open, one discharged");
+
+    const block = renderWholeNode(node, { byId });
+    assert.match(block, /^- `rank-one-declared-second` — open, rank 1, raised 2026-09-07 by clean-context review:/m);
+    assert.match(block, /^- `rank-two-declared-first` — open, rank 2, raised 2026-09-07 by clean-context review:/m);
+    assert.match(block, /^- `stale-rank-discharged` — discharged, rank 5, raised 2026-09-05 by clean-context review:.* — discharged: The author answered it in the sitting of 2026-09-06\.$/m);
+
+    // Render order follows rank, not declaration order: rank 1 precedes rank
+    // 2 though the file lists rank 2 first.
+    const rank1Index = block.indexOf("`rank-one-declared-second`");
+    const rank2Index = block.indexOf("`rank-two-declared-first`");
+    assert.ok(rank1Index > -1 && rank2Index > -1 && rank1Index < rank2Index,
+      "the open probes are listed in rank order, not declaration order");
+
+    // The survey's node block carries the same ordering.
+    const judged = renderJudgedNode(node, graph.words, byId);
+    const judgedRank1Index = judged.indexOf("`rank-one-declared-second`");
+    const judgedRank2Index = judged.indexOf("`rank-two-declared-first`");
+    assert.ok(judgedRank1Index > -1 && judgedRank2Index > -1 && judgedRank1Index < judgedRank2Index,
+      "renderJudgedNode's probes block is rank-ordered too");
   });
 
   test("a node with no probe says so, rather than leaving the reading to guess", async () => {

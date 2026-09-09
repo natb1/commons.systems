@@ -1164,6 +1164,7 @@ describe('parseNode: probes', () => {
     const n = parseNode(answered(probeYaml(PROBE_BASE)), loc);
     assert.deepEqual(n.probes, [{
       ...PROBE_BASE,
+      rank: null,
       fact: null,
       status: null,
       reason: null,
@@ -1239,6 +1240,16 @@ describe('parseNode: probes', () => {
     assert.equal(n.probes[0].type, 'maieutic');
   });
 
+  test("a probe with a 'rank' parses it through unconstrained -- its shape is a mechanical finding, not a parse problem", () => {
+    const n = parseNode(answered(probeYaml({ ...PROBE_BASE, rank: 1 })), loc);
+    assert.equal(n.probes[0].rank, 1);
+  });
+
+  test("'rank' absent on a probe normalizes to null", () => {
+    const n = parseNode(answered(probeYaml(PROBE_BASE)), loc);
+    assert.equal(n.probes[0].rank, null);
+  });
+
   test("a probe missing 'target' is a problem", () => {
     const fields = { ...PROBE_BASE };
     delete fields.target;
@@ -1257,7 +1268,7 @@ describe('parseNode: probes', () => {
   });
 
   test('PROBE_KEYS and PROBE_TYPES carry the recommended vocabulary', () => {
-    assert.deepEqual(PROBE_KEYS, ['id', 'asks', 'why', 'discharges', 'source', 'raised', 'target', 'type', 'fact', 'status', 'reason']);
+    assert.deepEqual(PROBE_KEYS, ['id', 'asks', 'why', 'discharges', 'source', 'raised', 'target', 'type', 'rank', 'fact', 'status', 'reason']);
     assert.deepEqual(PROBE_TYPES, ['periagogic', 'maieutic']);
   });
 
@@ -2446,6 +2457,103 @@ describe('deriveMechanicalFindings', () => {
     });
     const byId = new Map([[target.id, target], [n.id, n]]);
     assert.deepEqual(deriveMechanicalFindings(n, byId), []);
+  });
+
+  test('kind 8: a dense 1..n over the open probes raises nothing', () => {
+    const n = node('synthetic/root', {
+      facts: [],
+      probes: [
+        { id: 'p1', status: null, rank: 2 },
+        { id: 'p2', status: null, rank: 1 },
+        { id: 'p3', status: null, rank: 3 },
+      ],
+    });
+    assert.deepEqual(deriveMechanicalFindings(n), []);
+  });
+
+  test("kind 8: a gap in the open probes' ranks is a finding", () => {
+    const n = node('synthetic/root', {
+      facts: [],
+      probes: [
+        { id: 'p1', status: null, rank: 1 },
+        { id: 'p2', status: null, rank: 3 },
+      ],
+    });
+    assert.deepEqual(deriveMechanicalFindings(n), [
+      'the open probes carry ranks 1, 3, which is not exactly 1..2',
+    ]);
+  });
+
+  test("kind 8: a duplicate among the open probes' ranks is a finding", () => {
+    const n = node('synthetic/root', {
+      facts: [],
+      probes: [
+        { id: 'p1', status: null, rank: 1 },
+        { id: 'p2', status: null, rank: 1 },
+      ],
+    });
+    assert.deepEqual(deriveMechanicalFindings(n), [
+      'the open probes carry ranks 1, 1, which is not exactly 1..2',
+    ]);
+  });
+
+  test('kind 8: a rank that is not a positive integer is a finding, checked on any probe whether open or '
+    + 'discharged', () => {
+    const n = node('synthetic/root', {
+      facts: [],
+      probes: [{ id: 'p1', status: 'discharged', rank: 1.5 }],
+    });
+    assert.deepEqual(deriveMechanicalFindings(n), [
+      "probe 'p1' carries rank 1.5, which is not a positive integer",
+    ]);
+  });
+
+  test('kind 8: rank 0 is not a positive integer, and is a finding', () => {
+    const n = node('synthetic/root', {
+      facts: [],
+      probes: [{ id: 'p1', status: 'discharged', rank: 0 }],
+    });
+    assert.deepEqual(deriveMechanicalFindings(n), [
+      "probe 'p1' carries rank 0, which is not a positive integer",
+    ]);
+  });
+
+  test('kind 8: an open probe with no rank while a sibling open probe carries one is a finding, and the '
+    + "exactness check is skipped rather than folded into it", () => {
+    const n = node('synthetic/root', {
+      facts: [],
+      probes: [
+        { id: 'p1', status: null, rank: 1 },
+        { id: 'p2', status: null, rank: null },
+      ],
+    });
+    assert.deepEqual(deriveMechanicalFindings(n), [
+      "probe 'p2' is open and carries no rank while other open probes on the node do",
+    ]);
+  });
+
+  test('kind 8: a discharged probe keeps a stale rank alongside a dense 1..n over the open probes, and '
+    + 'neither raises a finding', () => {
+    const n = node('synthetic/root', {
+      facts: [],
+      probes: [
+        { id: 'p1', status: null, rank: 1 },
+        { id: 'p2', status: null, rank: 2 },
+        { id: 'p3', status: 'discharged', rank: 7 },
+      ],
+    });
+    assert.deepEqual(deriveMechanicalFindings(n), []);
+  });
+
+  test('kind 8: a node with no ranks at all on any probe raises nothing', () => {
+    const n = node('synthetic/root', {
+      facts: [],
+      probes: [
+        { id: 'p1', status: null, rank: null },
+        { id: 'p2', status: null, rank: null },
+      ],
+    });
+    assert.deepEqual(deriveMechanicalFindings(n), []);
   });
 });
 

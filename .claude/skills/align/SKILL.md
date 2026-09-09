@@ -472,13 +472,20 @@ skill only when the session starts in the checkout that carries it.
   rather than on the node's ground, `why` the record cannot answer it,
   naming the locus the AI read and what that locus leaves open,
   `discharges`, what an answer would settle and which recommendation it
-  would move, which is also the ordering, its `source` in the vocabulary
-  an option's source carries, `raised`, the date, `target`, the party it is
-  put to, `author`, `ai` where the author put it to the AI, or another
-  expert's identity, and `type`, `periagogic` where it asks what the record
-  says or whether the author has read what it says and `maieutic` where it
-  asks what the author means or intends to bind, set by the party that
-  raised it; a probe discharged
+  would move, which is the criterion the rank is assigned on and no longer
+  the ordering itself, its `source` in the vocabulary an option's source
+  carries, `raised`, the date, `target`, the party it is put to, `author`,
+  `ai` where the author put it to the AI, or another expert's identity,
+  `type`, `periagogic` where it asks what the record says or whether the
+  author has read what it says and `maieutic` where it asks what the
+  author means or intends to bind, set by the party that raised it, and
+  `rank`, the probe's place among the open probes of its node, a whole
+  number counting from one, smaller being higher, assigned by the main
+  thread on how much the probe discharges; the rank is scoped to the node
+  and says nothing across nodes, it is optional because a node with one
+  open probe needs no rank, and where any open probe on a node carries one
+  all of them do, the ranks being exactly one through their count; a probe
+  discharged keeps the rank it had and
   stays on the list with `status: discharged` and the `reason`, in the
   shape a passed option's status and reason have, the two reasons being
   that the author answered it, the reason naming their words' address in
@@ -549,6 +556,29 @@ skill only when the session starts in the checkout that carries it.
   and `probes` is not among the fields its editing surface offers
   (`alignment-page`). The projector drops the field from the graph the
   browser serializes, so no probe is published either.
+- **Probes returned by an expert or by a review are integrated before they
+  are recorded** (`author-questions`, its option
+  `probes-are-integrated-and-carry-a-rank`, from the author's words of
+  2026-09-09). The integrated set is what the node carries, as the
+  recommendation on a fact is the main thread's integration of the
+  experts' choices and not a tally of them. The main thread deduplicates,
+  two returns being one probe where a single answer would discharge both
+  and not merely where they are about the same thing, since two probes on
+  one subject that ask its extension and its intension are two questions;
+  it aggregates what the duplicates carry, one `why` naming every locus
+  the returns read and one `discharges` naming everything a single answer
+  would settle; and it may add a probe no return raised where the set has
+  a gap, under the licence that makes the recommendation its own.
+  Deduplication is scoped to the node, as the rank is: two probes on two
+  nodes are two probes however alike they read, because merging across
+  nodes would move a probe off the node whose recommendation it moves.
+  The main thread then assigns each probe's `rank` within the node on how
+  much it discharges and records it on the probe. `source` holds one
+  party, so a merged probe presently names one of its raisers and not all
+  of them, and nothing yet distinguishes a merged probe from a single
+  return; the record says so rather than hiding it, and the probe
+  `does-the-record-show-that-a-merge-happened` on `author-questions` holds
+  the question.
 - **The class is read off the rulings and never written** (`authority`,
   `authority-derived`; `unanswered`, `unanswered-is-no-ruling`). No stamp
   stands beside them. Ratified is a node whose answer fact carries a
@@ -1060,7 +1090,27 @@ first inverts that account and is the deviation to watch.
 ## 7. Self-review
 
 Before the round closes, review the recorded output adversarially
-(`evaluation`) and report the map of decisions to fields. The state of the
+(`evaluation`) and report the map of decisions to fields. A sitting that
+stops, at the author's word, on a probe it cannot answer, or at the end of
+its work, prints the standard report `standard-report` fixes, and a bare
+`result:` line is not one. A sitting that is both an alignment sitting and
+a reconciliation sitting, as a sitting under a grant is, prints two
+reports, the alignment sequencing report first and the reconciliation
+residue report after it, because the probes are answerable only with the
+reconciliation's context in hand; an alignment sitting alone prints the
+first, and a sitting that produced no residue says so. The sequencing
+report lists each disposition the sitting sequenced, in the sitting's own
+sequence order (`session-sequence`) and not the frontier's, and for each
+its id, its question, a paraphrase of the author's inputs that decomposed
+into it, and every probe open on it that targets the author, in the node's
+rank order, each in the probe's own schema with what it asks, why, and
+what it discharges shown separately and never compressed into a line. Once
+ten probes have been printed in full, every remaining disposition falls to
+the short form, its id, its question, the paraphrase, and the count of its
+open probes to the author; the bound falls at a disposition and never
+inside one, and no disposition falls off the report. The residue report
+lists what the sitting reconciled and did not finish, each item with what
+it rests on, from the store `session-state` names. The state of the
 work is the nodes and the git log: there is no ledger and no round log,
 and nothing essential is kept in memory, scratch, or this session. After
 compaction, run §0.

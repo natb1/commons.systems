@@ -641,11 +641,20 @@ function renderProbes(node, headingPrefix = "####") {
     out.push("(no probe has been raised on this node)", "");
     return out;
   }
-  for (const p of open) {
-    out.push(`- \`${p.id}\` — open${p.fact ? `, on its \`${p.fact}\` fact` : ""}, raised ${p.raised} by ${p.source}: ${p.asks}`);
+  // Open probes list in rank order once every open probe on the node
+  // carries one (commons.systems/disposition-graph/author-questions,
+  // `probes-are-integrated-and-carry-a-rank`); otherwise the existing,
+  // declaration order holds. Discharged probes are never reordered: a
+  // stale rank kept past discharge says where the probe stood, not where
+  // it stands.
+  const orderedOpen = open.length > 0 && open.every((p) => p.rank != null)
+    ? [...open].sort((a, b) => a.rank - b.rank)
+    : open;
+  for (const p of orderedOpen) {
+    out.push(`- \`${p.id}\` — open${p.rank != null ? `, rank ${p.rank}` : ""}${p.fact ? `, on its \`${p.fact}\` fact` : ""}, raised ${p.raised} by ${p.source}: ${p.asks}`);
   }
   for (const p of discharged) {
-    out.push(`- \`${p.id}\` — discharged${p.fact ? `, on its \`${p.fact}\` fact` : ""}, raised ${p.raised} by ${p.source}: ${p.asks} — discharged: ${p.reason}`);
+    out.push(`- \`${p.id}\` — discharged${p.rank != null ? `, rank ${p.rank}` : ""}${p.fact ? `, on its \`${p.fact}\` fact` : ""}, raised ${p.raised} by ${p.source}: ${p.asks} — discharged: ${p.reason}`);
   }
   out.push("");
   return out;

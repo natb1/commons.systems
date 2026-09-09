@@ -206,10 +206,16 @@ export const SHIM_KEYS = ['artifact', 'liquidation', 'declared', 'for'];
 // whichever party raised the probe and never derived from the node's stage
 // or from the probe's `fact`
 // (commons.systems/disposition-graph/author-questions,
-// `a-probe-carries-a-target-and-a-type`); `status` and `reason` are absent
+// `a-probe-carries-a-target-and-a-type`); `rank` is optional, a whole number
+// counting from one ordering a node's own open probes, smaller being
+// higher, assigned by the main thread on how much the probe discharges; a
+// discharged or declined probe may still carry the rank it held when it left
+// the list, and such a rank is not checked for density
+// (commons.systems/disposition-graph/author-questions,
+// `probes-are-integrated-and-carry-a-rank`); `status` and `reason` are absent
 // while it stands open and both present once it is discharged, in the shape
 // an option's `passed`/`reason` pair already has.
-export const PROBE_KEYS = ['id', 'asks', 'why', 'discharges', 'source', 'raised', 'target', 'type', 'fact', 'status', 'reason'];
+export const PROBE_KEYS = ['id', 'asks', 'why', 'discharges', 'source', 'raised', 'target', 'type', 'rank', 'fact', 'status', 'reason'];
 // A `defines` entry is a bare term or a term with the gloss a projection
 // shows wherever a vocabulary fact offers that term as an option: what
 // confirming that choice would mean, written once, on the node that defines
@@ -1931,8 +1937,8 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   }
 
   // probes: a list of {id, asks, why, discharges, source, raised, target,
-  // type, and optional fact, status, reason}, modelled on shims above. The
-  // reader checks only the shape of a probe -- target for presence only
+  // type, and optional fact, rank, status, reason}, modelled on shims above.
+  // The reader checks only the shape of a probe -- target for presence only
   // (author, ai, or another expert's identity, not yet an enumerable
   // vocabulary)
   // and type against PROBE_TYPES, and neither is derived from anything else
@@ -1940,7 +1946,13 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   // `a-probe-carries-a-target-and-a-type`). There is no cap on how many
   // stand open -- the author struck it at words/2026-09-08/32 -- and no
   // count was ever checked here, since an attention rule must never turn
-  // into a parse error (commons.systems/disposition-graph/dialogue).
+  // into a parse error (commons.systems/disposition-graph/dialogue). rank is
+  // passed through here unconstrained -- whether its value is a positive
+  // integer and whether a node's open probes carry a dense 1..n of them is
+  // a mechanical finding, in deriveMechanicalFindings below, and never a
+  // parse problem, for the same reason the count above is not one
+  // (commons.systems/disposition-graph/author-questions,
+  // `probes-are-integrated-and-carry-a-rank`).
   let probes = [];
   if (!isAbsent(fm.probes)) {
     if (!Array.isArray(fm.probes)) {
@@ -2029,6 +2041,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
               raised: entry.raised,
               target: entry.target,
               type: entry.type,
+              rank: isAbsent(entry.rank) ? null : entry.rank,
               fact: isAbsent(entry.fact) ? null : entry.fact,
               status: isAbsent(entry.status) ? null : entry.status,
               reason: isAbsent(entry.reason) ? null : entry.reason,
@@ -2542,6 +2555,23 @@ function authorBlockquotes(text) {
   return out;
 }
 
+function isPositiveInteger(value) {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+// Whether `ranks` is exactly `1..n`: n values, each a positive integer no
+// greater than n, none repeated (commons.systems/disposition-graph/author-questions,
+// `probes-are-integrated-and-carry-a-rank`).
+function isDenseRankSet(ranks, n) {
+  if (ranks.length !== n) return false;
+  const seen = new Set();
+  for (const r of ranks) {
+    if (!isPositiveInteger(r) || r > n || seen.has(r)) return false;
+    seen.add(r);
+  }
+  return true;
+}
+
 /**
  * The mechanical findings one node's own shape raises, each a string
  * (without the node id, which the caller prefixes): never a parse error, and
@@ -2563,6 +2593,13 @@ function authorBlockquotes(text) {
  * 7. A `depends` entry naming `#<option>` on a node whose answer fact has no
  *    such option (`readGraph`'s own referential-integrity pass already makes
  *    this fatal; kept here for the same reason as (1)).
+ * 8. A probe carrying a `rank` that is not a positive integer; or, on a node
+ *    where at least one open probe carries a `rank`, an open probe that
+ *    carries none; or, where every open probe carries one, a set of ranks
+ *    that is not exactly `1..n` for `n` open probes. A discharged or
+ *    declined probe's `rank` is checked for shape but never for density
+ *    (commons.systems/disposition-graph/author-questions,
+ *    `probes-are-integrated-and-carry-a-rank`).
  *
  * @param {object} node - a node as `parseNode`/`readGraph` shapes it.
  * @param {Map<string, object>} [byId] - every node of the graph, keyed by
@@ -2644,6 +2681,35 @@ export function deriveMechanicalFindings(node, byId = null) {
       if (!names.includes(dep.option)) {
         findings.push(`'depends' names '${dep.id}#${dep.option}', but ${dep.id}'s answer fact has no option '${dep.option}'`);
       }
+    }
+  }
+
+  // rank: shape first, for any probe that carries one at all, open or not
+  // (a discharged or declined probe may carry the rank it held when it left
+  // the list). Density is checked only across the open probes, and only
+  // once every open probe on the node carries some rank -- partial coverage
+  // is its own finding, named per unranked probe, rather than folded into
+  // the density message (commons.systems/disposition-graph/author-questions,
+  // `probes-are-integrated-and-carry-a-rank`).
+  const probes = node.probes || [];
+  for (const p of probes) {
+    if (p.rank != null && !isPositiveInteger(p.rank)) {
+      findings.push(`probe '${p.id}' carries rank ${JSON.stringify(p.rank)}, which is not a positive integer`);
+    }
+  }
+  const openProbes = probes.filter((p) => !p.status);
+  const rankedOpen = openProbes.filter((p) => p.rank != null);
+  if (rankedOpen.length > 0 && rankedOpen.length < openProbes.length) {
+    for (const p of openProbes) {
+      if (p.rank == null) {
+        findings.push(`probe '${p.id}' is open and carries no rank while other open probes on the node do`);
+      }
+    }
+  } else if (openProbes.length > 0 && rankedOpen.length === openProbes.length) {
+    const n = openProbes.length;
+    if (!isDenseRankSet(openProbes.map((p) => p.rank), n)) {
+      const list = openProbes.map((p) => JSON.stringify(p.rank)).join(', ');
+      findings.push(`the open probes carry ranks ${list}, which is not exactly 1..${n}`);
     }
   }
 
