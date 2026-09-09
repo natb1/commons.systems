@@ -28,6 +28,10 @@ bears:
     fact: answer
     option: per-fact-after-two-readings
     relation: adopted
+  - node: commons.systems/disposition-graph/deferring-on-a-probe
+    fact: answer
+    option: the-choice-is-the-record-read-back
+    relation: diverged
 ---
 
 ## Facts
@@ -62,6 +66,10 @@ bears:
     fact: answer
     option: per-fact-after-two-readings
     relation: adopted
+  - node: commons.systems/disposition-graph/deferring-on-a-probe
+    fact: answer
+    option: the-choice-is-the-record-read-back
+    relation: diverged
 ---
 
 ## Answer
@@ -69,6 +77,8 @@ bears:
 Supports the record's distinction between two refusals, and marks where the page had run them together. Non liquet is a statement about the decider rather than about the case: not that the accused is innocent, and not that the charge is bad, but that the ground for deciding is not there. The tradition treats it as a third disposition with its own name and its own consequence, which is that the matter is heard again rather than resolved. The author's kick-back is a different act. It says that none of the options offered is acceptable, which is a statement about the options and calls for options to be drafted again.
 
 The record already distinguishes them, and what the tradition wins is that the distinction is said out loud. The kick-back row is typed to the maieutic movement, where options are drafted, which is the destination the author named for it. Feedback whose words show that the ground itself is at issue, that the author cannot yet say what would count as an answer, is classified further back, to the periagogic movement where the author's own account is taken, and `recording` already classifies a denial to the movement its words call for. So no second control is owed, and the disposition says which movement the row is typed to rather than leaving the reader to infer it.
+
+The record has since acquired a second refusal that is nearer to this tradition than the kick-back is, and it is nearer by being further from it. When the author defers on a probe they say that the ground for deciding is not there, which is what non liquet says and what the kick-back does not; and then, unlike the Roman juror, they hand the decision to the other party rather than send it to be heard again. So the closest analogue in the record is also the clearest departure from the tradition, and the departure is the whole of what is worth noticing: non liquet is a refusal that decides nothing and costs the decider nothing but a second hearing, and a deferral is a refusal that decides the question by transferring it. A tradition that gave the unpersuaded juror a way out without giving the verdict to the prosecution is the standing objection to reading a deferral as though it were merely a pause.
 
 The divergence is that the tradition gave the refusal its own vote and the record gives it one control with a classifier behind it. In the Roman court the juror's third tablet was cast and counted as itself; here both refusals arrive through the same row and are separated by reading the author's words afterwards. That is weaker in one respect, since a classification can be wrong where a tablet cannot, and stronger in another, since the author writes the reason in their own words instead of choosing a category the record made up for them.
 ```
@@ -108,3 +118,15 @@ Recorded as an option on commons.systems/disposition-graph/authority's answer fa
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/non-liquet stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.
+
+### A second relation added, 2026-09-08
+
+Diverged on `commons.systems/disposition-graph/deferring-on-a-probe`'s recommended
+option, `the-choice-is-the-record-read-back`, minted the same day from the author's
+disposition at `words/2026-09-08/39`. The pass on that node found this reading
+already on the record and found that its subject had moved: the deferral, not the
+kick-back, is the record's nearest thing to a juror's third tablet, and it differs
+from it on the point that matters, since non liquet sends the matter to be heard
+again and a deferral hands it to the other party. The answer gains a paragraph
+saying so, and the relation is recorded as `diverged` because the record's mechanism
+departs from the tradition at exactly the place the tradition is careful.

@@ -33,6 +33,10 @@ bears:
     fact: answer
     option: reconciliation-writes-options
     relation: diverged
+  - node: commons.systems/disposition-graph/deferring-on-a-probe
+    fact: answer
+    option: the-choice-is-the-record-read-back
+    relation: adopted
 ---
 
 ## Facts
@@ -72,6 +76,10 @@ bears:
     fact: answer
     option: reconciliation-writes-options
     relation: diverged
+  - node: commons.systems/disposition-graph/deferring-on-a-probe
+    fact: answer
+    option: the-choice-is-the-record-read-back
+    relation: adopted
 ---
 
 ## Answer
@@ -110,3 +118,18 @@ Recorded as an option on commons.systems/disposition-graph/authority's answer fa
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/ocap-attenuation stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact.
+
+### One relation added, 2026-09-08
+
+Adopted on `commons.systems/disposition-graph/deferring-on-a-probe`'s recommended
+option, `the-choice-is-the-record-read-back`, minted the same day from the author's
+disposition at `words/2026-09-08/39`. The bearing is on that option's third change,
+which reads the author's clause that a probe response never raises a class as a
+statement about what a probe can do rather than as a cap on the node. That is this
+tradition's own shape: attenuation runs one way down a chain of grants, a holder
+passes on a weaker reference and never a stronger one, and the recovery of a
+narrowed authority is not un-attenuation but the grantor revoking and re-issuing.
+The author raising a class by ruling on the node is the re-issue; the AI's inability
+to obtain a raise by asking is the attenuation. The divergence this reading already
+records applies here too and is not repeated: the bound is a written disposition a
+session follows, not a mechanism that makes exceeding it impossible.
