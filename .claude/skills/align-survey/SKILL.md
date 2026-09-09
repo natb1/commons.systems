@@ -219,10 +219,12 @@ bears on one. Three limbs admit a probe and all must hold — the record does
 not answer it and the reader has looked, the answer would move a
 recommendation on the node it names, and the answer is not itself a
 disposition, a question of that last kind being a node and going to the merge
-finding instead. Finding none is a complete answer. The cap is three open
-probes on one node, a compound probe counting as the probes it compounds, and
-the reading checks it on every node it judges, as a finding naming the node
-and the probes; the parser does not enforce it. A probe reaches any node in
+finding instead. Finding none is a complete answer. There is no cap on how
+many probes stand open on a node, the author having struck it at
+`words/2026-09-08/32`, so no reading reports a count: the list is bounded
+because a probe blocks on the author rather than recursing, and the remedy for
+a long list is to refine the disposition until it can be confirmed, never to
+stop asking. A probe reaches any node in
 the graph for the same reason a finding does, and it does the same thing
 wherever it lands: a probe recorded on a node at the review or the ruling
 stage returns that node to the `maieutic` stage, judged or not, and the survey
@@ -304,10 +306,9 @@ answer, given whole only where a difference would not be shorter. A node the
 judged set reaches is carried by what it answers, and by the answer its
 recommended option resolves to where that differs from what stands. Each node
 so carried holds a `#### Probes` block, every probe on it, open and
-discharged alike, one line each with the count of the open ones against the
-cap of three: a reader asked to check a cap against a set it is never shown
-counts only the probes it raises itself and re-asks what the record has asked
-already.
+discharged alike, one line each. There is no cap to check against them; they
+are shown for the reason that outlived it, that a reader shown no probe
+re-asks what the record has asked already.
 
 ## 3. The reader
 

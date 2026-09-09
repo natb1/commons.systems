@@ -1918,9 +1918,9 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
 
   // probes: a list of {id, asks, why, discharges, source, raised, and
   // optional fact, status, reason}, modelled on shims above. The reader
-  // checks only the shape of a probe -- the cap of three open probes binds
-  // the movement and is checked by the readings as a finding, never here, so
-  // that an attention rule never turns into a parse error
+  // checks only the shape of a probe. There is no cap on how many stand open
+  // -- the author struck it at words/2026-09-08/32 -- and no count was ever
+  // checked here, since an attention rule must never turn into a parse error
   // (commons.systems/disposition-graph/dialogue).
   let probes = [];
   if (!isAbsent(fm.probes)) {

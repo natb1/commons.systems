@@ -530,11 +530,11 @@ skill only when the session starts in the checkout that carries it.
   its reason, and the author rules the prune at the node's own row. A
   reading (`form: reading`) is exempt by construction. Finding none is a complete
   answer and a movement that found no probe records none and says so. The
-  cap is three open probes on one node, a probe compounding two counting as
-  two, and a movement that would raise a fourth discharges or withdraws one
-  first; the readings check the cap as a finding and the reader of the graph
-  does not enforce it. Each movement that collects also asks whether the
-  list is still the right list. A probe recorded on a node at the review or
+  author struck the cap of three open probes at `words/2026-09-08/32`, so no
+  number bounds the list and no reading reports a count: probes block on the
+  author rather than recursing, and the remedy for a long list is to refine
+  the disposition until it can be confirmed, never to stop asking. Each
+  movement that collects also asks whether the list is still the right list. A probe recorded on a node at the review or
   the ruling stage returns that node to the maieutic stage, whatever else
   that movement wrote, and a node already at the periagogic stage stays
   there. The maieutic session is where the list is worked and where the

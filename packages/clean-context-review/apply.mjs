@@ -1061,9 +1061,9 @@ function pinFailureMessage(err) {
  * Shape-check one raw probe entry from a reading (`asks`, `why`,
  * `discharges`, optional `fact`) -- the shape both `brief-draft.md` and
  * `brief-survey.md` ask the reading for, before `assignProbeIds` supplies
- * `id`, `source` and `raised`. The cap of three open probes is not checked
- * here: it binds the movement and is checked by the readings as a finding,
- * never by the applying step (author-questions).
+ * `id`, `source` and `raised`. No count of open probes is checked here, and
+ * since `words/2026-09-08/32` struck the cap of three there is no count left
+ * to check anywhere (author-questions).
  */
 function pushProbeProblems(problems, p, label) {
   if (!p || typeof p !== "object" || Array.isArray(p)) {

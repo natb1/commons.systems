@@ -2657,7 +2657,7 @@ describe("renderWholeNode: the draft reading's node block, compacted the way the
     assert.match(block, /#### Account \(the AI's account: only the last '### ' section/);
   });
 
-  test("the probes block: an open probe with its text, a discharged one with its reason, and the count against the cap", async () => {
+  test("the probes block: an open probe with its text, a discharged one with its reason, and the counts with no cap to weigh them against", async () => {
     const rootDir = await fixtureWithProbedContentNode("whole-probes-");
     const graph = await readGraph(rootDir);
     const byId = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -2666,14 +2666,14 @@ describe("renderWholeNode: the draft reading's node block, compacted the way the
 
     const block = renderWholeNode(node, { byId });
     assert.match(block, /#### Probes \(the questions this node stands open on for the author\)/);
-    assert.match(block, /1 open of a cap of three, and 1 discharged\./);
+    assert.match(block, /1 open, and 1 discharged\./);
     assert.match(block, /^- `what-a-whole-means` — open, on its `answer` fact, raised 2026-09-07 by clean-context review: Does 'whole' mean the file or the answer\?$/m);
     assert.match(block, /^- `who-pays-the-second-read` — discharged, raised 2026-09-06 by clean-context review: .* — discharged: The author answered it in the sitting of 2026-09-07\.$/m);
 
     // The survey's node block carries the same block, for the same cap.
     const judged = renderJudgedNode(node, graph.words, byId);
     assert.match(judged, /#### Probes \(the questions this node stands open on for the author\)/);
-    assert.match(judged, /1 open of a cap of three, and 1 discharged\./);
+    assert.match(judged, /1 open, and 1 discharged\./);
     assert.match(judged, /^- `what-a-whole-means` — open, on its `answer` fact/m);
   });
 
@@ -2683,7 +2683,7 @@ describe("renderWholeNode: the draft reading's node block, compacted the way the
     const node = graph.nodes.find((n) => n.id === CONTENT_NODE);
     assert.equal(node.probes.length, 0);
     const block = renderWholeNode(node, { byId: new Map(graph.nodes.map((n) => [n.id, n])) });
-    assert.match(block, /0 open of a cap of three, and 0 discharged\./);
+    assert.match(block, /0 open, and 0 discharged\./);
     assert.match(block, /\(no probe has been raised on this node\)/);
   });
 });

@@ -1242,7 +1242,7 @@ describe('parseNode: probes', () => {
     assert.throws(() => parseNode(text, loc), /unknown key 'probes\[0\]\.bogus'/);
   });
 
-  test('four open probes parse without complaint -- the cap of three binds the movement and is checked by the readings, not the reader', () => {
+  test('four open probes parse without complaint -- there is no cap on open probes and the reader never counted them', () => {
     const lines = ['probes:'];
     for (let i = 0; i < 4; i += 1) {
       lines.push(

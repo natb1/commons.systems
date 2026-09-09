@@ -202,15 +202,15 @@ move, and the `fact` it bears on where it bears on one. Three limbs admit a
 probe and all must hold — the record does not answer it and the reader has
 looked, the answer would move a recommendation on this node, and the answer is
 not itself a disposition, a question of that last kind being a node and going
-to the merge finding instead. Finding none is a complete answer. The cap is
-three open probes on one node, a compound probe counting as the probes it
-compounds, and the reading checks it as a finding naming the node and the
-probes; the parser does not enforce it. The brief carries the node's own
-`#### Probes` block, every probe standing on it, open and discharged alike,
-one line each with the count of the open ones against the cap, so the reader
-counts from what the record has already asked and adds its own to that: a
-reader shown no probe counts only the ones it raises and re-asks the
-questions the record asked before it. A probe beats the verdict: a reader
+to the merge finding instead. Finding none is a complete answer. There is no
+cap on how many probes stand open on a node: the author struck it at
+`words/2026-09-08/32`, an arbitrary cutoff buying nothing and costing variance
+in encoding, and the list is bounded without one because a probe blocks on the
+author rather than recursing. The remedy for a long list is to refine the
+disposition until it can be confirmed, never to stop asking. The brief still
+carries the node's own `#### Probes` block, every probe standing on it, open
+and discharged alike, for the reason that outlived the cap: a reader shown no
+probe re-asks the questions the record asked before it. A probe beats the verdict: a reader
 that returns one has said the draft is not ready, so a probe and a forward
 cannot both stand, and §4 applies the kick-back whichever the reader wrote.
 

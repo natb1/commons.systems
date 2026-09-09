@@ -614,18 +614,19 @@ function renderOptionCase(node, fact, option) {
 
 /**
  * The probes standing on one node: the questions the record needs the author
- * to answer before a recommendation on it can be grounded, which
- * `author-questions` caps at three open on one node, "a compound probe
- * counting as the probes it compounds, and the reading checks it as a
- * finding naming the node and the probes; the parser does not enforce it".
+ * to answer before a recommendation on it can be grounded. There is no cap on
+ * how many stand open: the author struck it at `words/2026-09-08/32`, an
+ * arbitrary cutoff buying nothing and costing variance in encoding, the same
+ * content standing in the `probes` field below the number and in prose above
+ * it. The list is bounded without one, because a probe blocks on the author
+ * rather than recursing, and the remedy for a long list is to refine the
+ * disposition until it can be confirmed, never to stop asking.
  *
- * Every brief that asks its reader to check that cap carries this block, for
- * the reason the cap is the reading's and not the parser's: a reader asked to
- * enforce a cap against a set it is never shown counts only the probes it
- * raises itself, and re-raises the questions the record has already asked.
- * The discharged ones are carried for the same reason and with their reasons,
- * since a discharged probe is precisely the question a fresh context is
- * likeliest to ask again.
+ * Every brief carries this block, and the reason it does outlives the cap that
+ * was once its occasion: a reader shown no probe re-raises the questions the
+ * record has already asked. The discharged ones are carried for the same
+ * reason and with their reasons, since a discharged probe is precisely the
+ * question a fresh context is likeliest to ask again.
  *
  * One line each, which is what a count needs: the id, because a finding
  * naming a probe names it by id; what it asks; the fact it bears on where it
@@ -638,8 +639,8 @@ function renderProbes(node, headingPrefix = "####") {
   const out = [
     `${headingPrefix} Probes (the questions this node stands open on for the author)`,
     "",
-    `${open.length} open of a cap of three, and ${discharged.length} discharged. `
-    + "A compound probe counts as the probes it compounds. The cap binds the movement and is checked by this reading, never by the parser.",
+    `${open.length} open, and ${discharged.length} discharged. `
+    + "A compound probe counts as the probes it compounds. There is no cap: a probe blocks on the author rather than recursing, so the list is bounded without one, and the remedy for a long list is to refine the disposition until it can be confirmed, never to stop asking. They are listed so that this reading does not re-raise what the record has already asked.",
     "",
   ];
   if (probes.length === 0) {
@@ -2320,10 +2321,10 @@ export async function appendSurveyHistory(historyPath, history, entry) {
  * shows less of it.
  *
  * The probes stay, open and discharged alike (`renderProbes`), for the one
- * reason a part earns its place in a brief: a validation reads it. This
- * reading is asked to check the cap of three open probes on every node it
- * judges, counting what the node already carries together with what it
- * raises, and a reader shown no probe counts only its own.
+ * reason a part earns its place in a brief: a validation reads it. There is no
+ * cap left for this reading to count against, `words/2026-09-08/32` having
+ * struck it, but a reader shown no probe re-raises what the record has already
+ * asked, and that is what the block is against.
  *
  * The heading, the file and the stage line stay: a reading's heading is an
  * address, and a finding names the node it is written on.
