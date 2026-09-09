@@ -141,11 +141,28 @@ function optionByName(fact, name) {
   return (fact?.options ?? []).find((o) => o && o.name === name) ?? null;
 }
 
-/* The option whose content a content-encoded node's answer is: the one the
- * author last confirmed, and where none is confirmed the one the answer fact
- * recommends. Confirmed is derived from the rulings and is never a field
- * (commons.systems/disposition-graph/viable-options). */
+/* The option whose content a content-encoded node's *answer* is: the one the
+ * author last confirmed, and nothing else. Null where no ruling confirms
+ * one, which is every node of this record today -- a node's answer is the
+ * content of a confirmed option, and the option a fact recommends is a
+ * recommendation and never a fallback answer standing in for one
+ * (commons.systems/disposition-graph/authority). Confirmed is derived from
+ * the rulings and is never a field
+ * (commons.systems/disposition-graph/viable-options).
+ *
+ * A projection that renders drafts wants `carriedOptionName` below, and
+ * saying so is the point of the two names: this file's projections render
+ * text no ruling confirms, and each says so in its own header rather than in
+ * the expression that reads it. */
 function answerOptionName(node) {
+  return confirmedOption(node, "answer");
+}
+
+/* The option whose content a content-encoded node presently *carries*, which
+ * on this record is almost always a draft: the one the author last
+ * confirmed, and where none is confirmed the one the answer fact recommends.
+ * Calling this is the declaration that what follows may be a draft. */
+function carriedOptionName(node) {
   const fact = factByName(node, "answer");
   if (fact === null) return null;
   return confirmedOption(node, "answer") ?? fact.recommends ?? null;
@@ -192,16 +209,25 @@ function optionContentText(option) {
   return typeof option?.resolved === "string" && option.resolved.trim() !== "" ? option.resolved : null;
 }
 
-/* The text a node's answer is, whichever encoding it is written in: the
- * `## Answer` section on a legacy node, and on a content node the same
- * section of the resolved content of the option last confirmed, or of the
- * one recommended where none is (commons.systems/disposition-graph/
+/* The text a node presently carries in the place its answer would go,
+ * whichever encoding it is written in: the `## Answer` section on a legacy
+ * node, and on a content node the same section of the resolved content of
+ * `carriedOptionName`'s option -- the one last confirmed, or the one
+ * recommended where none is (commons.systems/disposition-graph/
  * unconfirmed-accumulation). Null where the node has no answer at all, which
- * is the state of most of this record. */
+ * is the state of most of this record.
+ *
+ * Carried and not `answerOptionName`, deliberately: nothing on this record is
+ * confirmed, so the doctrinal reading is empty everywhere, and the three
+ * consumers below -- the rule files, the browser's `excludeUnaligned`, and
+ * the pages themselves -- would render nothing at all. Each is a projection
+ * of a draft and says so in its own text: a rule file's notice line carries
+ * the node's class and stage ("unanswered; stage maieutic"), and the browser
+ * marks an unanswered node as unanswered on its page. */
 function derivedAnswer(node) {
   if (encodingOf(node) === "legacy") return typeof node?.answer === "string" ? node.answer : null;
   const fact = factByName(node, "answer");
-  const name = answerOptionName(node);
+  const name = carriedOptionName(node);
   const content = name === null ? null : optionContentText(optionByName(fact, name));
   return content === null ? null : contentSections(content).Answer;
 }
@@ -209,7 +235,7 @@ function derivedAnswer(node) {
 function derivedRationale(node) {
   if (encodingOf(node) === "legacy") return typeof node?.rationale === "string" ? node.rationale : null;
   const fact = factByName(node, "answer");
-  const name = answerOptionName(node);
+  const name = carriedOptionName(node);
   const content = name === null ? null : optionContentText(optionByName(fact, name));
   return content === null ? null : contentSections(content).Rationale;
 }
@@ -1091,8 +1117,12 @@ const INDICATIONS_HINT = "Context, not rows: each is a node of its own and is ru
 function standingState(n) {
   // In the content encoding nothing "stands": the record's text is the
   // content of the option a ruling confirms, and where none is confirmed
-  // there is no text of the author's in that place at all.
-  if (encodingOf(n) === "content") return confirmedOption(n, "answer") ? "ratified" : "none";
+  // there is no text of the author's in that place at all. This is the one
+  // site in this file that wants the doctrinal reading, and it already
+  // implemented it inline; `answerOptionName` is that same reading under its
+  // name, and it is `confirmedOption(n, "answer")` exactly, since
+  // `confirmedOption` returns null on a node with no answer fact.
+  if (encodingOf(n) === "content") return answerOptionName(n) ? "ratified" : "none";
   const stands = n.answerFact ? n.answerFact.stands : null;
   const hasAnswer = typeof n.answer === "string" && n.answer.length > 0;
   if (!stands || !hasAnswer) return "none";

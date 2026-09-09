@@ -35,9 +35,9 @@ import {
 } from './derive.mjs';
 import { glossary, optionText } from './derive.mjs';
 import {
-  answerText, confirmedOption, defineTerms, deriveMechanicalFindings, nodeEncoding, parseNode,
-  parseOptionSubsection, readGraph, readyToRule, resolveOptionContent, surveyJudges, surveyOwed,
-  surveyStale,
+  answerText, carriedText, confirmedOption, defineTerms, deriveMechanicalFindings, nodeEncoding,
+  parseNode, parseOptionSubsection, readGraph, readyToRule, resolveOptionContent, surveyJudges,
+  surveyOwed, surveyStale,
 } from './read.mjs';
 import { validate } from './validate.mjs';
 
@@ -2679,14 +2679,40 @@ describe('the content fixture graph', () => {
     assert.equal(confirmedOption(node, 'authority'), null, 'no ruling on the authority fact confirms anything');
   });
 
-  test('with nothing confirmed the answer is the recommended option, and with neither it is null', async () => {
+  test('where a ruling confirms an option, the doctrinal and the carried reading are one text', async () => {
+    const graph = await readGraph(CONTENT_DIR);
+    const node = graph.nodes.find((n) => n.slug === 'confirmed');
+    assert.equal(carriedText(node), answerText(node), 'a confirmation is what both readings return');
+    assert.equal(carriedText(node), resolveOptionContent(node, 'answer', 'the-confirmed-one'));
+    assert.notEqual(
+      carriedText(node),
+      resolveOptionContent(node, 'answer', 'the-recommended-one'),
+      'the recommendation does not displace a confirmation in either reading',
+    );
+  });
+
+  test('with nothing confirmed the node has no answer, and the recommendation is carried and not the answer', async () => {
     const graph = await readGraph(CONTENT_DIR);
     const ladder = graph.nodes.find((n) => n.slug === 'ladder');
     assert.equal(confirmedOption(ladder, 'answer'), null);
-    assert.equal(answerText(ladder), resolveOptionContent(ladder, 'answer', 'the-delta-survey'));
+    assert.equal(ladder.facts[0].recommends, 'the-delta-survey', 'the fact recommends an option');
+
+    // A node's answer is the content of the option the author confirmed, and
+    // where none is confirmed the node has no answer: the option a fact
+    // recommends is a recommendation and never a fallback answer standing in
+    // for one (commons.systems/disposition-graph/authority).
+    assert.equal(answerText(ladder), null, 'a recommendation is not an answer');
+    // What binds the node today is the recommendation, and that is what a
+    // projection rendering drafts asks for, by a name that says so.
+    assert.equal(carriedText(ladder), resolveOptionContent(ladder, 'answer', 'the-delta-survey'));
 
     const nothing = { encoding: 'content', facts: [{ name: 'answer', options: [], recommends: null }] };
     assert.equal(answerText(nothing), null);
+    assert.equal(carriedText(nothing), null, 'neither confirmed nor recommended is null in both readings');
+
+    const noFact = { encoding: 'content', facts: [] };
+    assert.equal(answerText(noFact), null, 'no answer fact at all is null in both readings');
+    assert.equal(carriedText(noFact), null);
   });
 
   test('a legacy node beside them keeps its own behaviour: prose, stands, and the standing text', async () => {
@@ -2702,6 +2728,10 @@ describe('the content fixture graph', () => {
     assert.match(text, /\n## Answer\n\nIt reads it as it stands/);
     assert.ok(!text.includes('facts:'), 'the facts are not part of the text that would stand');
     assert.ok(!text.includes('stage:'), "nor is the dialogue's own state");
+    // The doctrinal/carried distinction is a distinction of the content
+    // encoding, which is where rulings live. The legacy encoding records
+    // none, so the two readings are one path there.
+    assert.equal(carriedText(node), text, 'both readings read a legacy node the same way');
   });
 
   test("answerText on a legacy node with a fence is the fence's own text", async () => {
@@ -2709,6 +2739,7 @@ describe('the content fixture graph', () => {
     const node = graph.nodes.find((n) => n.fence !== null);
     assert.ok(node, 'the fixture carries a node whose recommendation differs from what stands');
     assert.equal(answerText(node), node.fence.raw);
+    assert.equal(carriedText(node), node.fence.raw, 'and the carried reading reads the same fence');
   });
 
   test('the mechanical finding on an author-sourced option is the ledger one in the content encoding', async () => {

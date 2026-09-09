@@ -90,7 +90,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  readGraph, surveyJudges, answerText, confirmedOption, resolveOptionContent,
+  readGraph, surveyJudges, carriedText, confirmedOption, resolveOptionContent,
 } from "@commons.systems/disposition/read.mjs";
 import { diffText } from "@commons.systems/disposition/patch.mjs";
 import { renderFrontier } from "@commons.systems/disposition/project.mjs";
@@ -481,46 +481,40 @@ function factsSummary(node) {
 }
 
 /**
- * The name of the answer fact's confirmed-or-recommended option, in the
- * content encoding only: the option a ruling confirms (`confirmedOption`),
- * or, where none is confirmed -- almost every node, before bootstrap's first
- * ruling -- the option the fact recommends. Null where the fact has neither.
- * The legacy encoding has no analogue; it is asked only from the two helpers
- * below, both already gated on `node.encoding === "content"`.
- */
-function contentAnswerOptionName(node) {
-  const fact = node.answerFact ?? null;
-  if (!fact) return null;
-  return confirmedOption(node, ANSWER_FACT) ?? fact.recommends ?? null;
-}
-
-/**
- * The text that stands on a node's answer fact, or an honest line about why
- * there is none, encoding-aware.
+ * The text a node's answer fact presently carries, or an honest line about
+ * why there is none, encoding-aware.
  *
  * The legacy encoding takes the old path, unchanged: `node.answer`, the
  * '## Answer' section's own text, or "nothing stands on this node yet"
  * where the node carries none. That section is legacy vocabulary the
  * content encoding struck (`materialization`, `session-context`'s
- * `disposition/read.mjs` comment on `answerText`), so a content node never
+ * `disposition/read.mjs` comment on `carriedText`), so a content node never
  * has one to read -- which is the defect this function and
  * `recommendedOptionText` below repair: every content node's neighbour
  * rendered blank, "(no '## Answer' section...)", whatever it answered,
  * because the render read a section only the legacy encoding ever wrote.
  *
- * In the content encoding the text that stands is the resolved content of
- * `contentAnswerOptionName`'s option -- confirmed if a ruling names one,
- * recommended otherwise, which is exactly how `answerText` (imported above)
- * answers the same question for the node under review itself. Where that
- * option carries no content yet (the record has not written a case for it),
- * or the fact recommends and confirms nothing at all, an honest line says
- * so instead of silently reusing the legacy wording for a different reason.
+ * In the content encoding the text carried is the resolved content of
+ * `carriedOptionName`'s option -- confirmed if a ruling names one,
+ * recommended otherwise, which is exactly how `carriedText` (imported above)
+ * answers the same question for the node under review itself. Carried and
+ * not the doctrinal reading, deliberately: this is a neighbour's draft being
+ * shown to a reviewer, and on this record no option anywhere is confirmed,
+ * so the doctrinal reading would blank every neighbour on the page. Where
+ * that option carries no content yet (the record has not written a case for
+ * it), or the fact recommends and confirms nothing at all, an honest line
+ * says so instead of silently reusing the legacy wording for a different
+ * reason.
+ *
+ * There was a second, identical implementation of the carried option's name
+ * here (`contentAnswerOptionName`); it is gone, and this reads
+ * `carriedOptionName` below, so the two cannot drift apart.
  */
 function renderedAnswerText(node) {
   if ((node.encoding ?? "legacy") !== "content") {
     return node.answer || "(no '## Answer' section: nothing stands on this node yet)";
   }
-  const name = contentAnswerOptionName(node);
+  const name = carriedOptionName(node);
   if (!name) return "(no '## Answer' section: nothing stands on this node yet)";
   const fact = node.answerFact;
   const option = (fact.options || []).find((o) => o.name === name) ?? null;
@@ -1715,7 +1709,16 @@ export function optionContentText(node, factName, option) {
 
 /** The option whose content is "the one answer that binds": the option last
  * confirmed, or, where none is confirmed, the one the answer fact
- * recommends. The other options of that fact are the rivals. */
+ * recommends. The other options of that fact are the rivals.
+ *
+ * Carried and not doctrinal, and the name says so. A node's *answer* is the
+ * content of a confirmed option alone
+ * (commons.systems/disposition-graph/authority), and this record confirms
+ * none, so a brief written on the doctrinal reading would be a brief with no
+ * text in it. What a reviewer reads is what binds the node today, which is
+ * the draft; every call of this name is that declaration, and the brief's
+ * own headings say the same thing in words. `disposition/read.mjs` keeps the
+ * pair this belongs to: `answerText` doctrinal, `carriedText` carried. */
 export function carriedOptionName(node) {
   const fact = node?.answerFact ?? null;
   if (!fact) return null;
@@ -1773,6 +1776,17 @@ export function nodeWords(node, words) {
  * propagates nothing", which is what makes the accumulation's fold cost the
  * survey nothing.
  *
+ * The second hash is `carriedText` and never the doctrinal `answerText`, and
+ * that is a decision and not a rename. A pin's object is what *binds* the
+ * node, because what the pin guards against is a reading attesting to text
+ * that has since moved, and the text a reading read is the carried one. On a
+ * record that confirms nothing, hashing the doctrinal answer would collapse
+ * every node's second hash to `sha256("")`: identical everywhere, never
+ * moving, and so a staleness guard that passes vacuously exactly when a
+ * draft is redrawn under it. `rivals` is taken against `carried` for the
+ * same reason, and the two must name the same option or a rival would be
+ * hashed twice and the option that binds not at all.
+ *
  * @returns {{question: string, answer: string, options: string, rivals: string, words: string}}
  */
 export function sectionHashes(node, words = null) {
@@ -1791,7 +1805,7 @@ export function sectionHashes(node, words = null) {
     .join("\n");
   return {
     question: sha256(node?.question ?? ""),
-    answer: sha256(answerText(node) ?? ""),
+    answer: sha256(carriedText(node) ?? ""),
     options: sha256(optionLines),
     rivals: sha256(rivalLines),
     words: sha256(wordLines),
@@ -2377,11 +2391,15 @@ export function renderJudgedNode(node, words = null, byId = null) {
     }
   }
 
+  // `carriedText` and not `answerText`: the heading names `carried` as the
+  // option whose content this is, so the text under it must be that option's
+  // and not a doctrinal reading that would be empty beneath a heading naming
+  // a draft. The heading is where the reader is told what it is.
   parts.push(
     "",
     `#### The one answer that binds${carried ? ` (the resolved content of \`${carried}\`)` : ""}`,
     "",
-    answerText(node) || "(no answer stands and none is recommended: nothing binds on this node yet)",
+    carriedText(node) || "(no answer stands and none is recommended: nothing binds on this node yet)",
     "",
     "#### The options on its answer fact",
     "",
@@ -2440,7 +2458,7 @@ const DIFF_LINE_CAP = 80;
 const DIFF_CONTEXT = 1;
 
 /**
- * A whole node's rendered text -- what `answerText` returns and what a
+ * A whole node's rendered text -- what `carriedText` returns and what a
  * whole option's resolved content is -- cut into its frontmatter block and
  * its `## ` sections, fence-aware, in the order they appear. Returns `null`
  * where the text does not open on a `---` frontmatter delimiter or never
@@ -2616,7 +2634,11 @@ function optionContentAgainstAnswer(node, option, carried, answerHeading = "####
     ];
   }
 
-  const base = answerText(node);
+  // The base a rival is shown as a difference from is the text the caller
+  // rendered above, which is `carriedText`'s and not the doctrinal reading's:
+  // a diff taken against a different base than the one on the page is a diff
+  // against nothing the reader can see.
+  const base = carriedText(node);
   const target = optionContentText(node, ANSWER_FACT, option);
   if (target === null || /^\(unresolvable: /.test(target)) {
     return [target ?? "(no content resolved for this option)", ""];

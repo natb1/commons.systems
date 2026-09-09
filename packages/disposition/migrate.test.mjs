@@ -24,7 +24,7 @@ import {
   splitProse,
   withAnswerBody,
 } from './migrate.mjs';
-import { answerText, readGraph, resolveOptionContent } from './read.mjs';
+import { carriedText, readGraph, resolveOptionContent } from './read.mjs';
 import { validate } from './validate.mjs';
 import { parseWordsFile } from './words.mjs';
 
@@ -229,11 +229,16 @@ describe('migrate over the legacy fixture', () => {
     const now = await readGraph(graph);
     const byId = new Map(now.nodes.map((n) => [n.id, n]));
     let compared = 0;
+    // `carriedText` on both sides: the legacy node's text is what it held,
+    // and the migrated node's is the content of the option the migration
+    // wrote it into, which the migration recommends and no ruling confirms.
+    // The doctrinal `answerText` would be null on every migrated node, and
+    // the comparison would be vacuous.
     for (const node of before_.nodes) {
-      const legacy = answerText(node);
+      const legacy = carriedText(node);
       if (legacy === null) continue;
       compared += 1;
-      assert.equal(answerText(byId.get(node.id)), removeRationale(legacy).text, node.id);
+      assert.equal(carriedText(byId.get(node.id)), removeRationale(legacy).text, node.id);
     }
     assert.equal(compared, 4);
   });
@@ -244,7 +249,7 @@ describe('migrate over the legacy fixture', () => {
     for (const node of before_.nodes) {
       const fact = node.facts.find((f) => f.name === 'answer');
       if (!fact || fact.stands === null) continue;
-      const want = removeRationale(answerText({ ...node, fence: null })).text;
+      const want = removeRationale(carriedText({ ...node, fence: null })).text;
       assert.equal(resolveOptionContent(byId.get(node.id), 'answer', fact.stands), want, node.id);
     }
   });

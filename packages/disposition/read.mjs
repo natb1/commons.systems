@@ -2308,36 +2308,54 @@ function stripFrontmatterKeys(fmText, keys) {
     .replace(/\n+$/, '');
 }
 
-/**
- * The node as its answer would have it stand, whole: frontmatter, its
- * `## Answer`, and, where it has one, its `## Rationale`.
- *
- * In the content encoding that is the resolved content of the confirmed
- * option -- the option carrying the most recent confirming ruling -- and,
- * where none is confirmed, of the option the answer fact recommends. In the
- * legacy encoding it is the `## Recommendation` fence's text where the
- * recommendation differs from what stands, and otherwise the standing node
- * as a fence would hold it: the frontmatter without the dialogue's own keys
- * (`FENCE_FORBIDDEN_KEYS`) and without the facts, then the two sections.
- *
- * Null where the node has no answer at all, which is the state of most of
- * this record: no confirmed and no recommended option in the content
- * encoding, and no `## Answer` in the legacy one.
- *
- * @param {object} node - a node as `parseNode`/`readGraph` returns it.
- * @returns {string|null}
- */
-export function answerText(node) {
-  if ((node?.encoding ?? nodeEncoding(node)) === 'content') {
-    const fact = factByName(node, ANSWER_FACT);
-    if (fact === null) return null;
-    const name = confirmedOption(node, ANSWER_FACT) ?? fact.recommends;
-    if (name === null || name === undefined) return null;
-    const option = fact.options.find((o) => o.name === name) ?? null;
-    if (option === null || option.content === null) return null;
-    return resolveOptionContent(node, ANSWER_FACT, name);
-  }
+// ---------------------------------------------------------------------------
+// the answer, and the text that is merely carried
+//
+// Two readings of one place in a node, kept apart because they answer
+// different questions and one expression answering both said neither. The
+// doctrinal reading is `answerText`: a node's answer is the content of the
+// option the author has confirmed, and where no option on the answer fact is
+// confirmed the node has no answer, the option the fact recommends being a
+// recommendation and never a fallback answer standing in for one
+// (commons.systems/disposition-graph/authority). The carried reading is
+// `carriedText`: confirmed where a ruling confirms one and recommended
+// otherwise, which is what every
+// projection that renders drafts must render, since on this record nothing
+// is confirmed and the doctrinal reading is empty everywhere.
+//
+// Rendering a draft is legitimate; rendering it silently is the defect. A
+// caller that wants the draft says `carriedText`, and the name is the
+// declaration that a draft is what it renders.
+//
+// The distinction is a distinction of the content encoding, which is where
+// rulings live. The legacy encoding has no rulings to read, so both
+// functions read its `## Recommendation` fence or its `## Answer` exactly as
+// this module always has; `legacyWholeNodeText` below is that one path, and
+// it is why the two functions differ in their content branch alone.
+// ---------------------------------------------------------------------------
 
+/**
+ * The resolved content of one named option of the answer fact, as a whole
+ * node text. Null where the node has no answer fact, where `name` is null,
+ * or where the option named carries no content of its own.
+ */
+function contentWholeNodeText(node, name) {
+  const fact = factByName(node, ANSWER_FACT);
+  if (fact === null) return null;
+  if (name === null || name === undefined) return null;
+  const option = fact.options.find((o) => o.name === name) ?? null;
+  if (option === null || option.content === null) return null;
+  return resolveOptionContent(node, ANSWER_FACT, name);
+}
+
+/**
+ * A legacy node as a fence would hold it: the `## Recommendation` fence's
+ * text where the recommendation differs from what stands, and otherwise the
+ * frontmatter without the dialogue's own keys (`FENCE_FORBIDDEN_KEYS`) and
+ * without the facts, then the two sections. Null where the node carries no
+ * `## Answer` at all.
+ */
+function legacyWholeNodeText(node) {
   if (node?.fence && typeof node.fence.raw === 'string') return node.fence.raw;
   if (node?.answer === null || node?.answer === undefined) return null;
   const fm = stripFrontmatterKeys(node.fmText ?? '', FENCE_FORBIDDEN_KEYS);
@@ -2346,6 +2364,58 @@ export function answerText(node) {
     parts.push(`## Rationale\n\n${node.rationale}`);
   }
   return `${parts.join('\n\n')}\n`;
+}
+
+/**
+ * The node as its *answer* would have it stand, whole: frontmatter, its
+ * `## Answer`, and, where it has one, its `## Rationale`.
+ *
+ * In the content encoding that is the resolved content of the confirmed
+ * option -- the option carrying the most recent confirming ruling -- and
+ * nothing else. Null where no option on the answer fact is confirmed, which
+ * is every node of this record today: an answer is the content of a
+ * confirmed option, and the recommendation is not one
+ * (commons.systems/disposition-graph/authority). A caller that means the
+ * text the record presently carries wants `carriedText` below.
+ *
+ * In the legacy encoding it is `legacyWholeNodeText`, unchanged: that
+ * encoding records no rulings, so there is no confirmation to read there and
+ * both functions read what they always did.
+ *
+ * @param {object} node - a node as `parseNode`/`readGraph` returns it.
+ * @returns {string|null}
+ */
+export function answerText(node) {
+  if ((node?.encoding ?? nodeEncoding(node)) === 'content') {
+    return contentWholeNodeText(node, confirmedOption(node, ANSWER_FACT));
+  }
+  return legacyWholeNodeText(node);
+}
+
+/**
+ * The node as the option that *binds* it would have it stand, whole, which
+ * on this record is almost always a draft: in the content encoding the
+ * resolved content of the confirmed option, and where none is confirmed of
+ * the option the answer fact recommends; in the legacy encoding
+ * `legacyWholeNodeText`, the same text `answerText` reads there.
+ *
+ * This is what a projection rendering drafts calls, and calling it is the
+ * declaration that a draft is what is being rendered: the rule files, the
+ * browser, and the reviewer's brief all render text no ruling confirms, and
+ * each says so in its own header. Null where the node has no answer at all:
+ * no confirmed and no recommended option in the content encoding, and no
+ * `## Answer` in the legacy one.
+ *
+ * @param {object} node - a node as `parseNode`/`readGraph` returns it.
+ * @returns {string|null}
+ */
+export function carriedText(node) {
+  if ((node?.encoding ?? nodeEncoding(node)) === 'content') {
+    const fact = factByName(node, ANSWER_FACT);
+    if (fact === null) return null;
+    return contentWholeNodeText(node, confirmedOption(node, ANSWER_FACT) ?? fact.recommends);
+  }
+  return legacyWholeNodeText(node);
 }
 
 // ---------------------------------------------------------------------------

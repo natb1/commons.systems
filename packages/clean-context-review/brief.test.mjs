@@ -23,8 +23,9 @@ import {
   cutPairs, probeSeed, drawProbe, wholeDemand, frozenOnPin, frozenNodeIds,
   renderJudgedNode, renderWholeNode, groupedPairLines, shortId, shortKey, probePairLine,
   tierGate, tierReportSection, TIER_REPORT_HEADING,
+  carriedOptionName,
 } from "./brief.mjs";
-import { readGraph, surveyJudges } from "@commons.systems/disposition/read.mjs";
+import { readGraph, surveyJudges, confirmedOption } from "@commons.systems/disposition/read.mjs";
 import { diffText } from "@commons.systems/disposition/patch.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -1613,6 +1614,81 @@ describe("CLI: --node derives its mode from the record, prints it, and --draft f
     assert.match(stdout, /^mode: draft \(.*names no commit/m);
     assert.match(stdout, /draft: clean-context-review\.test\/main\/review-low;/, "still writes the draft brief");
     assert.match(stderr, /falling back to the draft brief: .*names no commit/);
+  });
+});
+
+// --------------------------------- the answer, and the text that is carried
+
+/* A node's *answer* is the content of the option the author confirmed, and
+ * where no option on the answer fact is confirmed the node has no answer:
+ * the option a fact recommends is a recommendation and never a fallback
+ * answer standing in for one (commons.systems/disposition-graph/authority).
+ * `disposition/read.mjs` keeps that reading as `answerText`.
+ *
+ * A brief renders what *binds* the node instead, which on this record is
+ * almost always the recommendation, and `carriedOptionName` and `carriedText`
+ * are that reading. The names are the declaration: a brief written on the
+ * doctrinal reading would be a brief with no text in it, and every heading in
+ * the render says in words that what it shows is a draft. */
+describe("carriedOptionName: the option that binds, confirmed or else recommended", () => {
+  const EMPTY_SHA = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+  test("the confirmed option where a ruling confirms one", async () => {
+    const graph = await readGraph(await freshFrontierFixture("carried-"));
+    const node = graph.nodes.find((n) => n.id === ANSWERED);
+    assert.equal(confirmedOption(node, "answer"), "standing", "a ruling confirms it");
+    assert.equal(carriedOptionName(node), "standing");
+  });
+
+  test("the recommended option where none is confirmed, on a node whose answer is a draft", async () => {
+    const graph = await readGraph(await freshFrontierFixture("carried-"));
+    const node = graph.nodes.find((n) => n.id === REVIEW_A);
+    assert.equal(confirmedOption(node, "answer"), null, "no ruling confirms an option");
+    assert.equal(node.answerFact.recommends, "standing");
+    assert.equal(carriedOptionName(node), "standing", "and the recommendation is what binds it");
+  });
+
+  test("a content node's recommendation is carried, and a confirmation displaces it", () => {
+    // Built here rather than read from the fixture graph, which is legacy
+    // throughout: in the legacy encoding there are no rulings to read, so the
+    // two readings are one path and the distinction cannot be exercised.
+    const options = [
+      { name: "the-recommended-one", content: { form: "whole" } },
+      { name: "the-confirmed-one", content: { form: "whole" }, ruling: { response: "confirm", date: "2026-09-08" } },
+    ];
+    const drafted = { name: "answer", options: [options[0]], recommends: "the-recommended-one" };
+    const ruled = { name: "answer", options, recommends: "the-recommended-one" };
+
+    assert.equal(carriedOptionName({ facts: [drafted], answerFact: drafted }), "the-recommended-one");
+    assert.equal(carriedOptionName({ facts: [ruled], answerFact: ruled }), "the-confirmed-one",
+      "a confirmation displaces the recommendation, and a recommendation never displaces a confirmation");
+  });
+
+  test("nothing confirmed and nothing recommended carries nothing, and neither does a node with no answer fact", () => {
+    const empty = { name: "answer", options: [], recommends: null };
+    assert.equal(carriedOptionName({ facts: [empty], answerFact: empty }), null);
+    assert.equal(carriedOptionName({ facts: [] }), null);
+    assert.equal(carriedOptionName(null), null);
+  });
+
+  test("the pin's answer hash is taken over what binds the node, never over an empty doctrinal answer", async () => {
+    const graph = await readGraph(await freshFrontierFixture("carried-"));
+    const node = graph.nodes.find((n) => n.id === REVIEW_A);
+
+    // The second of the five hashes is `carriedText`'s and not `answerText`'s,
+    // and that is a decision and not a rename. A pin guards against a reading
+    // attesting to text that has since moved, and the text a reading read is
+    // the carried one. Hashed doctrinally, every node of a record that
+    // confirms nothing would hash to sha256("") here: identical everywhere,
+    // never moving, and so a staleness guard that passes vacuously exactly
+    // when a draft is redrawn under it.
+    assert.equal(confirmedOption(node, "answer"), null, "nothing is confirmed on this node");
+    assert.notEqual(sectionHashes(node, graph.words).answer, EMPTY_SHA, "the hash is of the text that binds");
+
+    // And `rivals` is taken against the same option, so the option that binds
+    // is never hashed twice and never left out of both.
+    const names = node.answerFact.options.map((o) => o.name);
+    assert.ok(names.includes(carriedOptionName(node)), "the carried option is one of the fact's own");
   });
 });
 

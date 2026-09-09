@@ -3121,6 +3121,50 @@ test("where no option is confirmed the column says so in words rather than showi
   assert.ok(item.includes('data-pane-option="the-recommended-draft"'));
 });
 
+/* The two readings of a node's answer, side by side on one node.
+ *
+ * `answerOptionName` is the doctrinal one: a node's answer is the content of
+ * the option the author confirmed, and where none is confirmed the node has
+ * no answer (commons.systems/disposition-graph/authority). `standingState`
+ * asks it, which is why the column above says nothing is confirmed rather
+ * than putting the draft in the confirmed text's place.
+ *
+ * `carriedOptionName` is the carried one: confirmed, or recommended where
+ * none is confirmed, which is what actually binds the node today.
+ * `derivedAnswer` asks it, and so every projection that renders a node's
+ * text -- the rule files, the browser, the alignment page's preview -- shows
+ * the draft, which is the whole of what this record has. Each says so in its
+ * own text: a rule file's notice line carries the class and stage, the
+ * browser marks the node unanswered, and the column says it in words.
+ *
+ * The two must not be one expression: on this record nothing is confirmed,
+ * so a projection that asked the doctrinal question would render nothing at
+ * all, and the column that asks the carried one would claim a confirmation
+ * that does not exist. */
+test("a node with a recommendation and no confirmation: the derived answer is carried, the standing column is not", () => {
+  const derived = withDerivedAnswers(CONTENT_PAGE).nodes.find((n) => n.slug === "open-content");
+  const fact = derived.facts.find((f) => f.name === "answer");
+
+  // Carried: the recommendation's content reaches the page as the node's
+  // text, since that is what binds it and there is nothing else to render.
+  assert.equal(fact.recommends, "the-recommended-draft");
+  assert.ok(typeof derived.answer === "string" && derived.answer.length > 0, "the node renders text");
+  assert.ok(!String(derived.answer).includes("question:"), "and not the frontmatter around it");
+
+  // Doctrinal: nothing is confirmed, so nothing "stands". `withDerivedAnswers`
+  // writes `stands` only where a ruling confirms an option, and the column
+  // above reads the same absence.
+  assert.equal(fact.stands, null, "no ruling confirms an option, so none stands");
+
+  // The same node on the browser: shown, with its draft, and marked
+  // unanswered rather than presented as the record's settled answer.
+  assert.equal(derived.status, "unanswered");
+  assert.ok(
+    !excludeUnaligned(withDerivedAnswers(CONTENT_PAGE)).nodes.every((n) => n.slug !== "open-content"),
+    "and never dropped as un-aligned: it has text, it just has no confirmation",
+  );
+});
+
 test("the preview script is emitted only where a content pane exists", () => {
   const withContent = buildAlignment(ALIGNMENT_TEMPLATE, CONTENT_PAGE);
   assert.ok(withContent.includes("function paneSync(item)"), "the page that has a preview carries the script that moves it");

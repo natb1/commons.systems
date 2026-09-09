@@ -50,7 +50,7 @@ import YAML from 'yaml';
 
 import { applyStrict, diffText } from './patch.mjs';
 import {
-  answerText,
+  carriedText,
   authorEntries,
   parseNode,
   parseOptionSubsection,
@@ -76,7 +76,7 @@ function oneNewline(text) {
 
 /**
  * Cut a `## Rationale` section out of a whole node text (a fence's content,
- * or the text `answerText` builds from a standing node), returning the text
+ * or the text `carriedText` builds from a standing node), returning the text
  * without it and the rationale's own body. The content encoding carries no
  * `## Rationale`: its argument is the option's `**AI support.**`.
  */
@@ -772,12 +772,18 @@ export function migrateNode(node, ctx) {
   const recommends = answerFact === null ? null : answerFact.recommends;
 
   // The two texts the legacy encoding held: what stands, and what is
-  // recommended. Both come back through `answerText`, so the migration
+  // recommended. Both come back through `carriedText`, so the migration
   // reproduces the reader's own answer and never a second reading of it.
+  // Carried and not `answerText`: what the migration must reproduce is the
+  // text the legacy node held, whatever authority it had, and a legacy node
+  // records no rulings for the doctrinal reading to find. The two functions
+  // are the same on this path -- they share `legacyWholeNodeText` -- and the
+  // name is chosen so the migration cannot go silently empty if the
+  // doctrinal reading is ever narrowed further.
   let standingWhole = null;
   let standingRationale = null;
   if (node.answer !== null && node.answer !== undefined) {
-    const cut = removeRationale(answerText({ ...node, fence: null }));
+    const cut = removeRationale(carriedText({ ...node, fence: null }));
     standingWhole = cut.text;
     standingRationale = cut.rationale;
   }
