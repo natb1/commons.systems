@@ -19,9 +19,14 @@ facts:
       - name: test-without-the-written-reading
         source: review
         ref: "2026-09-05"
-    recommends: escalate-toward-ratified
-    boldness: high
-    against: "The test decides which questions reach the author at all, and the party applying it is the party whose work a ratification would slow. Expensive, irreversible and capture-shaped are the AI's own reading of each node, applied on twenty of the record's 129 authority facts, counted by the three terms in a node's `### authority` prose, with no instrument behind it and no record of the reading anywhere but the node's authority-fact prose, so a systematic tilt toward delegated would be invisible in exactly the way the test exists to prevent."
+      - name: delegated-is-the-residual
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/39
+    recommends: delegated-is-the-residual
+    boldness: low
+    against: "The test decides which questions reach the author at all, and the party applying it is the party whose work a ratification would slow. Expensive, irreversible and capture-shaped are the AI's own reading of each node, applied on twenty of the record's 129 authority facts, counted by the three terms in a node's `### authority` prose, with no instrument behind it and no record of the reading anywhere but the node's authority-fact prose, so a systematic tilt toward delegated would be invisible in exactly the way the test exists to prevent. The recommendation of 2026-09-08 makes that argument sharper rather than answering it. Under the text it replaces the AI's silence produced deferred, and a deferred node stays in front of the author; under it the AI's silence produces delegated, and a delegated node leaves the alignment frontier. The residual is now the class that ends the dialogue, so the same unaudited reading that would have tilted the record toward being asked less now tilts it toward not being asked at all, and the three limbs holding it back are the same three, applied the same way, with the same nothing behind them. That the reversal is the author's own settles whose choice it is and does not reduce what it exposes."
   - name: authority
     options:
       - name: ratified
@@ -60,6 +65,8 @@ probes:
     source: review
     raised: "2026-09-05"
     fact: answer
+    status: discharged
+    reason: "Answered by the author at `words/2026-09-08/39`, by removing the question rather than answering it: \"If not expensive, irreversible or capture-shaped the default authority is delegated. Deferred authority is for when a ratification is desired, but not currently practical and must not block (non-bootstrapped) reconciliation.\" There is no enumeration of classes the author has said they do not want to be asked about again, and the answer does not supply one: it makes delegation the residual, which needs no list behind it, and gives deferred a positive test of its own. The recommendation moves to `delegated-is-the-residual`. What the probe said the discharge would move, the authority-fact recommendation on every node the escalation test reaches, is moved by the reversal and not by this discharge, and the back-fill this node already owed is now owed against the reversed default."
 defines:
   - term: expensive
     gloss: "Of a wrong answer: that its cost is paid in work the record cannot take back cheaply."
@@ -372,6 +379,77 @@ reading of 2026-09-05, which held that the option cannot be ruled for as the fac
 is drawn.
 ```
 
+#### delegated-is-the-residual
+
+The residual reversed. Where none of the three limbs holds, the recommendation is
+delegated, and deferred stops being what is left over: it is recommended on a
+positive test of its own, a ratification wanted, not presently practical to obtain,
+and not worth stopping reconciliation for outside bootstrap.
+
+**AI support.** It is the author's, at `words/2026-09-08/39`, answering the
+clean-context reading's probe of 2026-09-05: "If not expensive, irreversible or
+capture-shaped the default authority is delegated. Deferred authority is for when a
+ratification is desired, but not currently practical and must not block
+(non-bootstrapped) reconciliation." The probe found the delegated limb unfalsifiable,
+because it turned on an enumeration of classes the author had already spoken about
+that the record does not hold and names no locus for, leaving the limb to be applied
+from the AI's recollection of the author's words, which the same answer's third
+paragraph forbids elsewhere. The answer removes the enumeration instead of supplying
+one. That is the repair that closes the hole rather than moving it: a list would have
+to be maintained, would go stale against the author's later words, and would put the
+AI back in the position of deciding whether a given decision falls in a listed class.
+
+The second half is the larger repair and the probe did not ask for it. Under the text
+this replaces, deferred is the residue of a residue: it is what the recommendation
+becomes where the delegated limb fails, so no reading written on any node could ever
+say why deferred rather than delegated, only that delegated did not apply. A class
+recommended for a reason the record cannot state is a class recommended with no
+reading behind it, which this same answer's third paragraph calls a recommendation the
+reviewer may find unsupported. The author's test is positive and answerable by
+someone other than the AI: is a ratification wanted here, is it obtainable now, and
+would waiting for it stop reconciliation. So every one of the three classes is now
+recommended against a stated ground.
+
+**AI divergence.** It moves the default toward the class that takes a node off the
+alignment frontier, which is the direction this fact's own `against` says a systematic
+tilt would be invisible in, and the `against` is amended to say so rather than left as
+it stood. The exposure is real and is not the author's error: the author has said
+which default they want, and what they cannot see from inside the ruling is that the
+same unaudited three-limb reading now decides, on the AI's own judgment, whether a
+question reaches them at all rather than how often. What holds it is a bound this
+option does not own. A delegation covers the class of decision it names and no more,
+and authority only narrows on the way down, so a delegated node's silence is bounded
+by a scope the author can read; that is `authority`'s sentence, and the check it
+describes is only as good as the scope the AI writes into the ruling it recommends.
+
+**Content.**
+
+From: escalate-toward-ratified
+
+```diff
+@@ -23,9 +23,17 @@
+ take back cheaply. Irreversible means it is not paid back at all: a deletion, a
+ swap, a landing that other work is built on. Capture-shaped means the party that
+ would set the answer is the party the answer is meant to check.
+-Where none of the three holds, the recommendation is delegated where the author
+-has said they do not want to be asked again about that class of decision, and
+-deferred otherwise.
++Where none of the three holds, the recommendation is delegated. Delegation is
++the residual and takes no enumeration behind it: a decision none of the three
++limbs reaches is one the author does not want to be asked about again, and
++that is what the residual says rather than something a list of already-named
++classes has to establish first. Deferred is the narrow case and carries a test
++of its own: it is recommended where a ratification is wanted and is not
++presently practical to obtain, and where waiting for it must not stop
++reconciliation outside bootstrap. So deferred is a holding pattern with an
++intention behind it, ratification later, and not the absence of one, and it is
++recommended against a reason the node states rather than as what is left when
++nothing else applies.
+ 
+ The reading that applies the test is written on the node, in the `### authority`
+ subsection, which says which of the three limbs it found and why; a class
+```
+
 ### authority
 
 Ratified, at low boldness. What this decides is which questions reach the author
@@ -480,3 +558,46 @@ The session's reply: Taken in full. The test decides which questions reach the a
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/class-recommendation stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `escalate-toward-ratified`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `no-recommendation-on-the-authority-fact`, `class-follows-the-authors-words`, `form-decides-the-default`, `test-without-the-written-reading`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `5d924981999cd48668b2d71e8a6287b31a766fbd` is re-computed for the encoding as `ef23296a96bb799b9cdd1d500652d172746aea3d`; nothing it read changed. The survey's pin `5d924981999cd48668b2d71e8a6287b31a766fbd` is re-computed for the encoding as `ef23296a96bb799b9cdd1d500652d172746aea3d`; nothing it read changed.
+
+### The default reversed on the author's words, 2026-09-08
+
+The author, at `words/2026-09-08/39`, answering the probe
+`which-classes-of-decision-have-you-said`: "If not expensive, irreversible or
+capture-shaped the default authority is delegated. Deferred authority is for when a
+ratification is desired, but not currently practical and must not block
+(non-bootstrapped) reconciliation."
+
+Recorded as the option `delegated-is-the-residual`, which the answer fact now
+recommends at low boldness, the boldness being low because the text is the author's
+own and not the AI's reading of it. The option is a rival and not a refinement, which
+is why it is a new option and not an amendment of `escalate-toward-ratified`: the text
+it replaces says the recommendation is delegated only where the author has said they
+do not want to be asked again and deferred otherwise, and the author says the reverse.
+
+Two things the record gains and one it loses. It gains a residual that needs no
+enumeration behind it, which is what the probe found missing and could not have been
+supplied without minting a list that would go stale. It gains a positive test for
+deferred, which the standing text never had: deferred was the residue of a residue,
+recommended wherever delegated failed, so no `### authority` reading on any node could
+state a ground for it. It loses the direction of its own safety margin. The `against`
+on this fact says a systematic tilt toward delegated would be invisible; under the
+reversal the AI's silence produces delegated rather than deferred, so the tilt the
+`against` names is now the default rather than the deviation. The `against` is amended
+to say that, and the amendment is a sharpening and not a strike.
+
+The authority fact is untouched and still recommends ratified. That is not
+inconsistency: this node decides which questions reach the author, and the party that
+would otherwise set it is the party the review exists to check, which is the
+capture-shaped limb applied to this node itself. The reversal makes the case for
+ratifying this one stronger, not weaker.
+
+The back-fill this node already owed is now owed against a different default. Every
+authority fact recorded without a written reading was recorded under a rule whose
+residual was deferred; the residual is delegated from this recommendation, so the
+back-fill is not only a matter of writing down readings that were never written but of
+re-taking the ones that fell through to the old residual. That is a reconciliation
+item on this node and is not done here.
+
+This node is `tier: global`, so its rule projection under
+`.claude/rules/class-recommendation.md` is stale from this amendment. The projection
+lands on the implementation ref and is named in this sitting's report.

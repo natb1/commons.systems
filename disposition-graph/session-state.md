@@ -49,6 +49,19 @@ probes:
       a sweeper.
     source: ai
     raised: 2026-09-08
+    status: discharged
+    reason: >-
+      Answered by the author at `words/2026-09-08/39`: "The session local store is a
+      recovery log specifically to supplement the compaction record to recover from
+      compaction. Other error recovery states are handled by the harness. The session
+      local store just formalizes state that must be retained across compaction." A
+      recovery log and not a diary, so the first limb is settled; its one failure is
+      compaction, so the third is settled the other way from what the probe expected,
+      no sitting identity, no liveness test and no sweeper, because the reader is the
+      sitting that wrote it and a sitting that died is the harness's to answer for. The
+      second limb goes with them: the report stays at the stop, since nothing is
+      obliged to read a store left behind. The probe's crash-only argument is answered
+      and not adopted, and the answer's content now carries the answer.
   - id: is-the-ledger-rule-admission-or-citation
     asks: >-
       Is the ledger's rule about what may be admitted to the record, or about
@@ -167,6 +180,7 @@ facts:
           - words/2026-09-08/21
           - words/2026-09-08/24
           - words/2026-09-08/25
+          - words/2026-09-08/39
       - name: a-file-a-global-rule-fixes
         source: ai
         ref: "2026-09-08"
@@ -329,6 +343,20 @@ local temporary file is enough. What the store holds is what the sitting has not
 been able to put in the record: the author's words whose relation to a disposition
 fact is unresolved, and the sitting's own working state. Nothing in it has any
 authority, it is not on the disposition ref, and it does not outlive the sitting.
+
+The store is a recovery log and not a diary, and the one failure it recovers from is
+compaction. Every other way a sitting can end, killed, crashed, or stopped by an
+error, is the harness's to handle, and the store owes such an ending nothing. It is
+read on the far side of a compaction by the sitting that wrote it, so it carries no
+sitting identity, needs no liveness test and no sweeper, and no later sitting is
+obliged to look for one left behind; a store whose sitting died is not a thing the
+record recovers, it is a thing the record never had. The crash-only reading, that a
+recovery path taken only on an orderly exit is wrong when it is finally needed, is
+answered here rather than adopted: compaction is not a crash. It is a scheduled event
+inside a sitting that continues across it, so this store lies on the ordinary path and
+not the exceptional one, and the instruments that would make a recovery log correct in
+the crash-only sense, an identity, a scan at open, a sweeper for what no one claims,
+buy nothing when the reader is the writer and the writer has not gone away.
 
 The mechanism is the AI's to choose, and different state may be held by different
 tools or in different files as the AI judges best. What this rule fixes is the
@@ -627,9 +655,9 @@ From: a-compaction-store-the-ai-shapes
 +Nothing in it has any authority, it is not on the disposition ref, and it does not
 +outlive the sitting.
  
- The mechanism is the AI's to choose, and different state may be held by different
- tools or in different files as the AI judges best. What this rule fixes is the
-@@ -42,6 +44,18 @@
+ The store is a recovery log and not a diary, and the one failure it recovers from is
+ compaction. Every other way a sitting can end, killed, crashed, or stopped by an
+@@ -56,6 +58,18 @@
  word. Quotations may also be kept in other stores for other reasons, by rule or by
  the AI's judgement; the ledger's rule governs the ledger.
  
@@ -840,3 +868,35 @@ rivals cannot be marked as the author's choice without dropping what the incumbe
 holds, and the record has no mark for an option the author currently chooses short of
 confirming it. `viable-options` carries the option that would mint one, and the mark
 moved to it in this sitting.
+
+### The probe on what a dead sitting owes the next, discharged, 2026-09-08
+
+The author, at `words/2026-09-08/39`: "The session local store is a recovery log
+specifically to supplement the compaction record to recover from compaction. Other
+error recovery states are handled by the harness. The session local store just
+formalizes state that must be retained across compaction."
+
+The probe put a binary and the answer takes the first term while narrowing it. A
+recovery log, then, and not a diary; but the failure it recovers from is compaction
+alone, and the probe had assumed the class was wider. That narrowing reverses the
+probe's own expectation on its third limb. The probe reasoned from crash-only software
+that the store would need a sitting identity, a liveness test and a sweeper, because
+the failures the store exists for are the ones that never reach a stop. The author's
+answer says those failures are not the store's: they are the harness's. What is left
+for the store is a boundary inside one sitting, with the same sitting on both sides of
+it, and none of the three instruments has anything to do there.
+
+Why the tradition does not bind here is worth recording, since the probe cited it
+correctly and the answer still goes the other way. Candea and Fox's argument is about
+a path that is exercised only in the failure it exists for and is therefore never
+tested until it is needed. Compaction is not that: it is scheduled, it is frequent, it
+happens inside a sitting that carries on across it, and the store is read on the
+ordinary path every time. The tradition's force is proportional to how rare the
+recovery is, and here it is not rare at all. The second limb follows: the standard
+report stays at the stop, because nothing is obliged to read a store a dead sitting
+left, and a report obligated at the start would be a reader for a thing the record has
+just said it does not keep.
+
+This node is `tier: global`, so its rule projection under `.claude/rules/session-state.md`
+is stale from this amendment. The projection lands on the implementation ref and is
+named in this sitting's report.
