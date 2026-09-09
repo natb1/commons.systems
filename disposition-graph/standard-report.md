@@ -10,6 +10,7 @@ facts:
         supports:
           - words/2026-09-08/25
           - words/2026-09-08/36
+          - words/2026-09-08/38
     recommends: a-standard-report-of-probes-sequencing-and-residue
     boldness: low
   - name: authority
@@ -53,6 +54,20 @@ carrying the type `words/2026-09-08/36` gives it, periagogic or maieutic. The
 sitting's alignment sequencing -- what it took up, in what order, and what state each
 node was left in. And the reconciliation residue, where the sitting produced any.
 
+The refinement of `words/2026-09-08/38` fixes the probe listing's form, and it is a
+refinement of this option and not a rival to it: it says what a probe entry contains,
+which the option already claimed to carry, and it contradicts nothing the option says.
+The probe is shown in its own schema, its `asks`, its `why` and its `discharges`
+separately, and not compressed into one line each. The words were given against a
+report that had compressed them, so the disposition names a real loss and not a
+preference of layout: a summary line states what a probe is about, and the author
+answers the question the probe asks, which is the `asks` field and nothing else; and a
+probe answered without its `why` and its `discharges` is answered without knowing what
+turns on the answer, which is the whole of what the two fields exist to say. The three
+fields are the record's own, from `author-questions`' probe encoding, so the form is a
+projection of a structure the record already holds rather than a second one invented at
+the stop.
+
 The relation to `author-questions` is a constraint and not a conflict. That node's
 recommended option puts the probes "in the maieutic session and not the alignment
 page", which a report the sitting prints is consistent with; what this node adds is
@@ -69,10 +84,11 @@ it sequenced would have shown entry 25 unsequenced at the stop.
 
 #### a-standard-report-of-probes-sequencing-and-residue
 
-A sitting that stops prints a standard report. It carries the probes standing against
-the author, each with its type, periagogic or maieutic; the sitting's alignment
-sequencing, which is what it took up and what state each node was left in; and, where
-the sitting produced any, its reconciliation residue.
+A sitting that stops prints a standard report. It carries the probes standing
+against the author, each with its type, periagogic or maieutic, and each in the
+probe's own schema, its `asks`, its `why` and its `discharges` shown separately; the
+sitting's alignment sequencing, which is what it took up and what state each node was
+left in; and, where the sitting produced any, its reconciliation residue.
 
 **AI support.** The record wrote no case for this option; its support is owed.
 
@@ -92,8 +108,11 @@ under:
 ## Answer
 
 A sitting that stops prints a standard report of three parts: the probes standing
-against the author, each carrying its type, periagogic or maieutic; the sitting's
-alignment sequencing; and, where the sitting produced any, its reconciliation residue.
+against the author, each carrying its type, periagogic or maieutic, and each shown in
+the probe's own schema, with the question it asks, the reason it was raised, and what
+answering it discharges given separately and not compressed into a summary; the
+sitting's alignment sequencing; and, where the sitting produced any, its
+reconciliation residue.
 ```
 
 ### authority
@@ -141,3 +160,21 @@ seven probe fields; `alignment-order` and what it holds a sitting's order to be;
 `bootstrap-residue-staleness` and `what-acts-during-bootstrap` on residue;
 `session-state`, whose account already carries the text of `words/2026-09-08/25`; and
 `probe-response-treatment`, whose account carries it too.
+
+### Refined, 2026-09-08
+
+The author's words at `words/2026-09-08/38`, given while this sitting was in hand and
+in answer to the report the sitting had just printed: "when listing the ranking probes
+for this sitting as part of the standard report, show the original schema for probe
+including the question asked, the reason and what it discharges separately." Recorded
+against the standing option rather than as a new one, because it fixes the form of a
+part the option already carries and contradicts nothing in it; the option's `supports`
+now names all three of the author's entries on this question.
+
+The occasion is worth keeping. The sitting's report of that evening listed each ranking
+probe as one summary sentence, folding `asks`, `why` and `discharges` together. The
+author read it and could not answer the probes from it, which is what the third
+paragraph of the same entry says: the words ask for the reconciliation to run first "so
+that I can respond to the ranking probe's actual questions with the correct context".
+So the defect this refinement corrects was measured on the instrument itself, in the
+one way the record can measure it, by the author failing to be able to use the output.

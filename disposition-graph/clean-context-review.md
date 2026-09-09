@@ -548,15 +548,19 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/37
+        diverges:
+          - words/2026-09-08/38
       - name: the-independent-reading-is-constituted-and-sequenced-after-the-experts
         source: ai
         ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/38
       - name: independence-by-model-diversity-and-one-whole-object-per-reader
         source: ai
         ref: "2026-09-08"
-    recommends: a-surveys-selection-and-its-state-are-the-selection-nodes
-    boldness: high
-    against: "The wave buys bytes and spends attention, and attention is the quantity this subtree has already said is the scarce one. `review-cost` now recommends that \"Token efficiency and context management are bounds on what a reading is given; attention is what the reading does with it, and it is not the same quantity\", and a wave halves the bytes while quartering what any one object gets of the reader: the brief is fifty-six percent smaller, but each of the four drafts is now judged by a reader holding three other drafts, three other neighbourhoods of options, and three other verdicts it must also write. Deriving the wave's membership and bounding its brief settle who is in it and how large it may be, and neither touches that: on the record's own accounting a wave is a rise in cost per unit of attention and not a fall, and it is invisible to the measurement the case is built on, which counts only bytes. The deeper objection is that the saving and the loss fall on different parties: the bytes are the record's, the independence is the author's, and the author is the one the review exists to protect. And the loss is hedged only by the survey, which this node's own rationale still records as one \"no sitting has yet generated\" and which runs for the first time in the sitting that recommends the wave."
+    recommends: the-independent-reading-is-constituted-and-sequenced-after-the-experts
+    boldness: moderate
+    against: "The clause that would do the most work names a party the record does not have. \"Convened by something other than the party under test\" is the clause that separates a constituted independence from an asserted one, and the record's parties are the author, the main thread, and what the main thread launches: the first is the party the instrument exists to protect and the other two are the party under test. So the recommendation carries one clause it cannot perform, and it is `movements`' open probe `who-convenes-the-experts` that decides it, which means the answer is recommended ahead of a question it depends on. The sequencing is the second charge: this places the reading after the expert exchange, and the author's words of 2026-09-08 at `/37` describe probe review as iterative and superseding the sequential movements, so a phase placed after another phase is in tension with the shape the same author has just described, and the tension is real rather than a detail of wording. Nemeth still bites at the third: a reader briefed to attack is an assigned advocate whichever phase it runs in, and the content answers this by striking the adversarial assignment, which is a change to what the incumbent brief does and is not yet materialized in `packages/clean-context-review`. And auditor tenure is not monotone, so the permanently fresh stranger this option keeps is not the measured optimum, and the persistent scoped expert it declines has a defence this option gives up."
   - name: authority
     options:
       - name: ratified
@@ -1251,7 +1255,7 @@ The survey carries a node the judged set does not reach, or whose read text an e
 
 The clean-context review is struck: the expert system of recorded identities, scopes and groundings replaces it, and no fresh-context reader stands between a draft and the author.
 
-**Author choice, unconfirmed.** The author's words of 2026-09-08: "Based on expert feedback and what's been relayed on tradition my current choice is to strike clean-context review as superceded by expert system." It is the author's current choice and it is not a confirmation, and the record has no mark for that state yet; `viable-options` carries the option that would mint one. Recorded here as an option so that the choice is on the ref and visible beside what the first expert convened on it returned.
+**Author choice, withdrawn 2026-09-08.** The author's words of 2026-09-08 at `words/2026-09-08/37`: "Based on expert feedback and what's been relayed on tradition my current choice is to strike clean-context review as superceded by expert system." The mark was moved off this option later the same day, at `words/2026-09-08/38`: "I am convinced by the tradition and move my mark to the option supported by tradition." The option stands viable with its case intact and its divergence recorded: it carries no `status: passed`, because withdrawing a mark is not passing an option over, and the record keeps both the reason the choice was made and the reason it was left. What the withdrawal strikes is the mark and not the argument. It is the author's current choice and it is not a confirmation, and the record has no mark for that state yet; `viable-options` carries the option that would mint one. Recorded here as an option so that the choice is on the ref and visible beside what the first expert convened on it returned.
 
 **Tradition support.** Nemeth, Brown and Rogers (2001) found authentic minority dissent outperformed every assigned devil's-advocate condition, and that assigned advocacy can bolster the position it was assigned to oppose by letting the majority feel the objection has been heard and defeated; a reader briefed to attack a draft is an assigned advocate in that exact sense, so the strike removes an instrument whose independence was thinner than its description. Fagan locates the rigour of inspection in the division of the reading into scoped roles rather than in one reader's diligence, which makes several scoped experts the more Fagan-like instrument. The multi-agent debate result (arXiv:2305.19118) is evidence that a plurality of agents held in tension outperforms one agent reflecting on its own output.
 
@@ -1267,6 +1271,8 @@ The clean-context review is struck: the expert system of recorded identities, sc
 
 The independent reading is kept and constituted rather than struck: its brief fixed by rule instead of composed per launch, convened by something other than the party under test, given the whole object rather than a scope, and placed after the expert exchange so that it reads the integration rather than competing with the experts.
 
+**Author choice, unconfirmed.** The author's words of 2026-09-08 at `words/2026-09-08/38`: "I am convinced by the tradition and move my mark to the option supported by tradition." It is the author's current choice and not a confirmation, and the record still has no mark for that state; `viable-options` carries the option that would mint one. What the author names as the reason is the traditions this option's support cites, which is a relation between the choice and the readings and not only a change of mark, and it is why the recommendation moved here with it. The move reverses the choice of `words/2026-09-08/37` within the same sitting, and both stand on the record: the withdrawn choice on the option beside this one, this one here.
+
 **Expert choice.** Chosen by `tradition-on-orchestration-shape`, as the cure tradition offers for what the strike correctly diagnosed. The expert states it as an option and not a recommendation, on the ground that the answer fact is the author's.
 
 **Tradition support.** TIBER-EU and CBEST are the closest institutional analogue and they sequence rather than substitute, keeping the blind test and placing the joint exchange after it. IV&V's three levels give the test the constitution would have to meet. Fagan's inspection keeps a moderator who is not the author, so the tradition with the strongest measured defect removal used author-adjacent readers under a party who was not one of them. Peer review keeps editor-chosen referees and treats author-suggested reviewers as a supplement and never a replacement.
@@ -1277,6 +1283,23 @@ The independent reading is kept and constituted rather than struck: its brief fi
 
 **AI divergence.** It requires a party the record does not have. "Convened by something other than the party under test" names no one: there is the author, the main thread, and what the main thread launches, and the first is the party the instrument exists to protect. So the clause is a requirement without an implementation, and it is `movements`' open probe and not this node's to settle. It also adds a phase to a shape the author has just described as iterative rather than sequenced, which is a real tension with the same entry's P3 and not a detail.
 
+**Content.**
+
+From: a-surveys-selection-and-its-state-are-the-selection-nodes
+
+```diff
+@@ -8,7 +8,9 @@
+ ---
+ ## Answer
+ 
+-As two skills, `/align-review` for the review of a draft and `/align-survey` for the survey, divided as the review-skills node decides, running two reviews divided by their object, each in one fresh context that carries nothing of the invoking session and is never a fork, each reading the record and writing nothing to it.
++As two skills, `/align-review` for the review of a draft and `/align-survey` for the survey, divided as the review-skills node decides, running two reviews divided by their object, each in one fresh context that carries nothing of the invoking session and is never a fork, each reading the record and writing nothing to it. The independent reading is kept and constituted rather than asserted, and where a sitting convenes experts it is sequenced after them, so that what it reads is the integration and not a position competing with theirs. Fresh context is a necessary condition of that independence and is not the whole of it: a reader is fresh and uncommitted by construction, and was hostile only by assignment, which is the half the strike of 2026-09-08 correctly diagnosed and which the clauses below answer.
++
++What constitutes the independence. Four clauses, of which three bind today and the fourth names a party the record does not have. Its brief is fixed by rule and not composed per launch, so that the party under test does not choose what the reader is shown; that is what this node's own brief generator already writes, and the clause holds it there. It is given the whole object and never a scope, which is what separates this reading from a convened expert and is the one function the expert system does not subsume, since a scoped reader cannot by construction find a defect of composition -- a contradiction between two facts each well supported, a node correct and redundant, vocabulary drift across siblings. Its brief assigns no adversarial role and supplies no candidate finding, because an assigned advocate is what Nemeth, Brown and Rogers (2001) measured as weaker than authentic dissent, and because a reader briefed to attack is an assigned advocate whichever phase it runs in. The fourth clause is that it be convened by something other than the party under test, and the record has no such party: there is the author, the main thread, and what the main thread launches, and the first is the party the instrument exists to protect. That clause is therefore stated and unmaterialized, as this node states its other unmaterialized clause, and it is `movements`' open probe `who-convenes-the-experts` and not this node's to settle.
+ 
+ The review of a draft. Its object is one node's recommendation; when it is invoked, by whom, and what it gates are the recording node's confirmation and are not restated here. Where one sitting records or moves the recommendations of several nodes that share a neighbourhood -- the children of one parent drafted in one wave, or the single amendment one disposition lands on several nodes at once -- their readings are one reading. The wave is derived from the record and never named by the session, as the round is: it is the nodes one checkpoint landed at one graph commit that stand at the review stage and share a parent or one amendment, computed by the generator and recorded with the reading, so that a draft left out of a wave leaves a trace. That reader is given the shared neighbourhood once and each of those nodes whole, and returns for each of them a verdict, its findings, its facts check, its viability judgment and its counter-argument, exactly as the reader of one returns them for one; the object is still one text per verdict, and what is shared is the brief and not the judgment. A wave is bounded by what one reader holds whole, which is the review-cost node's bound and is cited here and not restated: where the wave's brief would exceed it the wave splits, and it splits on the parent or the amendment its members share, by the same derivation and never by a choice made in the session. This is not `one-context-for-a-batch`, which stays passed over: a batch is every node standing at the review stage, gathered by a stage field and sharing nothing but the field, while a wave is the drafts of one sitting that already share a parent and a neighbourhood, and that every reader of any one of them is already handed as its siblings and as the round. The framing a wave's reader carries from one draft to the next is framing each of their separate readers would have been given anyway. A node the wave's neighbourhood does not cover is read on its own, and a wave of one is a reading of one. This clause is not materialized: it requires a wave mode on `packages/clean-context-review/brief.mjs`, with a brief template of its own, and a second contract for `/align-review`, which today takes exactly one node id, and neither exists; the saving stated below is projected from a measurement of four separate briefs and has not been observed on a brief any generator writes. The reader is given the node whole; the chain of nodes above it; the rules that bind everywhere; the rules of this reading itself, carried in the brief and not named as files to open; the nodes under it; its siblings under the same parent, which the checkpoint has landed; the nodes it names, by id or as the node of that slug, and the nodes its `depends` names; the readings that bear on it; the round of other drafts; and, of every other node in the record, its id, its question, and the file it is in, on one line, so that a draft answering a question the record already asks is caught at the draft. A neighbour is carried by what it answers, its question, the answer that stands, the answer it now recommends where those differ, and the names of its options, and not by its whole file; the exception is an option whose source is the draft under review, which is carried whole because it is the draft's own text, and which the generator does as of the reconciliation of 2026-09-05. The round is derived from the record and never named by the session: it is the judged set the `survey-selection` node's answer names, the nodes the survey owes a reading, and that node and not this one says which those are; since the survey of 2026-09-05 that is a proper subset of the review and ruling stages, twenty-five nodes of fifty at graph commit e4c87ed0, and it is given as pointers, one line a node, because it grows with the frontier and not with the draft. Why each part is given at that size, and what it costs, is the review-cost node's question and is not restated here; this node says what the parts are and that node says what bounds them. It runs the first six validations of the frontier-consistency node and the fifteenth, judges whether every option on the node's facts is viable and whether a viable one is missing, and returns as data a verdict, forward or kick back to the stage it names, its findings, its check of the facts, its judgment of the options' viability, any probe it raises for the author, and the strongest counter-argument with its strength. Its reader's model, and the survey's, is decided on the review-model node and stated by the skill at the launch; no brief argues it. Two reviews of drafts never wait on each other. A draft gets two readings, the reading and the re-reading of the amendment that answers it, and no more of one answer; the re-reading's object, and the cap, are the review-cost node's. A forward sets the ruling stage and writes the review's state, verdict, strength, date, the counter-argument, and the pin of the recommendation read; what the reader was given is not written on the node but is reconstructible where the reading recorded the graph commit, which the applying step records only on a clean tree, by re-running the generator of that day at that commit; a kickback sets the stage the reviewer named and writes the same; both append the findings, the facts check, the viability judgment, the counter-argument, and the session's reply to the account, and write on the node the probes the reader raised, a probe returning the node to the maieutic stage whatever the verdict, as the author-questions node says, the applying step deriving the stage from the probes before it reads the verdict.
+ 
+```
 
 #### independence-by-model-diversity-and-one-whole-object-per-reader
 
@@ -1653,3 +1676,57 @@ a smaller instrument than the review being struck. It is not minted here because
 it would be the main thread choosing among the experts on a fact where two of them have
 just told it that its briefs are steering them, and because the author's choice to strike
 is on the fact and unconfirmed. It is put to the author as a probe.
+
+### The mark reverses, 2026-09-08
+
+The author moved their mark off the strike and onto the option the traditions support,
+at `words/2026-09-08/38`: "I am convinced by the tradition and move my mark to the
+option supported by tradition." The reversal came within the same sitting that recorded
+the strike at `words/2026-09-08/37`, and both choices stand on the record: the withdrawn
+one on `the-review-is-struck-as-superseded-by-the-expert-system`, marked withdrawn with
+its case and its divergence intact, the current one on
+`the-independent-reading-is-constituted-and-sequenced-after-the-experts`, marked as an
+author choice and not a confirmation.
+
+The recommendation moved with it, from
+`a-surveys-selection-and-its-state-are-the-selection-nodes` to the option the author
+chose. What moved the mark is the author's own choice and the traditions behind it, so
+the boldness falls from high to moderate rather than to low. Low would be the reading if
+the recommendation were the author's words put into the answer's vocabulary and nothing
+more. It is not: the option arrived as a stub, and the content now under it is the AI's
+composition, four clauses of which three bind today and the fourth is stated
+unmaterialized. A fact carries the higher of the two boldnesses, because the ruling is
+on the whole, and the half that rests on the AI is the half a wrong ruling is paid for.
+
+The option was a stub and the stub was the danger. It carried a summary paragraph and no
+`**Content.**` block, while the option the mark sat on carries a seventeen-line fence, so
+moving the recommendation as the node then stood would have left the node with no
+resolvable answer at all -- the second time this sitting has found that defect, after
+`what-acts-during-bootstrap`. The content was therefore encoded first, as a named change
+against `a-surveys-selection-and-its-state-are-the-selection-nodes` rather than as a
+fresh fence, so that everything the incumbent answer settles about the two skills, their
+division by object, and the survey's selection is carried rather than re-asserted, and
+the diff shows exactly what the author's choice changes: the independence is constituted
+rather than asserted, it is sequenced after the experts where a sitting convenes any,
+and fresh context is named as a necessary condition of independence rather than the
+whole of it.
+
+The case against the new recommendation is rewritten to be a case against it and not
+against the option it replaced. Three charges survive the move. The fourth clause of the
+constitution, that the reading be convened by something other than the party under test,
+names a party the record does not have, so the answer is recommended ahead of
+`movements`' open probe `who-convenes-the-experts`, which is the question that decides
+it. The sequencing is in tension with the same author's `words/2026-09-08/37`, which
+describes probe review as iterative and superseding the sequential movements, and a
+phase placed after another phase is the shape that description sets aside. And the
+striking of the adversarial assignment, which is what answers Nemeth, is a change to what
+the brief generator in `packages/clean-context-review` actually does and is not yet
+materialized there; that is a reconciliation item on `greenfield` and not a defect of
+this node.
+
+What this closes and what it does not. It closes the divergence this sitting reported
+between the author's choice and the traditions, which was the finding that led the
+sitting's report of that evening; the sequencing that followed from that divergence is
+therefore re-derived and not merely restated. It does not close the node: nothing here is
+a ruling, the authority fact still recommends ratified, and the persistence fact still
+recommends that the shim is superseded by `review-skills`.
