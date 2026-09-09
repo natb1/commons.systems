@@ -314,6 +314,11 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/36
+      - name: the-recommendation-is-the-main-threads-integration-of-expert-choices
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/37
     recommends: an-option-accumulates-per-expert
     boldness: moderate
     against: "It takes every surface on which the author checks the AI and makes it something the AI derives — the answer resolved through hunks against another option, the author's own words reached by `supports` and `diverges` references the AI files, the confirmed label computed — and it composes the encoding in force, five clauses folded into it earlier, the per-option content, the ledger, the removal of four sections and a six-key survey block into one row whose bundling the AI chose, so a confirmation confers together what the author examined and what they did not. And the pin it now defines leaves a rival recorded after a reading on the page at the ruling with no reader having set it against the record, and lets the AI move a pin by a status it writes while a rival it records moves nothing."
@@ -3255,6 +3260,48 @@ From: probes-are-a-part-that-outlives-the-dialogue
  
 ```
 
+#### the-recommendation-is-the-main-threads-integration-of-expert-choices
+
+**Author support.** The author's words of 2026-09-08 at `words/2026-09-08/37`, answering the probe on whether the AI's recommendation survives the
+expert system: "(change in author disposition) Preserve AI recommends as main thread
+integration of expert choices. main thread may also record probes for both author and
+experts." The author marks it themselves as a change in their disposition.
+
+The term `recommendation`, which this node defines, is redrawn. It was the AI's own best
+judgment on a fact, made by whatever party held the fact. It becomes the main thread's
+integration of the choices the experts convened on that fact have returned. The main
+thread does not thereby become a party to the accumulation: it integrates, and the
+choices integrated are the experts'.
+
+**AI support.** It answers a defect the record could not otherwise reach. Under the
+incumbent reading the party that writes the recommendation and the party the experts
+exist to check are the same party, and adding experts does not cure that as long as the
+recommendation is that party's own opinion standing beside theirs; making the
+recommendation a function of their choices is what gives the experts purchase on it.
+It also gives the record something it has never had, a recommendation whose derivation
+can be audited: an expert's choice is recorded per option, so a reader can ask whether
+the integration matches what was integrated.
+
+**AI divergence, two.** The first is a consequence the author may not have intended and
+should see, because this sitting has already run into it. Where the recommendation is a
+function of the experts' choices, it can diverge from the author's own unconfirmed
+choice by construction; on `clean-context-review` it presently does, since the author's
+current choice is to strike the review and the one expert convened chose to constitute
+and sequence it instead. That is arguably the point of the design. It is recorded
+because a recommendation that contradicts the author's stated choice reads, on a page,
+as the AI disagreeing with the author, and the record should say which it is.
+
+The second is that "integration" names no function. Whether the main thread takes the
+majority, the strongest argument, the union of what no expert diverges from, or its own
+judgment weighing them, is undetermined, and the difference is the whole of what the
+main thread can still do unilaterally. Where no expert has been convened, which is the
+state of every fact but one, the term has no referent at all and the record does not say
+what the mark means. The clause on this node's now-recommended option that "where no
+expert has been convened the one pair is the main thread's own" answers that by making
+the main thread a party, which is what this option denies; the two need reconciling and
+this sitting has not done it.
+
+
 ### authority
 
 Ratified. This node fixes what every node in the record carries and what every
@@ -3500,3 +3547,21 @@ the move: this node is unanswered, and on an unanswered node a moved recommendat
 dialogue and not an act, as `evaluation` says.
 
 One clause of the moved-to option is already falsified by the entry that moved it. It says "Where no expert has been convened the one pair is the main thread's own", which makes the main thread a party to the accumulation; the same entry's P2 makes the main thread the *integrator* of the experts' choices and not one of them. The mark moves anyway, because the defect is one clause of an option whose shape the author has chosen, and the repair is an amendment to it rather than a reason to leave the mark on an option the author has passed. P2 also redefines this node's own defined term `recommendation`, which is a second amendment owed here and is not made in this sitting.
+
+### The recommendation redefined, 2026-09-08
+
+`words/2026-09-08/37` answers P2 with what the author labels a change in their
+disposition: the AI's recommendation is preserved and redefined as the main thread's
+integration of the experts' choices, and the main thread may record probes targeted at
+the author and at experts.
+
+The redefinition lands here because this node defines the term. It is recorded as an
+option and the mark does not move onto it, for a reason worth stating: this option and
+the option the mark now sits on conflict on one clause, whether the main thread is a
+party to an option's accumulation where no expert has been convened, and moving the mark
+would pick a side of that conflict without saying so. The conflict is named in the
+option's own divergence and put to the author with it.
+
+The second half of P2, that the main thread may record probes for both parties, is
+recorded on `author-questions`, where the probe's encoding lives, and reaches this node
+only through the term.

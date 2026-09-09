@@ -45,6 +45,11 @@ facts:
       - name: the-caption-asks-and-the-control-collects
         source: commons.systems/disposition-graph/when-the-kickback-feedback-shows
         ref: "2026-09-07"
+      - name: a-change-request-is-alignment-input
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/37
     recommends: change-requests-go-to-the-kick-back
     boldness: moderate
     against: "A kick-back on one fact moves the whole node, so under this answer the author who wants one word changed loses the ruling they were ready to give and the node's stage with it, and the record answers a request about a label by making the cheapest correction on the page the most expensive act on it."
@@ -477,6 +482,73 @@ made here, so under that answer the label goes on asking for what the options mi
 and the caption, which is on the screen the whole time, carries the ask.
 ```
 
+#### a-change-request-is-alignment-input
+
+**Author support.** The author's words of 2026-09-08 at `words/2026-09-08/37`, answering P3: "There is no kick-back from confirmation either - just
+alignment input from the author until author records confirmation."
+
+A change to what is recommended is recorded as alignment input, decomposed into the
+disposition facts it bears on and landed on each with a reference to the ledger entry
+holding the author's words. There is no kick-back for it to go to.
+
+**AI support.** The recommendation this replaces rests on the author's own words of
+2026-09-04, "All change requests are recorded in the kickback input only". The author
+has now superseded them, which is the strongest of the four grounds `evaluation` admits
+for re-raising a position the record has left: not a new argument but the author's word.
+The node is at the ruling stage on the superseded answer, so the supersession has to be
+recorded before a ruling is taken on it, and that is what this option is for.
+
+**AI divergence.** The question this node asks survives the strike and this option
+answers only half of it. "Where does the author record a change to what is recommended"
+had a control for its answer, a named input on a page; the answer is now a kind rather
+than a place, and a kind does not tell the author where to type. The concrete question,
+what the alignment page shows the author when they want to say "not this" about one
+fact, is left open by this option and is a probe. It is possible that the honest reading
+is that this node's question is now `alignment-page`'s, in which case the node is a
+prune proposal rather than a node with a new answer; the option does not assert that,
+because the author has not been asked.
+
+
+**Content.**
+
+```markdown
+---
+question: Where does the author record a change to what is recommended?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+In alignment input, which is the only channel there is. A change to what is
+recommended is words the author writes; the session decomposes them into the
+disposition facts they bear on, records what they carry -- facts articulated,
+options stated, the author's choices among those options, unconfirmed, and probes
+for the convened experts -- and lands each on its fact with a reference to the
+ledger entry holding the words verbatim. Nothing is typed as a change request,
+because nothing needs to be: the decomposition says which facts moved, which is
+what a type was standing in for.
+
+There is no kick-back for a change request to go to. The author's words of
+2026-09-08 strike it from the review and from the confirmation alike, and the
+answer this replaces -- that every request to change what is recommended goes to
+the kick-back's feedback control -- rested on the author's own words of
+2026-09-04, which those of 2026-09-08 supersede. What follows for the page is not
+decided here: whether the author writes into one control per fact, one control
+per node, or a single input for the sitting is `alignment-page`'s question, and
+this answer says only that whatever they write is alignment input and is
+decomposed.
+
+What this costs is that the author no longer has a typed act for "not this". They
+had a control that recorded a refusal without prose; they now write prose, and the
+AI reads it. That moves the interpretation of a refusal from the author's hand to
+the session's, which is the direction this record usually guards against, and the
+guard that replaces the type is the ledger: the words are entered verbatim and the
+option that acts on them references the entry, so what the session made of the
+author's refusal can be checked against what the author actually wrote.
+```
+
 ### authority
 
 Ratified, on the capture-shaped limb of `class-recommendation`'s test. The other
@@ -543,3 +615,19 @@ Strongest counter-argument (weak): The one sentence this answer writes about the
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/where-a-change-request-goes stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `change-requests-go-to-the-kick-back`; the `## Rationale` its `**AI support.**`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/36, referenced by 1 option the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `edits-ride-on-the-option`, `label-only-change`, `a-dedicated-change-request-control`, `reason-goes-to-the-interview-too`, `one-reason-box-per-fact`, `change-request-typed-to-review`, `edit-applied-and-held-until-the-re-reading`, `kick-back-ask-unchanged`, `the-caption-asks-and-the-control-collects`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `d4f8ef948c8eafe6b806634105220c447ef06558` is re-computed for the encoding as `b07cc280a4699ac17d3d67471bdc7cc6db6a8874`; nothing it read changed. The survey's pin `d4f8ef948c8eafe6b806634105220c447ef06558` is re-computed for the encoding as `b07cc280a4699ac17d3d67471bdc7cc6db6a8874`; nothing it read changed.
+
+### The answer superseded by its own author, 2026-09-08
+
+This node stands at the ruling stage recommending `change-requests-go-to-the-kick-back`,
+which rests on the author's words of 2026-09-04: "All change requests are recorded in
+the kickback input only." P3 of `words/2026-09-08/37` strikes the kick-back. The
+recommendation is therefore an answer whose ground the author has withdrawn, and the
+option recorded above says so.
+
+The mark does not move. A node at the ruling stage is one the author is about to rule
+on, and moving its recommendation without the author seeing why would put a different
+question in front of them than the one they were brought to. What the sitting does
+instead is record the supersession and return the node to the author with both options
+standing and the reason in the account, which is the state `evaluation` calls a
+recommendation moved at the ruling stage sending the node back for review, arrived at by
+the other road.

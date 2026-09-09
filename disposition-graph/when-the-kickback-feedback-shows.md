@@ -43,6 +43,11 @@ facts:
       - name: shown-disabled-until-chosen
         source: review
         ref: "2026-09-07"
+      - name: the-question-has-no-subject-and-the-node-is-a-prune-proposal
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/37
     recommends: revealed-with-the-choice
     boldness: moderate
     against: "The control the author reaches for when the draft is wrong is the one control this answer takes off the screen, and it takes it off at the moment the author is deciding whether to dissent at all. A reader who does not know the box appears on choosing reads the row as a refusal with no way to say why, which is the fault `none-of-the-above-ballot` names, a refusal expressed where the voter does not look. The incumbent's cost is a box that collects words the page drops; this answer's is a channel the author may not know is there, paid on the one act the record has for telling the AI its draft is wrong. And hiding is not the record's own device for a control that must not collect what the page will not honour: the parent renders every input at the stages before the ruling and disables it rather than withdrawing it, which is `shown-disabled-until-chosen` on this fact, and the author's words reach the hiding without reaching the choice between hiding and disabling."
@@ -485,6 +490,68 @@ radio is chosen. Recorded from the reading of 2026-09-07, which raised it as the
 viable option the fact was missing.
 ```
 
+#### the-question-has-no-subject-and-the-node-is-a-prune-proposal
+
+**Author support.** The author's words of 2026-09-08 at `words/2026-09-08/37`, answering P3: "There is no kick-back because probe review is an
+iterative process that supercedes sequential periagogic/meiutic/review phases. There is
+no kick-back from confirmation either."
+
+This node asks when the kick-back's feedback control is shown and what becomes of what
+is written in it. Under P3 there is no kick-back and no such control, so the question has
+no subject. The option this records is not an answer to the question but the proposal
+that the node be pruned, its live residue -- when a control that collects the author's
+words is revealed, and what becomes of the words -- moving to `alignment-page`, which
+owns what the page shows.
+
+**AI support.** `evaluation` holds that a fence with no recorded reason is a
+prune-by-default proposal, and this fence's reason is recorded and has been withdrawn by
+the party who set it. Keeping a node whose subject the record no longer has is how a
+graph accumulates questions nobody can answer, and this node is at the ruling stage,
+which means the author would otherwise be asked to rule on the timing of a control that
+does not exist.
+
+**AI divergence.** The prune is proposed and cannot be executed here, and the record
+should be honest about why rather than leaving it to look like reticence. A prune of a
+standing node is carried by `commons.systems/disposition-graph/graph-topology` and waits
+on that node's authority fact, as `probe-or-node`'s recommended option sets out; this
+node carries no topology fact for the proposal to sit on, and minting one is a
+structural act the author has not been asked about. The option is therefore recorded on
+the answer fact, which is the wrong home for it, and that misplacement is stated here
+rather than hidden.
+
+
+**Content.**
+
+```markdown
+---
+question: When is the kick-back's feedback control shown, and what becomes of what is written in it?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+
+## Answer
+
+The question has no subject. There is no kick-back, so there is no feedback
+control of the kick-back's, so there is no moment at which it is shown and nothing
+written in it to become anything. This node is a prune proposal and its answer
+says so rather than inventing a subject for the question to keep it standing.
+
+What survives the strike is a real question and it is not this node's. A control
+that collects the author's words still exists in some form, since the author still
+writes alignment input, and when it is revealed and what becomes of what is
+written in it are questions about the page. They belong to
+`commons.systems/disposition-graph/alignment-page`, which owns what the page shows
+and when, and the answer that node's `two-responses-where-the-page-offers-them`
+option contemplates is where they land.
+
+Until the prune is ruled this text is what the node says, so that a reader who
+arrives here is not told the timing of a control that does not exist. The prune
+itself cannot be executed from this fact: it is carried by `graph-topology` and
+waits on that node's authority fact, and this node has no topology fact for the
+proposal to sit on.
+```
+
 ### authority
 
 Ratified, on the capture-shaped limb of `class-recommendation`'s test. The other
@@ -556,3 +623,18 @@ Strongest counter-argument (weak): The caption clause is the AI's and it departs
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/when-the-kickback-feedback-shows stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `revealed-with-the-choice`; 1 `## Disposition` entry became the ledger entry words/2026-09-04/46, referenced by 1 option the entry's own date names. The record wrote no text of its own for `hidden-until-chosen-and-discarded`, `the-control-asks-for-the-change-by-name`, `shown-always`, `kick-back-feedback-one-step-down`, `abandoned-words-carried-as-a-draft`, `abandoned-words-staged-as-a-kick-back`, `shown-disabled-until-chosen`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `9c0aa09f3ad04ed2e2be07f0cb1f4b4535fe62dc` is re-computed for the encoding as `76c3932b5ca1626e3806b1ff3cc237c97a3361d2`; nothing it read changed. The survey's pin `9c0aa09f3ad04ed2e2be07f0cb1f4b4535fe62dc` is re-computed for the encoding as `76c3932b5ca1626e3806b1ff3cc237c97a3361d2`; nothing it read changed.
+
+### The subject withdrawn, 2026-09-08
+
+P3 of `words/2026-09-08/37` strikes the kick-back. This node's question is about the
+kick-back's feedback control and about nothing else, so what it asks is no longer a
+question the record can answer. The node stands at the ruling stage.
+
+The prune is proposed and not made, and it is recorded on the answer fact because this
+node has no topology fact to carry it. That is the wrong home and the option says so.
+Two things follow for the author. The node should not be ruled in its present state,
+since ruling it would settle the timing of a control the same entry abolished. And the
+part of its question that survives -- when a control collecting the author's words is
+revealed, and what becomes of what is written in it -- is a real question about the
+alignment page that would be lost if the node were simply deleted; the option names
+`alignment-page` as where it goes.

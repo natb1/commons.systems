@@ -554,6 +554,11 @@ facts:
         supports:
           - words/2026-09-08/32
           - words/2026-09-08/34
+      - name: no-kickback-from-the-confirmation
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/37
     recommends: probes-survive-the-recording
     boldness: moderate
     against: "Both readings must pin the recommendation as it stands before the author may answer a single row, so every ruling waits on two readings of the AI's own drafting, and where the cap has been reached the rule bends rather than binds, so the author's last sight of the text is one no reader saw; while the one judgment no instrument can check, whether a denial is about the options or about the ground, is made by the party the denial was aimed at. And the answer now folds what another node's instrument left, so what the confirmation removes moves whenever `unconfirmed-accumulation` moves, on an instrument that does not exist."
@@ -1720,6 +1725,37 @@ From: the-confirmation-folds-an-already-accumulated-node
  **What the account carries.** What the account carries is the dialogue node's question and when it is written is the checkpoint node's; what this node adds is why it goes at the recording: re-running a reading reconstructs it while nothing reconstructs the facts, which is the test the dialogue node's minimal-state principle sets, applied here. What a resuming session needs of the sitting's minutes beyond the dialogue node's list, the conclusion of every unit the sitting delegated with the commands it ran and the author's response as it was given with the classification the session made of it, is recorded as an option on that node.
  
 ```
+#### no-kickback-from-the-confirmation
+
+**Author support.** The author's words of 2026-09-08 at `words/2026-09-08/37`, answering P3: "There is no kick-back from confirmation either - just
+alignment input from the author until author records confirmation."
+
+The term `kickback`, which this node defines, is struck rather than narrowed. What
+replaces it is not a fourth response but the absence of a mechanism: the author's words
+between one confirmation and the next are alignment input, decomposed into the facts
+they bear on like any other input, and nothing returns a node to a stage on their
+account.
+
+**AI support.** The kick-back was a typed transition and its type was doing no work the
+decomposition does not do better. A denial classified to a movement tells the record
+which stage to resume; a decomposed input tells the record which facts changed, which is
+strictly more, and is what a session has to compute anyway before it can act. Striking
+it removes a vocabulary the author has twice said they do not use, and the record's own
+measurements make its reach visible: the word appears 524 times across 50 files, in a
+defined term, in seven option names, in a whole node's question, and in the third
+response the alignment page offers.
+
+**AI divergence.** The strike leaves a hole this option does not fill, and the record
+should not discover it later. The kick-back was the author's way of saying "not this"
+about a specific fact without confirming anything and without writing a paragraph. Under
+this option there is one channel, alignment input, and it is prose the AI decomposes.
+That is more expressive and it is more work for the author, and it moves the
+interpretation of "not this" from a control the author operates to a decomposition the
+AI performs, which is a transfer in the direction this record usually guards against.
+What the author does on the page to reject a recommendation, now that the kick-back
+control is struck, is not answered here and is a probe.
+
+
 ### authority
 
 Ratified, at low boldness. This is the node that says what a ruling is and where it is written, so an error here is an error in every ruling the record will ever hold: a response mis-classified confers a class the author did not confer, a ruling recorded on the wrong option records a choice they did not make, and a recording that drops the wrong field loses the reason a question was closed. That is expensive, irreversible in the way a mis-recorded ruling is irreversible, and capture-shaped, which is the test `commons.systems/disposition-graph/class-recommendation` states, moved there from `authority` on 2026-09-05 from the option this node sourced on 2026-09-04, and which the frontier applies across the nodes below it. Delegated would let the recommendation act on how the author's own words are read, which is the one thing a delegation cannot cover; deferred is on the fact because the record's classes are three and the author's third exit stays open, and it is what the author takes if they want the recommendation to act while the question stays before them. Boldness low because the class follows that test, stated in the skill and applied across the frontier, rather than the AI's judgment of this node alone.
@@ -1867,3 +1903,18 @@ recommendation -- `author-questions` at `a9928ddc`, `dialogue` at `fd357f52`,
 this node here -- and the instrument has not, so a ruling on this one alone still
 buys a rule the reader rejects. This is the fourth and last of the amendments
 `author-questions`' recommended text names as owed elsewhere.
+
+### The kick-back struck, 2026-09-08
+
+P3 of `words/2026-09-08/37` strikes the kick-back twice over: from the review, because
+probe review is iterative and supersedes the sequential movements, and from the
+confirmation, because what stands between one confirmation and the next is alignment
+input and not a typed return. The half that bears on this node's defined term is
+recorded above.
+
+The reach was measured rather than estimated: the word appears 524 times across 50 files
+of the ref, most densely on this node, on `when-the-kickback-feedback-shows`, on
+`where-a-change-request-goes`, on `alignment-page` and on `dialogue`. It is a defined
+term here, the subject of a whole node's question, the name of seven options one of
+which is recommended, and one of the three responses the alignment page offers the
+author. Striking it is not a wording change and this sitting does not treat it as one.

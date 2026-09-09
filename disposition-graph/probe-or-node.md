@@ -98,6 +98,11 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/36
+      - name: an-alignment-input-carries-four-kinds-and-all-are-parsed
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/37
     recommends: interim-follows-the-authors-word
     boldness: moderate
     against: "Four of the five paragraphs of the recommended answer are the AI's own: the three tests put to the response, the independence test, the two refusals and the tie-break were drawn in one sitting from the failure the author named and are not yet worn by use, and the survival test asks the recorder to predict whether a response will be needed later, which is a judgment about the future of the record and not a fact a reading can check today. On the clause that moved, sending the prune to a node of its own does not answer the case against the delegation, it only moves where the author rules on it: the power at issue is deletion, which `class-recommendation` names irreversible, conferred on the party that also finds the node redundant; the bound `may not prune something that is ratified` excludes nothing in the record as it stands, no option on any node carrying a ruling; and the second bound, that anything of the author's be transferred first, is checked by the same session that wants the file gone. The delegation is still a forward reference, acting only when `commons.systems/disposition-graph/graph-topology`'s authority fact is ruled, so what the author confirms here about the standing rule is where it will be answered and not what it says. And the interim is now the one part of this answer that acts today: it hands an untested discriminator a deletion before the node that would confer the power has been ruled, and which of the author's words reached a particular prune is read by the same session that wants the file gone, with nothing but that session's account to check it."
@@ -582,6 +587,36 @@ From: interim-follows-the-authors-word
  Mixed cases resolve upward, and doubt resolves downward. A question whose response would both move this node's recommendation and stand is a node, because a node can carry both and a probe neither; it is entered in `depends` and the recommendation here waits on it. A question the recorder cannot classify is recorded as a probe, because that is the reversible error: a probe whose answer arrives and turns out to need to stand is promoted to a node then, with the author's words in hand to found it, whereas a node, once minted, stands until it is pruned, and while it stands it puts rulable rows on the alignment page and asks the author for a ruling where an answer was wanted. This is the opposite of the asymmetry the reverse sweep of 2026-09-04 worked under, which favoured keeping a node, and both are right: that sweep reviewed nodes already standing, where the expensive error is destroying a question the author may have asked for, and this rule governs the recording of new ones, where the expensive error is minting.
 ```
 
+#### an-alignment-input-carries-four-kinds-and-all-are-parsed
+
+**Author support.** The author's words of 2026-09-08 at `words/2026-09-08/37`, answering P3, in the note the author appended to it: "alignment input
+disposition may include articulation of facts, options, author choices (unconfirmed)
+and/or probes for experts - all must be parsed from alignment input decomposition."
+
+`an-alignment-input-decomposes-into-facts` with its object widened. An alignment input
+does not decompose into facts alone. It carries four kinds, and the decomposition must
+find all four: the disposition facts it articulates; the options it states on them; the
+author's choices among those options, unconfirmed, which are a mark the record does not
+presently have; and the probes it raises for the convened experts. Each kind lands where
+its kind belongs, and an input is not decomposed until all four have been looked for.
+
+**AI support.** The sitting that recorded this failed on exactly the kind the widening
+adds. It decomposed `words/2026-09-08/36` into facts and options and did not record the
+author's unconfirmed choices, because it had no mark for them and did not notice that it
+had none; the author's correction at the head of the entry this option is drawn from is
+that failure being reported back. The widening is therefore evidence-backed in the
+narrowest way a rule can be, by the record having just broken for want of it.
+
+**AI divergence.** Two of the four kinds have nowhere to land. An unconfirmed author
+choice has no mark on an option, which is `viable-options`' `selected` and is not yet
+ruled; a probe for an expert has a home only under `author-questions`' now-recommended
+option, which is likewise unruled. So the widened rule is presently unsatisfiable for
+half its object: a decomposition that finds all four kinds can record two of them. That
+is an ordering problem between this node and those two rather than an argument against
+the widening, and it is recorded so that the gap is not mistaken for a session's
+oversight.
+
+
 ### authority
 
 `ratified` is recommended on two of the three limbs `commons.systems/disposition-graph/class-recommendation` names, and either would carry it. Capture-shaped: the rule decides what the author is asked to rule on and what they are merely asked, so the party that would set it is the party it exists to check, and a recorder that may classify its own questions decides its own accountability. Irreversible: since 2026-09-07 the independence test's remedy reaches a deletion — "Irreversible means it is not paid back at all: a deletion, a swap, a landing that other work is built on" — and while the delegation that takes that deletion is now recorded on `commons.systems/disposition-graph/graph-topology`, the test that fires it is this node's, so a wrong test here is not paid back either. That is what makes a wrong ruling on this node unrecoverable rather than merely expensive, and it is the limb the reading of 2026-09-07 found missing. Boldness low: the escalation is the record's own test applied to a rule whose subject-matter is what the author sees, and the author may still hold the four tests to be operating detail under the parent's ratification and delegate them with it.
@@ -708,3 +743,15 @@ rivals cannot be marked as the author's choice without dropping what the incumbe
 holds, and the record has no mark for an option the author currently chooses short of
 confirming it. `viable-options` carries the option that would mint one, and the mark
 moved to it in this sitting.
+
+### The four kinds, 2026-09-08
+
+P3 of `words/2026-09-08/37` closes with a note the author marked as bearing on
+decomposition: an alignment input may articulate facts, options, unconfirmed author
+choices and probes for experts, and all must be parsed. The option above widens
+`an-alignment-input-decomposes-into-facts` accordingly.
+
+It is recorded and the mark does not move, for the reason the account above this one
+gives: the option it widens is not a rival of this fact's recommendation but an addition
+to it, so the fact cannot carry both marks, and the sitting reads that as evidence the
+fact holds two questions rather than as a choice to be made.

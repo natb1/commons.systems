@@ -895,6 +895,11 @@ facts:
         status: passed
         reason: "absorbed by the recommendation, whose third usage and rationale now carry it"
 
+      - name: iterative-probe-review-supersedes-the-sequential-movements
+        source: author
+        ref: "2026-09-08"
+        supports:
+          - words/2026-09-08/37
     recommends: turn-form-to-a-child-and-terms-aligned
     boldness: moderate
   - name: authority
@@ -2311,6 +2316,36 @@ shims:
 Everything the recommendation says, with the third usage and the rationale brought into line with the queue sentence: given nothing, the skill takes the first node of the ruling order, as alignment-order says, and the rationale drops "The author's choice of what to propose next is itself a ranking act, recorded as boost" for the answer's own clause that the author's naming of a node is their order and needs no boost. It is on the table because the fence as it stands names rank in one clause and the ruling order in another for one and the same set of unanswered nodes, and a confirmation would ratify both. Passed over on 2026-09-07, absorbed by the recommendation: the fence's third usage and its rationale now carry it.
 ```
 
+#### iterative-probe-review-supersedes-the-sequential-movements
+
+**Author support.** The author's words of 2026-09-08 at `words/2026-09-08/37`, answering P3: "There is no kick-back because probe review is an
+iterative process that supercedes sequential periagogic/meiutic/review phases."
+
+The sitting does not move in order through the periagogic, the maieutic and the review.
+Probes are raised, put to the author and to the convened experts, and answered, and the
+answers raise more; the process is iterative and has no phase boundary to kick back
+across. What the movements name survives as kinds of question rather than as stages a
+sitting passes through.
+
+**AI support.** The sequence was already failing on its own terms in the sitting that
+recorded this option. Entry 36 arrived mid-sitting and entry 37 answered probes the
+sitting had put after it had, by the sequence's reckoning, passed the movements those
+probes belong to; the sitting's own grant obliges it to re-visit alignment it has
+already sequenced when later findings overtake it, which is iteration described as an
+exception to a sequence that does not hold. Naming it iteration says what is happening.
+
+**AI divergence, and it is the one this option most needs answered.** The sequence bought
+something and this option does not say what replaces it. `evaluation` requires that a
+recommendation replacing an incumbent say what the incumbent solved; the movements
+solved the problem that comprehension precedes intention, that a reader who has not
+first read the node as it stands will propose changes to a node they have imagined. The
+periagogic movement was the instrument that forced the reading before the proposing.
+Under iteration nothing forces that order, and the failure it prevented is the one this
+record is least able to detect, because a session that has misread a node produces a
+coherent account of the node it misread. Whether iteration preserves it is a question for
+an expert and not for the AI whose reading is the thing at risk.
+
+
 ### authority
 
 Ratified, on the capture-shaped limb of `commons.systems/disposition-graph/class-recommendation`'s test. This node defines the vocabulary the author rules with — propose, project, ratify, steer, periagogic, maieutic, boldness — and states the conduct of the interview in which the author checks the AI; the party that would set that conduct is the party the conduct exists to check, which is the limb. The other two are not met on this recommendation's own object: the move of a rule to a child node and the alignment of three terms cost a landing to undo and undo cleanly. Boldness low on the class: it follows the stated test, and the author's ruling of 2026-09-03 on this node's rule shows they mean to be asked.
@@ -2466,3 +2501,27 @@ Also named: commons.systems/disposition-graph/readings, commons.systems/disposit
 Proposed: readings survives. Each reading named is re-pointed under the rung clause: where the recommended option contains the one borne on, the relation moves to the containing option; where it does not, the reading records diverged on the recommended option with its reason. plato-maieutics' existing option `bears-repointed-to-the-recommended-option` is the same proposal on that node; frontier-consistency's validation 4 gains the re-pointing check readings' `re-pointing-checked` records there.
 
 Recorded as an option on commons.systems/disposition-graph/readings's answer fact: `the-relation-is-derived-through-containment` (source review, 2026-09-07).
+
+### The movements as iteration, 2026-09-08
+
+P3 of `words/2026-09-08/37` states that probe review is iterative and supersedes the
+sequential periagogic, maieutic and review phases. That is this node's answer fact: the
+sequence is what this node's recommended text describes, and the option is recorded above.
+
+The mark does not move, and the reason is the author's instruction rather than the AI's
+caution. The same entry opens by making the probes that establish expert grounding the
+sitting's first priority; an expert has been convened on this fact, identity
+`dialectical-conduct`, scope this answer fact, grounding the conduct of structured
+inquiry, and the question it was given is squarely whether iteration preserves what the
+sequence bought. Moving the mark before it returns would settle on the AI's own reading
+the question the author has just directed the sitting to put to an expert.
+
+Two neighbours carry the same change and neither is reconciled to it here.
+`movements` replaces the sequence with a diagnosis that selects among the movements,
+which is a third answer and not this one. `alignment-target`'s recommended option still
+says "the clean-context review when the draft has not had it" and that "a denial resumes
+the dialogue at the movement it calls for", both of which this option and P3 strike. The
+parser hard-codes the sequence as well, `read.mjs` fixing the four stages and three
+option sources, with 238 options presently carrying `source: review`; that is
+implementation and lands on the other ref, and it is named here so the cost of the
+change is visible where the change is proposed.
