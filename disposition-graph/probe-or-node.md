@@ -675,16 +675,36 @@ Proposed: dialogue and quotes survive. The five nodes that place words under `##
 
 ### The fourth home, 2026-09-08
 
-The option `an-alignment-input-decomposes-into-facts` was recorded in the alignment
-sitting of 2026-09-08 under the grant at `words/2026-09-08/2` as refined at
-`words/2026-09-08/22`, from steps 1 and 3 of `words/2026-09-08/36`. No recommendation
-was moved: the author gave the seven steps as an option emerging from the dialogue and
-not as a settled answer. The option's own divergence carries the placement question,
-whether this belongs here or under `recording`, and the author is asked it with the
-option rather than after it.
+The option `an-alignment-input-decomposes-into-facts` was recorded in the
+alignment sitting of 2026-09-08 under the grant at `words/2026-09-08/2` as
+refined at `words/2026-09-08/22`, from steps 1 and 3 of `words/2026-09-08/36`.
+No recommendation was moved at the recording, and the reason this account first
+gave was wrong: it said the author had given the seven steps as an option and
+not as a settled answer, and `words/2026-09-08/37` denies it -- they are "an
+option, but also current author choice", unconfirmed. What the correction
+changed on this fact is in the account below. The option's own divergence
+carries the placement question, whether this belongs here or under `recording`,
+and the author is asked it with the option rather than after it.
 
 One defect on the recommended option was found and not repaired. `interim-follows-the-authors-word`
 still says a probe's response "is quoted under `## Disposition`", a section the content
 encoding removed in the migration of 2026-09-07; the repair moves a recommendation,
 and entry 36 gave the AI no warrant to move one, so the defect is on this sitting's
 residue and named here rather than fixed.
+
+### The mark held, and why, 2026-09-08
+
+`words/2026-09-08/37` corrects the reading this sitting made of `words/2026-09-08/36`:
+the seven steps are "an option, but also current author choice", unconfirmed, and not
+an option alone. The sitting recorded only the first of those and wrote the wrong
+reason into this account, where it is struck above.
+
+The mark on this fact does not move, and the reason is structural rather than a claim
+about what the author intended. The option this entry put here, `an-alignment-input-decomposes-into-facts`, is not a rival of `interim-follows-the-authors-word`; the two answer different questions that this one answer fact happens to hold. The incumbent governs the interim between a ruling here and a ruling on `graph-topology` for the prune of a standing node; the author's is a fourth route by which an alignment input reaches the facts it bears on. Moving the mark would silently drop the interim, and leaving it leaves the author's own choice unmarked. Neither is right, and the honest reading is that this fact holds two answers and should be two facts.
+
+That is a defect in how the entry was recorded and not in the author's words, and it is
+put to the author as such: an alignment input whose steps are additions rather than
+rivals cannot be marked as the author's choice without dropping what the incumbent
+holds, and the record has no mark for an option the author currently chooses short of
+confirming it. `viable-options` carries the option that would mint one, and the mark
+moved to it in this sitting.

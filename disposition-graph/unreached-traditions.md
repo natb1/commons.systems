@@ -15,7 +15,7 @@ facts:
         supports:
           - words/2026-09-08/35
           - words/2026-09-08/36
-    recommends: named-on-the-ref-and-resumed
+    recommends: unreached-tradition-is-recorded-on-the-answer-fact
     boldness: low
   - name: authority
     options:
@@ -402,14 +402,17 @@ recorded on the ref and resumed, and the option already standing carries that; w
 35 left open is where on the ref, and entry 36 supplies the other half, the
 identified expert who is the party the record names beside the gap.
 
-No recommendation was moved. The author gave the seven steps of entry 36 as an
-option emerging from the dialogue and not as a settled answer, so nothing in this
-sitting's reading of it moves a mark. The asymmetry between the two options is left
-standing and named: `named-on-the-ref-and-resumed` carries the placeholder support
-and divergence that say the record's case for it is owed, and this one carries a
-written case, which makes the newer option look better argued than the recommended
-one for a reason that is about what has been written and not about what is right.
-The owed case is this node's, and it is on the sitting's residue.
+No recommendation was moved at the recording, and the reason this account first
+gave was wrong: it said the author had given the seven steps as an option and
+not as a settled answer, and `words/2026-09-08/37` denies it -- they are "an
+option, but also current author choice", unconfirmed. What the correction
+changed on this fact is in the account below. The asymmetry between the two
+options is left standing and named: `named-on-the-ref-and-resumed` carries the
+placeholder support and divergence that say the record's case for it is owed,
+and this one carries a written case, which makes the newer option look better
+argued than the recommended one for a reason that is about what has been written
+and not about what is right. The owed case is this node's, and it is on the
+sitting's residue.
 
 ### The second tracked set, 2026-09-08
 
@@ -456,3 +459,20 @@ Leveson; the Fagan author-and-moderator rule; the knowledge-acquisition bottlene
 Team B; CBEST's own documents as against the ECB's account of them; the
 perspective-based-reading replications; and the Delphi primary sources this record
 already carries as unreached.
+
+### The mark, and the correction that moved it, 2026-09-08
+
+`words/2026-09-08/37` corrects the reading this sitting made of `words/2026-09-08/36`.
+The sitting read the seven steps as an option emerging from the dialogue; the author
+says they are "an option, but also current author choice", unconfirmed. Those are two
+different marks and the record collapsed them, and the sentence stating the wrong one
+was written into five node accounts before the correction arrived. It is struck above.
+
+What follows from it here: the mark moves to `unreached-tradition-is-recorded-on-the-answer-fact`.
+It moves rather than staying because the two options answer the same question, where on the ref an unreached tradition is written, and only the moved-to option answers it: the incumbent says "on the disposition ref" and leaves the locus open, while this one names the answer fact of the node the tradition was to be read against, and names the expert that could not reach it -- so nothing the
+incumbent held is dropped by the move, and the fact now shows the author their own
+current choice rather than the AI's reading of the option beside it. Nothing acts on
+the move: this node is unanswered, and on an unanswered node a moved recommendation is
+dialogue and not an act, as `evaluation` says.
+
+One clause of the incumbent is not carried and the record should not lose it by silence: `named-on-the-ref-and-resumed` says the entry "stays there to be resumed in a later round of probing and dialogue with the experts", and the moved-to option says where the entry goes without saying that it is resumed. That is a gap in the moved-to option and is recorded here as one.

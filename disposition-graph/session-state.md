@@ -802,11 +802,14 @@ rule should except a grant is a question this node does not own.
 
 ### The verbatim copy and the sequencing, 2026-09-08
 
-The option `the-store-is-written-verbatim-and-holds-the-sequencing` was recorded in
-the alignment sitting of 2026-09-08 under the grant at `words/2026-09-08/2` as refined
-at `words/2026-09-08/22`, from steps 2 and 3 of `words/2026-09-08/36`. No
-recommendation was moved: the author gave the seven steps as an option emerging from
-the dialogue and not as a settled answer.
+The option `the-store-is-written-verbatim-and-holds-the-sequencing` was recorded
+in the alignment sitting of 2026-09-08 under the grant at `words/2026-09-08/2`
+as refined at `words/2026-09-08/22`, from steps 2 and 3 of
+`words/2026-09-08/36`. No recommendation was moved at the recording, and the
+reason this account first gave was wrong: it said the author had given the seven
+steps as an option and not as a settled answer, and `words/2026-09-08/37` denies
+it -- they are "an option, but also current author choice", unconfirmed. What
+the correction changed on this fact is in the account below.
 
 The decomposition of that entry named `a-file-a-global-rule-fixes` as the option the
 named change should be written against. This fact recommends
@@ -820,3 +823,20 @@ hand into a unit's report should be derived from the record instead.
 
 This node is `tier: global`. Recording an option stales no rule projection, since the
 rule file follows the option the answer fact recommends and that did not change.
+
+### The mark held, and why, 2026-09-08
+
+`words/2026-09-08/37` corrects the reading this sitting made of `words/2026-09-08/36`:
+the seven steps are "an option, but also current author choice", unconfirmed, and not
+an option alone. The sitting recorded only the first of those and wrote the wrong
+reason into this account, where it is struck above.
+
+The mark on this fact does not move, and the reason is structural rather than a claim
+about what the author intended. The option this entry put here, `the-store-is-written-verbatim-and-holds-the-sequencing`, is compatible with `a-compaction-store-the-ai-shapes` rather than a rival of it: the incumbent fixes the requirement and delegates the mechanism, which is itself the author's refinement of the same day, and the author's option adds that the words go to the store verbatim whatever their relation turns out to be and that the sitting's re-evaluated sequencing is among the working state. Neither contains the other as written, so the mark cannot express both, and moving it would drop the delegation the author made first.
+
+That is a defect in how the entry was recorded and not in the author's words, and it is
+put to the author as such: an alignment input whose steps are additions rather than
+rivals cannot be marked as the author's choice without dropping what the incumbent
+holds, and the record has no mark for an option the author currently chooses short of
+confirming it. `viable-options` carries the option that would mint one, and the mark
+moved to it in this sitting.

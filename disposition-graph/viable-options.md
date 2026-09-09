@@ -94,7 +94,7 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/36
-    recommends: confirmed-is-a-derived-label-and-every-option-carries-its-content
+    recommends: an-option-carries-a-selection-per-party
     boldness: high
     against: "The author scoped what persists to options 'categorized as viable by the AI', and this node's own rationale rejected keeping the rest, so the recommendation reverses the author's words on the AI's reading of the regression purpose those same words gave, and prices that reversal at a status on rows the author must read, a hundred and two at graph commit 417b8335 across twenty-eight nodes and a hundred and forty-one at 0daa4792 across thirty-eight, while the discretion the change was bought to remove survives untouched in which candidates the AI names at all; and the amendment binds that decision to a second one, so one ratification would confer both the derivation of a class and what an option must carry, which is the bundling the record's own rule that a text answering two questions is two nodes exists to prevent."
   - name: authority
@@ -1272,3 +1272,20 @@ divergence from it" is not falsified by the entry, since the count of accumulati
 is the sentence `dialogue` carries and this one names the party generically. And the
 tradition an answer fact leaves unexplored is `unreached-traditions`', which is a
 fact-level record and not an option's.
+
+### The mark, and the correction that moved it, 2026-09-08
+
+`words/2026-09-08/37` corrects the reading this sitting made of `words/2026-09-08/36`.
+The sitting read the seven steps as an option emerging from the dialogue; the author
+says they are "an option, but also current author choice", unconfirmed. Those are two
+different marks and the record collapsed them, and the sentence stating the wrong one
+was written into five node accounts before the correction arrived. It is struck above.
+
+What follows from it here: the mark moves to `an-option-carries-a-selection-per-party`.
+It moves rather than staying because that option is written as the standing recommendation with a third thing an option carries, the selection each party has made on it, and amends nothing the standing recommendation says -- so nothing the
+incumbent held is dropped by the move, and the fact now shows the author their own
+current choice rather than the AI's reading of the option beside it. Nothing acts on
+the move: this node is unanswered, and on an unanswered node a moved recommendation is
+dialogue and not an act, as `evaluation` says.
+
+The move is worth more here than on the other facts it happened on, because this is the node that would give the record the mark it was missing when it made the error above. The sitting could not distinguish an option the author raised from an option the author currently chooses, because the record has one mark for both; `selected` is that distinction. The error is therefore evidence for the option, and it is recorded as such rather than left as a story about a sitting.

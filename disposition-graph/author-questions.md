@@ -90,7 +90,7 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/36
-    recommends: no-cap-and-probes-do-not-block
+    recommends: a-probe-carries-a-target-and-a-type
     boldness: moderate
     against: "The record already carries every function of this field in the accounts, the parent node's own answer names what is open for the author as their home, and a clean-context review of 2026-09-03 ruled that an open question carried as prose is minted as a node or folded into a fact's options; so this answer spends a frontmatter key, a term, a change to what the pin strips, a branch in the applying script and an amendment to the fifteenth frontier validation to buy a structure whose content the drafting session still writes alone, and whose worst failure, the probe a session did not raise because it liked its recommendation, is exactly as invisible in the new field as it was in the prose."
   - name: authority
@@ -1251,3 +1251,20 @@ records -- the first amends a node at the review stage, the second mints a node 
 leaves this one nearly alone -- and `probe-or-node` is adjacent and settles neither,
 because its three destinations are all things the record keeps. The recommendation does
 not move, and the fork is put to the author.
+
+### The mark, and the correction that moved it, 2026-09-08
+
+`words/2026-09-08/37` corrects the reading this sitting made of `words/2026-09-08/36`.
+The sitting read the seven steps as an option emerging from the dialogue; the author
+says they are "an option, but also current author choice", unconfirmed. Those are two
+different marks and the record collapsed them, and the sentence stating the wrong one
+was written into five node accounts before the correction arrived. It is struck above.
+
+What follows from it here: the mark moves to `a-probe-carries-a-target-and-a-type`.
+It moves rather than staying because that option is written as the standing recommendation with two fields added, `target` and `type`, and strikes only the sentence explaining their absence -- so nothing the
+incumbent held is dropped by the move, and the fact now shows the author their own
+current choice rather than the AI's reading of the option beside it. Nothing acts on
+the move: this node is unanswered, and on an unanswered node a moved recommendation is
+dialogue and not an act, as `evaluation` says.
+
+The author's answer to P3 is what makes it their choice and not the AI's reading: asked whether an expert-targeted probe and an author-targeted probe are the same field or two, the author answered "same field", which is exactly what `target` encodes. The node's own `question` is narrower than its answer under this option, since it says "probes for the author", and the option carries the redrawing.

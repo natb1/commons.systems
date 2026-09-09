@@ -448,17 +448,19 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/37
-    recommends: the-relation-is-projected-onto-the-option-as-one-of-three
+    recommends: the-edge-carries-a-support-and-a-divergence-string
     boldness: moderate
     against: "The projection is only as complete as the `bears` entries are: a tradition read under one node and bearing on an option of another reaches that option only where the reading's author remembered the cross-node entry, which no validator can check, so the traditions' accumulation the author's words require is exact where it exists and silent where it does not, and a row showing no tradition cannot be told from a row no reading reached; the per-option relation beneath it still binds a verdict to option names that move under it, and a reading per node still multiplies files."
   - name: authority
     options:
       - name: ratified
       - name: delegated
+        supports:
+          - words/2026-09-08/37
       - name: deferred
-    recommends: ratified
+    recommends: delegated
     boldness: moderate
-    against: "Delegated is live: the relations are the AI's readings, each reading node recommends its own class for itself, and the author may hold the rule of how tradition binds the record as loosely."
+    against: "Ratified is live: the fact decides how tradition binds the record for every reading after it, which is the capture-shaped limb; and the author's sentence delegates the physical form alone, a scope none of the three classes can carry, so a ruling of delegated on the whole fact grants more than the author said."
 form: rule
 under:
   - commons.systems/disposition-graph/model
@@ -880,7 +882,13 @@ From: the-relation-is-projected-onto-the-option-as-one-of-three
 
 ### authority
 
-Ratified is recommended because the rule fixes how tradition binds the record, which is the capture-shaped case the record's escalation rule names: a divergence recorded as the author's decision cannot be overruled by the tradition, and a rule that decides what a divergence is decides that for every reading after it. Boldness moderate: the classes a reading may carry are the author's words of 2026-09-02, the rule that a reading is a node and the per-option relation's consequences are the AI's. The case against is delegated: the relations are the AI's readings, each reading node recommends its own class for itself, and the author may hold the rule as loosely as its instances.
+Delegated is recommended, and the mark moved here on 2026-09-08 from ratified on the author's own words. Ratified was recommended because the rule fixes how tradition binds the record, which is the capture-shaped case the record's escalation rule names: a divergence recorded as the author's decision cannot be overruled by the tradition, and a rule that decides what a divergence is decides that for every reading after it. That case is not answered and it is not withdrawn; what moved the mark is that the author addressed this fact directly, and an escalation the author has declined is a recommendation the AI no longer has the standing to make. Boldness moderate: the classes a reading may carry are the author's words of 2026-09-02, the rule that a reading is a node and the per-option relation's consequences are the AI's. The case against is ratified, and it is the case above: the fact governs how every later reading binds the record, and the author's sentence delegates one part of it rather than the whole, which is a scope the three classes cannot express.
+
+Three things about this mark, because the mark is the whole of what the sitting did here and none of them is visible in a one-word option name. The author's sentence is at `words/2026-09-08/37`: "The physical implementation can be delegated if it meets the logical expectation." It bears on this fact and not on the answer fact it was said in the course of answering, which is why the words are carried here as well as there.
+
+No ruling is written here and this mark is not one. `authority` holds that a ruling is the author's act, recorded on the option the author chose with the response, the date and the pin of the recommendation it answers, and that a class the AI writes for itself is not a grant. The author's sentence is permissive and conditional in its form, "can be delegated", "if it meets the logical expectation", and it was given inside an answer to a probe about the answer fact. So the sitting did the two things it may do, recorded the words on the fact they bear on and moved the recommendation onto the class they name, and did not do the third: it did not convert the author's sentence into a class. The difference between an author who said a thing and an author who ruled it is the whole of what this fact is for, and an AI that collapses that difference in its own favour has done what this record calls capture. The author's ruling is what would confer the class, and until then nothing here acts.
+
+The delegation's condition has no instrument. The author delegates "if it meets the logical expectation", and nothing in the record tests whether the physical form does: `read.mjs` checks that a reading's `bears` names a fact or an option that exists, and checks nothing about whether the two strings are reachable, whether both can stand at once, or whether an option a tradition speaks to carries either. So the AI grades itself against the condition the delegation is conditional on. It is recorded on the answer fact's option too; it is repeated here because it bites harder against a class than against a sentence, and because the instrument is the thing that would let the author stop reading the AI's word for it.
 
 ## Account
 
@@ -1015,16 +1023,24 @@ The probe this node's recommendation raised was put to the author in the standar
 report of 2026-09-08 and answered the same day at `words/2026-09-08/37`. The answer
 is recorded above as `the-edge-carries-a-support-and-a-divergence-string`.
 
-Two things about the recording are worth stating, because both were decisions and
-neither is visible in the option itself. The first is that no recommendation moved.
-The author's words give a constraint and delegate the form; they do not choose
-between this node's options, and the standing recommendation satisfies the
-constraint on cardinality already, so moving the mark would assert a choice the
-author did not make. The second is that the option is recorded as a constraint on
-the standing answer rather than as a rival to it. The record's option list is a list
-of rivals, and this entry is not one, which is a strain on the encoding rather than
-on the author's words; it is named here so that a later reader does not read the
-list as a disagreement the author has not had.
+Two things about the recording are worth stating, because both were decisions
+and neither is visible in the option itself. The first is that the
+recommendation did move, and it did not move when this account was first
+written, which was an error. The account said the standing recommendation
+satisfied the author's constraint and that moving the mark would assert a choice
+the author had not made; three paragraphs above it, the option's own AI support
+says the standing answer "fails the logical expectation" and names where -- on
+exclusivity, since the standing form makes a reader choose between adopted and
+diverged where the author's model puts two independent nullable strings on one
+edge. Satisfying one of the author's two constraints was written up as
+satisfying the constraint. The mark now sits on
+`the-edge-carries-a-support-and-a-divergence-string`, which is a named change
+against the option it replaces and therefore drops nothing that option held. The
+second is that the option is recorded as a constraint on the standing answer
+rather than as a rival to it. The record's option list is a list of rivals, and
+this entry is not one, which is a strain on the encoding rather than on the
+author's words; it is named here so that a later reader does not read the list
+as a disagreement the author has not had.
 
 What the sitting held back and no longer holds: this recording was the one thing
 entry 36 called for that the sitting of 2026-09-08 did not do, because entry 36's

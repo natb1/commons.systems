@@ -761,9 +761,11 @@ authority explicitly granted for this session, main thread makes a judgement abo
 whether sufficient grounding/alignment of author/experts exists for reconciliation
 (else, tracked as residue)".
 
-No recommendation was moved, here or on any other node this entry reaches. The author
-gave the seven steps as an option emerging from the dialogue and not as a settled
-answer, and the record takes them at that.
+No recommendation was moved at the recording, and the reason this account first
+gave was wrong: it said the author had given the seven steps as an option and
+not as a settled answer, and `words/2026-09-08/37` denies it -- they are "an
+option, but also current author choice", unconfirmed. What the correction
+changed on this fact is in the account below.
 
 Two things the option leaves to other nodes rather than settling here. The word
 "grounding" already names a different judgment on `round-termination`, the state the
@@ -778,3 +780,36 @@ This node is `tier: global`. Recording an option stales no rule projection, sinc
 `.claude/rules/what-acts-during-bootstrap.md` follows the option the answer fact
 recommends and that did not change; a ruling for this option would stale it, and the
 regeneration would land on the implementation ref.
+
+### The mark held for the expert, 2026-09-08
+
+`words/2026-09-08/37` corrects the reading this sitting made of `words/2026-09-08/36`:
+the seven steps are "an option, but also current author choice", unconfirmed. The
+sentence stating the wrong reading was written into this account and into four others,
+and is struck above.
+
+The mark on this fact does not move in this sitting, and the reason is the author's own
+instruction rather than the AI's reticence. The same entry opens: "if there is not
+sufficient expert concurrence to demonstrate sufficient common grounding for bootstrap
+reconciliation, then the probes to establish that grounding (with or without expert
+divergence) are first priority for this sitting." This fact is where that sentence
+lands -- `reconciliation-runs-on-a-judgment-of-sufficient-grounding` is the option that
+conditions reconciliation on grounding between the author and the convened experts --
+so moving the mark onto it before an expert has been convened on this fact would be the
+AI settling, on its own reading, the question the author has just made the sitting's
+first priority to put to an expert. An expert has been convened on it, identity
+`founding-constraint`, scope this answer fact, grounding institutional and
+constitutional design under a founding. The mark waits for what it returns.
+
+One measured thing is recorded now, because it bears on the option whether or not the
+expert agrees. Until the commit before this one, no expert had ever been convened on
+any node of this record: zero options carried an expert as their `source`, no node
+carried an `experts` key, and the fifteen files mentioning the word were prose about
+what an expert would be. So the option as it stands, which conditions reconciliation on
+a grounding between the author and the experts convened on a node, was for its whole
+life a condition no node in the record could satisfy -- it made bootstrap reconciliation
+impossible rather than conditional, and nothing in the record showed that. The first
+expert landed one commit ago on `clean-context-review`. That is one fact, one expert,
+and it diverges from the author's current choice there; the antecedent of the author's
+opening sentence therefore holds in its strongest form, not insufficient concurrence but
+no concurrence at all, and the consequent is what this sitting is doing.

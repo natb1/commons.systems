@@ -314,7 +314,7 @@ facts:
         ref: "2026-09-08"
         supports:
           - words/2026-09-08/36
-    recommends: probes-are-a-part-that-outlives-the-dialogue
+    recommends: an-option-accumulates-per-expert
     boldness: moderate
     against: "It takes every surface on which the author checks the AI and makes it something the AI derives — the answer resolved through hunks against another option, the author's own words reached by `supports` and `diverges` references the AI files, the confirmed label computed — and it composes the encoding in force, five clauses folded into it earlier, the per-option content, the ledger, the removal of four sections and a six-key survey block into one row whose bundling the AI chose, so a confirmation confers together what the author examined and what they did not. And the pin it now defines leaves a rival recorded after a reading on the page at the ruling with no reader having set it against the record, and lets the AI move a pin by a status it writes while a rival it records moves nothing."
   - name: authority
@@ -3483,3 +3483,20 @@ And the expert's choice is carried in the support paragraph, which puts a markin
 inside prose; `viable-options` carries the markings under
 `an-option-carries-a-selection-per-party`, and where the choice is finally written
 is a seam between the two nodes that a ruling on either will have to settle.
+
+### The mark, and the correction that moved it, 2026-09-08
+
+`words/2026-09-08/37` corrects the reading this sitting made of `words/2026-09-08/36`.
+The sitting read the seven steps as an option emerging from the dialogue; the author
+says they are "an option, but also current author choice", unconfirmed. Those are two
+different marks and the record collapsed them, and the sentence stating the wrong one
+was written into five node accounts before the correction arrived. It is struck above.
+
+What follows from it here: the mark moves to `an-option-accumulates-per-expert`.
+It moves rather than staying because that option is written as the standing recommendation with the accumulations counted per party rather than at three, and the standing recommendation's own clause on probes outliving the dialogue is carried into it unchanged -- so nothing the
+incumbent held is dropped by the move, and the fact now shows the author their own
+current choice rather than the AI's reading of the option beside it. Nothing acts on
+the move: this node is unanswered, and on an unanswered node a moved recommendation is
+dialogue and not an act, as `evaluation` says.
+
+One clause of the moved-to option is already falsified by the entry that moved it. It says "Where no expert has been convened the one pair is the main thread's own", which makes the main thread a party to the accumulation; the same entry's P2 makes the main thread the *integrator* of the experts' choices and not one of them. The mark moves anyway, because the defect is one clause of an option whose shape the author has chosen, and the repair is an amendment to it rather than a reason to leave the mark on an option the author has passed. P2 also redefines this node's own defined term `recommendation`, which is a second amendment owed here and is not made in this sitting.

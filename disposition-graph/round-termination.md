@@ -1059,8 +1059,11 @@ set now recorded on `unreached-traditions`, which is where an unreached locus li
 The option `grounding-for-reconciliation-is-not-grounding-for-confirmation` was
 recorded in the alignment sitting of 2026-09-08 under the grant at
 `words/2026-09-08/2` as refined at `words/2026-09-08/22`, from step 6 of
-`words/2026-09-08/36`. No recommendation was moved: the author gave the seven steps as
-an option emerging from the dialogue and not as a settled answer.
+`words/2026-09-08/36`. No recommendation was moved at the recording, and the
+reason this account first gave was wrong: it said the author had given the seven
+steps as an option and not as a settled answer, and `words/2026-09-08/37` denies
+it -- they are "an option, but also current author choice", unconfirmed. What
+the correction changed on this fact is in the account below.
 
 The decomposition of that entry carried this as an unsettled reading rather than a
 finding: whether the "grounding" step 6 gives the main thread to judge is the "shared
@@ -1071,3 +1074,20 @@ option was recorded in the same act as
 `reconciliation-runs-on-a-judgment-of-sufficient-grounding` on
 `what-acts-during-bootstrap`, which is where the judgment itself is stated, so that
 neither node references a distinction the other does not yet carry.
+
+### The mark held, and why, 2026-09-08
+
+`words/2026-09-08/37` corrects the reading this sitting made of `words/2026-09-08/36`:
+the seven steps are "an option, but also current author choice", unconfirmed, and not
+an option alone. The sitting recorded only the first of those and wrote the wrong
+reason into this account, where it is struck above.
+
+The mark on this fact does not move, and the reason is structural rather than a claim
+about what the author intended. The mark is already on the author's current choice. `no-terminator-the-author-confirms` is the author's own refinement of their own words, and P4 of `words/2026-09-08/37` restates it: "there is no mechanical round termination - only author choosing to proceed with confirmation given current disposition state". What the correction changes here is the standing of that option and not the mark: it was recorded as the AI's reading of the author's words, and it is the author's choice. `grounding-for-reconciliation-is-not-grounding-for-confirmation` is not thereby killed and is not thereby kept. P4 answers termination and that option is about the word "grounding", so the two do not meet; but the opening sentence of the same entry does meet it, and asks for a re-drawing the option has not had. It speaks of "sufficient expert concurrence to demonstrate sufficient common grounding for bootstrap reconciliation", which is one notion of grounding with two thresholds of sufficiency and not two notions, and that is a limb the option never considered. It is also the limb that answers the option's own recorded divergence, that two terms one word apart are a reader's trap. The re-drawing is owed and is not made here.
+
+That is a defect in how the entry was recorded and not in the author's words, and it is
+put to the author as such: an alignment input whose steps are additions rather than
+rivals cannot be marked as the author's choice without dropping what the incumbent
+holds, and the record has no mark for an option the author currently chooses short of
+confirming it. `viable-options` carries the option that would mint one, and the mark
+moved to it in this sitting.
