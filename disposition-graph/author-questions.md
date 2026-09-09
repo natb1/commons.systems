@@ -1,6 +1,55 @@
 ---
 question: What probes for the author does a node carry, and where are they asked?
 stage: review
+probes:
+  - id: what-should-the-record-call-a-probe-that-is-answered
+    asks: >-
+      The record says a probe is `discharged`, in the schema and in 330 places
+      of prose, and the author says they do not know the term. Is the word the
+      problem, or the model behind it, that a probe reaches a terminal state at
+      all?
+    fact: answer
+    why: >-
+      `discharge` is not decoration. It is a probe status the reader admits and
+      nothing else, `PROBE_STATUSES = ['discharged']`, and every probe carries
+      a required `discharges` field saying what answering it would settle. So
+      the word encodes a model: a probe is opened, is answered once, and is
+      closed. The author's words of 2026-09-08 say probing is iterative and
+      supersedes the sequential movements, that probes may be traded between
+      the author and the experts indefinitely, and that there is no mechanical
+      round termination. A terminal status on an iterated exchange is either
+      the wrong name for a real thing or the right name for a model the author
+      has just replaced, and the record cannot tell which from its own text
+      because it never defines the word.
+    discharges: >-
+      Whether the term is glossed where it is used, renamed, or struck with the
+      terminal status behind it; and therefore whether a probe's state is a
+      status at all or a position in an exchange that has none. It does not
+      move what a probe is for or where it is asked.
+    source: author
+    raised: 2026-09-08
+  - id: where-does-a-probe-addressed-to-an-expert-live
+    asks: >-
+      This node asks what probes for the author a node carries. The author's
+      words of 2026-09-08 have the main thread recording probes for the author
+      and for the experts alike. Does this node widen to both, or does an
+      expert-addressed probe belong to a node of its own?
+    fact: answer
+    why: >-
+      The two are the same object in the record and different objects in this
+      node's question. A probe has keys `id, asks, why, discharges, source,
+      raised, fact, status, reason` and no `target`, so nothing distinguishes
+      an author-addressed probe from an expert-addressed one, and this node's
+      question names only the first. Widening this node makes one list with a
+      new key; splitting makes two lists that the alignment page and the
+      frontier must both show. The choice decides what the page renders and
+      what a sitting is told it owes.
+    discharges: >-
+      Whether the probe schema gains a target and this node's question widens,
+      or a sibling node is minted for expert-addressed probes. It does not move
+      the answer's rule that a probe is carried on the node it bears on.
+    source: author
+    raised: 2026-09-08
 facts:
   - name: answer
     options:
@@ -1268,3 +1317,55 @@ the move: this node is unanswered, and on an unanswered node a moved recommendat
 dialogue and not an act, as `evaluation` says.
 
 The author's answer to P3 is what makes it their choice and not the AI's reading: asked whether an expert-targeted probe and an author-targeted probe are the same field or two, the author answered "same field", which is exactly what `target` encodes. The node's own `question` is narrower than its answer under this option, since it says "probes for the author", and the option carries the redrawing.
+
+### The word the record uses most and defines least, 2026-09-08
+
+The author's words at `words/2026-09-08/37` include "I don't know what discharge is".
+The sitting measured it: `discharg` appears 330 times across 73 of the graph's 165 node
+files, and no node's `defines` block carries the term. It is this node's densest use, 21
+occurrences, which is why the probe is raised here.
+
+It is not loose prose. `read.mjs` admits exactly one probe status, `discharged`, and
+requires every probe to carry a `discharges` field saying what answering it would settle.
+The word is therefore a piece of the schema, and the model it carries is that a probe
+opens, is answered once, and closes.
+
+That model is in tension with three things the author has said, which is what makes this
+worth a probe rather than a gloss. `words/2026-09-08/37` says probe review is an
+iterative process superseding the sequential movements, and that there is no mechanical
+round termination, only the author choosing to proceed. Earlier words in the same sitting
+say probes may be traded between the author and the experts indefinitely. An exchange
+that iterates indefinitely and terminates only by the author's choice does not obviously
+have a per-probe terminal status, and if it does, that status is doing something other
+than what "discharged" suggests.
+
+The sitting does not resolve it, and says why rather than leaving the silence to be read
+as an oversight. Glossing the term would define a model the author may have just
+replaced; striking it would touch the reader, the validator and 73 node files on the AI's
+own reading of words that were about something else. Both are the author's, and the probe
+puts the choice rather than making it.
+
+### The second half of the author's P2, recorded without an option, 2026-09-08
+
+`words/2026-09-08/37` states as a change in author disposition that the main thread "may
+also record probes for both author and experts". The first half of that entry, preserving
+the AI's recommendation as the main thread's integration of expert choices, was recorded
+across six facts. This is the second half and it lands here, because this node owns what
+a probe is and where it is asked.
+
+The record cannot presently encode it. A probe's keys are `id, asks, why, discharges,
+source, raised, fact, status, reason`, and there is no `target`; `source` says who raised
+the probe and nothing says who is being asked. So an expert-addressed probe is written
+today exactly as an author-addressed one, and the alignment page, which is where author
+probes are shown, would show it to the author. This is the same defect
+`expert-identity` measured on options, where no `source` value names an expert, appearing
+a second time on a second structure: the record has added a party to the dialogue and has
+not added the party to any of the shapes the dialogue is written in.
+
+No option is minted for it here. This node stands at the review stage, where every answer
+option must carry its content, so recording the disposition as an option means drafting
+the node's whole answer under it, and the drafting turns on which of the two shapes the
+author wants, one list with a target or two lists. The probe
+`where-does-a-probe-addressed-to-an-expert-live` asks that, and the option is owed the
+moment it is answered. The disposition is recorded here so that it is on the record from
+the day it was said and does not wait on the drafting.
